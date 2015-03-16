@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Implementation of the Nit virtual machine
-module vm
+module virtual_machine
 
 import interpreter::naive_interpreter
 import perfect_hashing
