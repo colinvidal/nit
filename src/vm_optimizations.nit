@@ -209,7 +209,7 @@ redef class CallSite
 	var id: Int
 
 	# Pattern that uses this call site
-	var pattern: nullable MPattern
+	var pattern: MPattern
 
 	# Optimize a method dispatch,
 	# If this method is always at the same position in virtual table, we can use direct access,
@@ -376,9 +376,11 @@ end
 redef class ASendExpr
 	redef fun numbering(v: VirtualMachine, pos: Int): Int
 	do
-		callsite.mpropdef.add_callsite(v, callsite.as(not null))
-		print "ST:{callsite.recv}\tGP:{callsite.mproperty}\t SIG:{callsite.msignature}"
-		return pos
+		v.current_mpropdef.as(MMethodDef).add_callsite(v, callsite.as(not null))
+		for arg in raw_arguments do
+			arg.numbering(v, pos)
+		end
+		return n_expr.numbering(v, pos)
 	end
 end
 
@@ -393,6 +395,9 @@ redef class MMethodDef
 
 		if p != null then
 			cs.pattern = p
+		else
+			print "Error: pattern null for a callsite"
+			abort
 		end
 
 		if not callsites.has(cs) then
@@ -414,14 +419,8 @@ redef class ModelBuilder
 					buf += m.to_s + "\n"
 					for cs in m.callsites do
 						buf += "\t {cs.to_s}\n"
-
-						if cs.pattern != null then
-							if not known_patterns.has(cs.pattern.as(not null)) then
-								known_patterns.add(cs.pattern.as(not null))
-							end
-						else
-							print "Error : null pattern inside a known callsite"
-							abort
+						if not known_patterns.has(cs.pattern) then
+							known_patterns.add(cs.pattern)
 						end
 					end
 				end

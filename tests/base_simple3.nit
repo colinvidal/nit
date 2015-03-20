@@ -46,6 +46,27 @@ class C
 	var val2: Int = 10
 end
 
+class D
+	fun give_D: D
+	do
+		return new D
+	end
+
+	fun give_Int: Int
+	do
+		return 5
+	end
+
+	fun give_Int_2: Int
+	do
+		return 55
+	end
+
+	fun take_param(i: Int)
+	do
+	end
+end
+
 fun foo do 2.output
 fun bar(i: Int) do i.output
 fun baz: Int do return 4
@@ -54,6 +75,13 @@ fun baz: Int do return 4
 foo
 bar(3)
 baz.output
+
+var d = new D
+#d.give_D
+d.give_D.give_Int
+#d.give_D.give_Int.output
+
+d.take_param(d.give_D.give_Int_2)
 
 var a = new A
 a.run

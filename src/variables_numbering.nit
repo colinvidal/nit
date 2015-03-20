@@ -34,10 +34,14 @@ redef class VirtualMachine
 		return pos
 	end
 
+	# MPropdef currently analysed
+	var current_mpropdef: MPropDef
+
 	# Redef to add the numbering of variables and arguments
 	redef fun new_frame(node, mpropdef, args)
 	do
 		var f = new VmFrame(node, mpropdef, args)
+		current_mpropdef = mpropdef
 
 		# If this Frame is for a method then number variables into the body of the method
 		if node isa AMethPropdef then
