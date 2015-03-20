@@ -21,6 +21,29 @@ import vm
 import variables_numbering
 
 redef class VirtualMachine
+	# List of known patterns (static type + global property)
+	var patterns = new List[MPattern]
+
+	# Add pattern if it didn't already exists
+	fun add_pattern(cs: CallSite): nullable MPattern
+	do
+		var found = false
+
+		for p in patterns do
+			if p.gp == cs.mproperty and p.st == cs.recv then
+				found = true
+				return p.add_callsite(cs)
+			end
+		end
+
+		if not found then
+			var p = new MPattern(cs.recv, cs.mproperty, cs.mpropdef)
+			patterns.push(p)
+			return p.add_callsite(cs)
+		end
+		
+		return null
+	end
 
 	# Add optimization of the method dispatch
 	redef fun callsite(callsite: nullable CallSite, arguments: Array[Instance]): nullable Instance
@@ -185,6 +208,9 @@ redef class CallSite
 	# Identifier of the class which introduced the MMethod
 	var id: Int
 
+	# Pattern that uses this call site
+	var pattern: nullable MPattern
+
 	# Optimize a method dispatch,
 	# If this method is always at the same position in virtual table, we can use direct access,
 	# Otherwise we must use perfect hashing
@@ -202,7 +228,7 @@ redef class CallSite
 
 	redef fun to_s: String
 	do
-		return "<{class_name}#ST:{recv}#GP:{mproperty}>"
+		return "<{class_name}#ST:{recv}#GP:{mproperty}#pattern_valid:{pattern.st == recv and pattern.gp == mproperty}>"
 	end
 end
 
@@ -350,7 +376,7 @@ end
 redef class ASendExpr
 	redef fun numbering(v: VirtualMachine, pos: Int): Int
 	do
-		callsite.mpropdef.add_callsite(callsite.as(not null))
+		callsite.mpropdef.add_callsite(v, callsite.as(not null))
 		print "ST:{callsite.recv}\tGP:{callsite.mproperty}\t SIG:{callsite.msignature}"
 		return pos
 	end
@@ -361,8 +387,14 @@ redef class MMethodDef
 	var callsites = new List[CallSite]
 
 	# Add a callsite inside a local property
-	fun add_callsite(cs: CallSite)
+	fun add_callsite(v: VirtualMachine, cs: CallSite)
 	do
+		var p = v.add_pattern(cs)
+
+		if p != null then
+			cs.pattern = p
+		end
+
 		if not callsites.has(cs) then
 			callsites.push(cs)
 		end
@@ -374,16 +406,31 @@ redef class ModelBuilder
 	do
 		super
 		var buf = "\n"
+		var known_patterns = new List[MPattern]
 
 		for c in model.mclassdef_hierarchy do
 			for m in c.mpropdefs do
 				if m isa MMethodDef then
 					buf += m.to_s + "\n"
 					for cs in m.callsites do
-						buf += "\t {cs.to_s} \n"
+						buf += "\t {cs.to_s}\n"
+
+						if cs.pattern != null then
+							if not known_patterns.has(cs.pattern.as(not null)) then
+								known_patterns.add(cs.pattern.as(not null))
+							end
+						else
+							print "Error : null pattern inside a known callsite"
+							abort
+						end
 					end
 				end
 			end
+		end
+
+		buf += "*** NITVM: List of known patterns ***\n"
+		for p in known_patterns do
+			buf += "{p.st}.{p.gp.name}\n"
 		end
 
 		self.toolcontext.info("*** NITVM: list of callsites by mpropdef ***" + buf, 1)
@@ -400,4 +447,21 @@ class MPattern
 
 	# Local property called
 	var lp: MMethodDef
+
+	# CallSite using this pattern
+	var callsites = new List[CallSite]
+
+	# Add a callsite using this pattern
+	fun add_callsite(cs: CallSite): nullable MPattern
+	do
+		if cs.recv == st and cs.mproperty == gp then
+			if not callsites.has(cs) then
+				callsites.add(cs)
+			end
+
+			return self
+		end
+
+		return null
+	end
 end
