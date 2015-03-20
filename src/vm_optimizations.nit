@@ -18,6 +18,7 @@
 module vm_optimizations
 
 import vm
+import variables_numbering
 
 redef class VirtualMachine
 
@@ -198,6 +199,11 @@ redef class CallSite
 		end
 		id = mproperty.intro_mclassdef.mclass.vtable.id
 	end
+
+	redef fun to_s: String
+	do
+		return "<{class_name}#ST:{recv}#GP:{mproperty}>"
+	end
 end
 
 redef class AIsaExpr
@@ -339,4 +345,59 @@ redef class AAsCastExpr
 		end
 		id = target.mclass.vtable.id
 	end
+end
+
+redef class ASendExpr
+	redef fun numbering(v: VirtualMachine, pos: Int): Int
+	do
+		callsite.mpropdef.add_callsite(callsite.as(not null))
+		print "ST:{callsite.recv}\tGP:{callsite.mproperty}\t SIG:{callsite.msignature}"
+		return pos
+	end
+end
+
+redef class MMethodDef
+	# List of known callsites inside a local property
+	var callsites = new List[CallSite]
+
+	# Add a callsite inside a local property
+	fun add_callsite(cs: CallSite)
+	do
+		if not callsites.has(cs) then
+			callsites.push(cs)
+		end
+	end
+end
+
+redef class ModelBuilder
+	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	do
+		super
+		var buf = "\n"
+
+		for c in model.mclassdef_hierarchy do
+			for m in c.mpropdefs do
+				if m isa MMethodDef then
+					buf += m.to_s + "\n"
+					for cs in m.callsites do
+						buf += "\t {cs.to_s} \n"
+					end
+				end
+			end
+		end
+
+		self.toolcontext.info("*** NITVM: list of callsites by mpropdef ***" + buf, 1)
+	end
+end
+
+# Pattern of a callsite
+class MPattern
+	# Static type of the receiver
+	var st: MType
+
+	# Global property called
+	var gp: MMethod
+
+	# Local property called
+	var lp: MMethodDef
 end
