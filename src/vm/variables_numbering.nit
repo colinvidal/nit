@@ -34,6 +34,8 @@ redef class VirtualMachine
 		return pos
 	end
 
+	var current_propdef: APropdef
+
 	# Redef to add the numbering of variables and arguments
 	redef fun new_frame(node, mpropdef, args)
 	do
@@ -41,6 +43,8 @@ redef class VirtualMachine
 
 		# If this Frame is for a method then number variables into the body of the method
 		if node isa AMethPropdef then
+			current_propdef = node
+
 			# Number the variables
 			if not node.is_numbering then node.numbering_variables(self, mpropdef.as(MMethodDef))
 
@@ -50,6 +54,8 @@ redef class VirtualMachine
 
 		# If this Frame is for an attribute with a block then number the block
 		if node isa AAttrPropdef then
+			current_propdef = node
+
 			# Number the variables
 			if not node.is_numbering then node.numbering_variables(self)
 
@@ -59,6 +65,7 @@ redef class VirtualMachine
 
 		# Putting self at the beginning of the environment
 		f.variables[0] = args[0]
+
 		return f
 	end
 
