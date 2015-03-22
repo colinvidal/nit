@@ -44,20 +44,24 @@ redef class Variable
 	var dependencies: HashSet[Variable] = new HashSet[Variable]
 
 	# The blocks in which this variable is assigned
-	var assignement_blocks: HashSet[ANode] = new HashSet[ANode] is lazy
+	var assignment_blocks: HashSet[ABlockExpr] = new HashSet[ABlockExpr] is lazy
 end
 
 redef class AExpr
 	public fun compute_ssa(vm: VirtualMachine) do end
 
-	# Return the closer block that contains this expression
-	fun declaring_block: ABlockExpr
+	# Return the enclosing block that contains this expression
+	# or return the APropdef
+	fun enclosing_block: ABlockExpr
 	do
-		var declaring_block: ANode = parent.as(not null)
+		var block: ANode = parent.as(not null)
 
-		while not declaring_block isa ABlockExpr do declaring_block = declaring_block.parent.as(not null)
+		# While parent is not a block, go up
+		while not block isa ABlockExpr do
+			block = block.parent.as(not null)
+		end
 
-		return declaring_block
+		return block
 	end
 end
 
@@ -80,10 +84,32 @@ redef class AMethPropdef
 
 		# SSA-Algorithm
 		# Once we have collected all data to compute SSA
+
+		# Blocks where a phi-function is added
+		var phi_blocks = new List[ABlockExpr]
+
+		# For each variables in the propdef
 		for v in variables do
-			print "\t {v}"
-			for bb in v.assignement_blocks do
-				print "assignement in = \t\t{bb}"
+			var assignment_blocks = new HashSet[ABlockExpr]
+			assignment_blocks.add_all(v.assignment_blocks)
+
+			# While we have not treated each block accessing `v`
+			while not assignment_blocks.is_empty do
+				# Remove a block from the set
+				var block = assignment_blocks.first
+				assignment_blocks.remove(block)
+
+				# For each block in the dominance frontier of `block`
+				for df in block.dominance_frontier do
+					# If we have not yet put a phi-function at the beginning of this block
+					if not phi_blocks.has(df) then
+						#TODO: Add a phi function at the beginning of df
+						print("Add a phi-function at the beginning of {df} for variable {v}")
+						df.dump_tree
+						phi_blocks.add(df)
+						if not v.assignment_blocks.has(df) then assignment_blocks.add(df)
+					end
+				end
 			end
 		end
 	end
@@ -94,6 +120,13 @@ redef class AAttrPropdef
 	do
 		# TODO : handle self
 		if n_block != null then n_block.compute_ssa(vm)
+	end
+end
+
+redef class AVarExpr
+	redef fun compute_ssa(vm)
+	do
+		self.variable.as(not null).assignment_blocks.add(enclosing_block)
 	end
 end
 
@@ -110,26 +143,46 @@ end
 redef class AVarAssignExpr
 	redef fun compute_ssa(vm)
 	do
-		self.variable.as(not null).assignement_blocks.add(declaring_block)
+		self.variable.as(not null).assignment_blocks.add(enclosing_block)
 	end
 end
 
 redef class AVarReassignExpr
 	redef fun compute_ssa(vm)
 	do
-		self.variable.as(not null).assignement_blocks.add(declaring_block)
+		self.variable.as(not null).assignment_blocks.add(enclosing_block)
 	end
 end
 
 redef class ABlockExpr
-
 	# The dominance frontier of this block
-	# i.e. the set of blocks this block dominate
-	var dominates: HashSet[ABlockExpr] = new HashSet[ABlockExpr] is lazy
+	# i.e. the set of blocks this block dominate (kind of child block)
+	var dominance_frontier: HashSet[ABlockExpr] = new HashSet[ABlockExpr] is lazy
 
 	redef fun compute_ssa(vm)
 	do
+		# Go in the enclosing block to set the dominance frontier
+		var block = dominate_block
+		if block isa ABlockExpr then block.dominance_frontier.add(self)
+
 		for e in self.n_expr do e.compute_ssa(vm)
+	end
+
+	# Return the block that dominate self block
+	# It can be a `ABlockExpr` or the enclosing `APropdef`
+	fun dominate_block: ANode
+	do
+		var block: ANode = parent.as(not null)
+
+		# While parent is not a block, go up
+		while not block isa ABlockExpr do
+			if block isa APropdef then return block
+
+			block = block.parent.as(not null)
+		end
+
+		return block
+
 	end
 end
 
@@ -137,7 +190,7 @@ redef class AIfExpr
 	redef fun compute_ssa(vm)
 	do
 		self.n_then.compute_ssa(vm)
-		self.n_else.compute_ssa(vm)
+		if self.n_else != null then self.n_else.compute_ssa(vm)
 	end
 end
 
