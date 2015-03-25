@@ -41,13 +41,32 @@ end
 
 redef class Variable
 	# The dependencies of this variable for SSA-Algorithm
-	var dependencies: HashSet[Variable] = new HashSet[Variable]
+	var dependencies: Array[Variable] = new Array[Variable]
 
 	# The blocks in which this variable is assigned
 	var assignment_blocks: Array[ANode] = new Array[ANode] is lazy
 
 	# Part of the program where this variable is read
 	var read_blocks: Array[ANode] = new Array[ANode] is lazy
+end
+
+class PhiFunction
+	# The dependencies of a variable for SSA-Algorithm
+	var dependencies: Array[Variable] = new Array[Variable] is lazy
+
+	# The position in the AST of the phi-function
+	var location: ANode
+
+	# Set the dependencies for the phi-function
+	# *`block` block in which we go through the dominance-frontier
+	# *`v` The variable to looking for
+	fun add_dependencies(block: ANode, v: Variable)
+	do
+		# Look in which blocks of DF(block) `v` has been assigned
+		for b in block.dominance_frontier do
+			if v.assignment_blocks.has(b) then dependencies.add(v)
+		end
+	end
 end
 
 redef class ANode
@@ -91,10 +110,25 @@ redef class APropdef
 end
 
 redef class AMethPropdef
+
+	# The return variable of the propdef
+	# Create an empty variable for the return of the method
+	# and treat returns like variable assignments
+	var returnvar: Variable = new Variable("returnvar")
+
+	# The PhiFunction this method contains
+	var phi_functions = new Array[PhiFunction]
+
 	redef fun compute_ssa(vm)
 	do
 		# TODO : handle self
 		if n_block != null then n_block.compute_ssa(vm)
+
+		# If the method has a signature
+		if n_signature != null then
+			# TODO: parameters
+			print "Parameters = " + n_signature.n_params.to_s
+		end
 
 		# Places where a phi-function is added per variable
 		var phi_blocks = new HashMap[Variable, Array[ANode]]
@@ -106,8 +140,6 @@ redef class AMethPropdef
 			var read_blocks = new Array[ANode]
 			read_blocks.add_all(v.read_blocks)
 
-			print v.to_s + "   " + read_blocks.to_s
-
 			# While we have not treated each part accessing `v`
 			while not read_blocks.is_empty do
 				# Remove a block from the set
@@ -118,18 +150,25 @@ redef class AMethPropdef
 				for df in block.dominance_frontier do
 					# If we have not yet put a phi-function at the beginning of this block
 					if not phi_variables.has(df) then
-						#TODO: Add a phi function at the beginning of df
 						print("Add a phi-function at the beginning of {df} for variable {v}")
-						df.dump_tree
 						phi_variables.add(df)
+
+						# Create a new phi-function and set its dependencies
+						var phi = new PhiFunction(df)
+						phi.add_dependencies(block, v)
+						phi_functions.add(phi)
 
 						if not v.read_blocks.has(df) then read_blocks.add(df)
 					end
 				end
 			end
 
-			# Add phi-variables to the global map
+			# Add `phi-variables` to the global map
 			phi_blocks[v] = phi_variables
+		end
+
+		for p in phi_functions do
+			print "\t" + p.location.to_s + ", " + p.dependencies.to_s
 		end
 	end
 end
@@ -163,6 +202,7 @@ redef class AVarAssignExpr
 	redef fun compute_ssa(vm)
 	do
 		self.variable.as(not null).assignment_blocks.add(dominator_block)
+		self.n_value.compute_ssa(vm)
 	end
 end
 
@@ -171,6 +211,7 @@ redef class AVarReassignExpr
 	do
 		self.variable.as(not null).read_blocks.add(dominator_block)
 		self.variable.as(not null).assignment_blocks.add(dominator_block)
+		self.n_value.compute_ssa(vm)
 	end
 end
 
@@ -191,8 +232,10 @@ end
 redef class AReturnExpr
 	redef fun compute_ssa(vm)
 	do
-		# TODO: create a special variable for the return
 		self.n_expr.compute_ssa(vm)
+
+		var returnvar = vm.current_propdef.as(AMethPropdef).returnvar
+		returnvar.assignment_blocks.add(dominator_block)
 	end
 end
 
@@ -350,44 +393,45 @@ redef class ASendReassignFormExpr
 	redef fun compute_ssa(vm)
 	do
 		self.n_expr.compute_ssa(vm)
+		self.n_value.compute_ssa(vm)
 		for e in self.raw_arguments do e.compute_ssa(vm)
 	end
 end
 
-redef class ASuperExpr
-	redef fun expr(v)
-	do
-		var recv = v.frame.arguments.first
+# redef class ASuperExpr
+# 	redef fun expr(v)
+# 	do
+# 		var recv = v.frame.arguments.first
 
-		var callsite = self.callsite
-		if callsite != null then
-			var args = v.varargize(callsite.mpropdef, recv, self.n_args.n_exprs)
-			if args == null then return null
-			# Add additional arguments for the super init call
-			if args.length == 1 then
-				for i in [0..callsite.msignature.arity[ do
-					args.add(v.frame.arguments[i+1])
-				end
-			end
-			# Super init call
-			var res = v.callsite(callsite, args)
-			return res
-		end
+# 		var callsite = self.callsite
+# 		if callsite != null then
+# 			var args = v.varargize(callsite.mpropdef, recv, self.n_args.n_exprs)
+# 			if args == null then return null
+# 			# Add additional arguments for the super init call
+# 			if args.length == 1 then
+# 				for i in [0..callsite.msignature.arity[ do
+# 					args.add(v.frame.arguments[i+1])
+# 				end
+# 			end
+# 			# Super init call
+# 			var res = v.callsite(callsite, args)
+# 			return res
+# 		end
 
-		# standard call-next-method
-		var mpropdef = self.mpropdef
-		mpropdef = mpropdef.lookup_next_definition(v.mainmodule, recv.mtype)
+# 		# standard call-next-method
+# 		var mpropdef = self.mpropdef
+# 		mpropdef = mpropdef.lookup_next_definition(v.mainmodule, recv.mtype)
 
-		var args = v.varargize(mpropdef, recv, self.n_args.n_exprs)
-		if args == null then return null
+# 		var args = v.varargize(mpropdef, recv, self.n_args.n_exprs)
+# 		if args == null then return null
 
-		if args.length == 1 then
-			args = v.frame.arguments
-		end
-		var res = v.call(mpropdef, args)
-		return res
-	end
-end
+# 		if args.length == 1 then
+# 			args = v.frame.arguments
+# 		end
+# 		var res = v.call(mpropdef, args)
+# 		return res
+# 	end
+# end
 
 redef class ANewExpr
 	redef fun compute_ssa(vm)
