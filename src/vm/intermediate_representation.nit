@@ -65,14 +65,17 @@ end
 abstract class IRPropSite
 	super IRSite
 
-	# Global property of the expression
-	var gp: MProperty
-
-	# Static type of the receiver
-	var st: MType
+#	# Global property of the expression
+#	var gp: MProperty
+#
+#	# Static type of the receiver
+#	var st: MType
 
 	# The expression of the receiver
 	var recv: IRExpr
+
+	# The pattern of the expression
+	var pattern: MPattern
 end
 
 # IR of object expression

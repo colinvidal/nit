@@ -684,7 +684,7 @@ redef class IRReadSite
 						reset.add(self)
 					end
 
-					# The receiver is always at position 0 of the variable environment 
+					# The receiver is always at position 0 of the environment 
 					set_dependency_flag(0)
 				else
 					if recv.is_perennial then
@@ -698,5 +698,18 @@ redef class IRReadSite
 		end
 
 		return preexist_cache
+	end
+end
+
+redef class IRCallSite
+	# 
+	fun check_args: Int
+	do
+		return -2
+	end
+
+	redef fun preexists(reset)
+	do
+		return -2
 	end
 end
