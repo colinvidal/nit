@@ -4,11 +4,11 @@ module intermediate_representation
 import compiler::abstract_compiler
 
 # Root hierarchy
-class IRExpr
+abstract class IRExpr
 end
 
 # IR of variables
-class IRVar
+abstract class IRVar
 	super IRExpr
 
 	# The offset of the variable in it environment, of the position of parameter
@@ -50,7 +50,7 @@ class IRLit
 end
 
 # IR of a object site (method call, subtype test, attribute access)
-class IRSite
+abstract class IRSite
 end
 
 # IR of a subtype test site
@@ -62,7 +62,7 @@ class IRSubtypeSite
 end
 
 # IR of global properties sites
-class IRPropSite
+abstract class IRPropSite
 	super IRSite
 
 	# Global property of the expression
@@ -73,13 +73,13 @@ class IRPropSite
 end
 
 # IR of object expression
-class IRExprSite
+abstract class IRExprSite
 	super IRPropSite
 	super IRExpr
 end
 
 # IR of attribute access
-class IRAttrSite
+abstract class IRAttrSite
 	super IRPropSite
 end
 
