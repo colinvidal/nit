@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Implementation of the Nit virtual machine
-module vm
+module virtual_machine
 
 import interpreter::naive_interpreter
 import perfect_hashing
@@ -175,16 +175,6 @@ class VirtualMachine super NaiveInterpreter
 		if not recv.mtype.as(MClassType).mclass.loaded then create_class(recv.mtype.as(MClassType).mclass)
 
 		recv.vtable = recv.mtype.as(MClassType).mclass.vtable
-	end
-
-	# Create a virtual table for this `MClass` if not already done
-	redef fun get_primitive_class(name: String): MClass
-	do
-		var mclass = super
-
-		if not mclass.loaded then create_class(mclass)
-
-		return mclass
 	end
 
 	# Initialize the internal representation of an object (its attribute values)

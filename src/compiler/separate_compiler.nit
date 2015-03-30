@@ -268,7 +268,7 @@ class SeparateCompiler
 		if mclass.mclass_type.ctype_extern == "val*" then
 			return 0
 		else if mclass.kind == extern_kind and mclass.name != "NativeString" then
-			return self.box_kinds[self.mainmodule.get_primitive_class("Pointer")]
+			return self.box_kinds[self.mainmodule.pointer_type.mclass]
 		else
 			return self.box_kinds[mclass]
 		end
@@ -456,14 +456,9 @@ class SeparateCompiler
 		# Collect types to colorize
 		var live_types = runtime_type_analysis.live_types
 		var live_cast_types = runtime_type_analysis.live_cast_types
-		var mtypes = new HashSet[MType]
-		mtypes.add_all(live_types)
-		for c in self.box_kinds.keys do
-			mtypes.add(c.mclass_type)
-		end
 
 		# Compute colors
-		var poset = poset_from_mtypes(mtypes, live_cast_types)
+		var poset = poset_from_mtypes(live_types, live_cast_types)
 		var colorer = new POSetColorer[MType]
 		colorer.colorize(poset)
 		type_ids = colorer.ids
@@ -471,20 +466,42 @@ class SeparateCompiler
 		type_tables = build_type_tables(poset)
 
 		# VT and FT are stored with other unresolved types in the big resolution_tables
-		self.compile_resolution_tables(mtypes)
+		self.compute_resolution_tables(live_types)
 
 		return poset
 	end
 
 	private fun poset_from_mtypes(mtypes, cast_types: Set[MType]): POSet[MType] do
 		var poset = new POSet[MType]
+
+		# Instead of doing the full matrix mtypes X cast_types,
+		# a grouping is done by the base classes of the type so
+		# that we compare only types whose base classes are in inheritance.
+
+		var mtypes_by_class = new MultiHashMap[MClass, MType]
 		for e in mtypes do
+			var c = e.as_notnullable.as(MClassType).mclass
+			mtypes_by_class[c].add(e)
 			poset.add_node(e)
-			for o in cast_types do
-				if e == o then continue
-				poset.add_node(o)
-				if e.is_subtype(mainmodule, null, o) then
-					poset.add_edge(e, o)
+		end
+
+		var casttypes_by_class = new MultiHashMap[MClass, MType]
+		for e in cast_types do
+			var c = e.as_notnullable.as(MClassType).mclass
+			casttypes_by_class[c].add(e)
+			poset.add_node(e)
+		end
+
+		for c1, ts1 in mtypes_by_class do
+			for c2 in c1.in_hierarchy(mainmodule).greaters do
+				var ts2 = casttypes_by_class[c2]
+				for e in ts1 do
+					for o in ts2 do
+						if e == o then continue
+						if e.is_subtype(mainmodule, null, o) then
+							poset.add_edge(e, o)
+						end
+					end
 				end
 			end
 		end
@@ -510,9 +527,8 @@ class SeparateCompiler
 		return tables
 	end
 
-	protected fun compile_resolution_tables(mtypes: Set[MType]) do
-		# resolution_tables is used to perform a type resolution at runtime in O(1)
-
+	# resolution_tables is used to perform a type resolution at runtime in O(1)
+	private fun compute_resolution_tables(mtypes: Set[MType]) do
 		# During the visit of the body of classes, live_unresolved_types are collected
 		# and associated to
 		# Collect all live_unresolved_types (visited in the body of classes)
@@ -777,7 +793,7 @@ class SeparateCompiler
 		var v = new_visitor
 
 		var rta = runtime_type_analysis
-		var is_dead = rta != null and not rta.live_classes.has(mclass) and mtype.ctype == "val*" and mclass.name != "NativeArray" and mclass.name != "Pointer"
+		var is_dead = rta != null and not rta.live_classes.has(mclass) and not mtype.is_c_primitive and mclass.name != "NativeArray" and mclass.name != "Pointer"
 
 		v.add_decl("/* runtime class {c_name} */")
 
@@ -806,7 +822,7 @@ class SeparateCompiler
 			v.add_decl("\};")
 		end
 
-		if mtype.ctype != "val*" or mtype.mclass.name == "Pointer" then
+		if mtype.is_c_primitive or mtype.mclass.name == "Pointer" then
 			# Is a primitive type or the Pointer class, not any other extern class
 
 			if mtype.is_tagged then return
@@ -973,6 +989,7 @@ class SeparateCompiler
 				v.add_decl("NULL,")
 			else
 				var s = "type_{t.c_name}"
+				undead_types.add(t.mclass_type)
 				v.require_declaration(s)
 				v.add_decl("&{s},")
 			end
@@ -1136,9 +1153,9 @@ class SeparateCompilerVisitor
 	do
 		if value.mtype == mtype then
 			return value
-		else if value.mtype.ctype == "val*" and mtype.ctype == "val*" then
+		else if not value.mtype.is_c_primitive and not mtype.is_c_primitive then
 			return value
-		else if value.mtype.ctype == "val*" then
+		else if not value.mtype.is_c_primitive then
 			if mtype.is_tagged then
 				if mtype.name == "Int" then
 					return self.new_expr("(long)({value})>>2", mtype)
@@ -1151,7 +1168,7 @@ class SeparateCompilerVisitor
 				end
 			end
 			return self.new_expr("((struct instance_{mtype.c_name}*){value})->value; /* autounbox from {value.mtype} to {mtype} */", mtype)
-		else if mtype.ctype == "val*" then
+		else if not mtype.is_c_primitive then
 			if value.mtype.is_tagged then
 				if value.mtype.name == "Int" then
 					return self.new_expr("(val*)({value}<<2|1)", mtype)
@@ -1170,7 +1187,7 @@ class SeparateCompilerVisitor
 			var res = self.new_var(mtype)
 			if compiler.runtime_type_analysis != null and not compiler.runtime_type_analysis.live_types.has(valtype) then
 				self.add("/*no autobox from {value.mtype} to {mtype}: {value.mtype} is not live! */")
-				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); show_backtrace(1);")
+				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); fatal_exit(1);")
 				return res
 			end
 			self.require_declaration("BOX_{valtype.c_name}")
@@ -1184,7 +1201,7 @@ class SeparateCompilerVisitor
 			# Bad things will appen!
 			var res = self.new_var(mtype)
 			self.add("/* {res} left unintialized (cannot convert {value.mtype} to {mtype}) */")
-			self.add("PRINT_ERROR(\"Cast error: Cannot cast %s to %s.\\n\", \"{value.mtype}\", \"{mtype}\"); show_backtrace(1);")
+			self.add("PRINT_ERROR(\"Cast error: Cannot cast %s to %s.\\n\", \"{value.mtype}\", \"{mtype}\"); fatal_exit(1);")
 			return res
 		end
 	end
@@ -1210,7 +1227,7 @@ class SeparateCompilerVisitor
 			var res = self.new_var(mtype)
 			if compiler.runtime_type_analysis != null and not compiler.runtime_type_analysis.live_types.has(value.mtype.as(MClassType)) then
 				self.add("/*no boxing of {value.mtype}: {value.mtype} is not live! */")
-				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); show_backtrace(1);")
+				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); fatal_exit(1);")
 				return res
 			end
 			self.require_declaration("BOX_{valtype.c_name}")
@@ -1231,7 +1248,7 @@ class SeparateCompilerVisitor
 	# Thus the expression can be used as a condition.
 	fun extract_tag(value: RuntimeVariable): String
 	do
-		assert value.mtype.ctype == "val*"
+		assert not value.mtype.is_c_primitive
 		return "((long){value}&3)" # Get the two low bits
 	end
 
@@ -1239,7 +1256,7 @@ class SeparateCompilerVisitor
 	# The point of the method is to work also with primitive types.
 	fun class_info(value: RuntimeVariable): String
 	do
-		if value.mtype.ctype == "val*" then
+		if not value.mtype.is_c_primitive then
 			if can_be_primitive(value) and not compiler.modelbuilder.toolcontext.opt_no_tag_primitives.value then
 				var tag = extract_tag(value)
 				return "({tag}?class_info[{tag}]:{value}->class)"
@@ -1256,7 +1273,7 @@ class SeparateCompilerVisitor
 	# The point of the method is to work also with primitive types.
 	fun type_info(value: RuntimeVariable): String
 	do
-		if value.mtype.ctype == "val*" then
+		if not value.mtype.is_c_primitive then
 			if can_be_primitive(value) and not compiler.modelbuilder.toolcontext.opt_no_tag_primitives.value then
 				var tag = extract_tag(value)
 				return "({tag}?type_info[{tag}]:{value}->type)"
@@ -1305,7 +1322,7 @@ class SeparateCompilerVisitor
 	end
 	redef fun send(mmethod, arguments)
 	do
-		if arguments.first.mcasttype.ctype != "val*" then
+		if arguments.first.mcasttype.is_c_primitive then
 			# In order to shortcut the primitive, we need to find the most specific method
 			# Howverr, because of performance (no flattening), we always work on the realmainmodule
 			var m = self.compiler.mainmodule
@@ -1512,7 +1529,7 @@ class SeparateCompilerVisitor
 
 	redef fun supercall(m: MMethodDef, recvtype: MClassType, arguments: Array[RuntimeVariable]): nullable RuntimeVariable
 	do
-		if arguments.first.mcasttype.ctype != "val*" then
+		if arguments.first.mcasttype.is_c_primitive then
 			# In order to shortcut the primitive, we need to find the most specific method
 			# However, because of performance (no flattening), we always work on the realmainmodule
 			var main = self.compiler.mainmodule
@@ -1563,7 +1580,7 @@ class SeparateCompilerVisitor
 			self.add("{res} = {recv}->attrs[{a.const_color}] != NULL; /* {a} on {recv.inspect}*/")
 		else
 
-			if mtype.ctype == "val*" then
+			if not mtype.is_c_primitive and not mtype.is_tagged then
 				self.add("{res} = {recv}->attrs[{a.const_color}].val != NULL; /* {a} on {recv.inspect} */")
 			else
 				self.add("{res} = 1; /* NOT YET IMPLEMENTED: isset of primitives: {a} on {recv.inspect} */")
@@ -1615,7 +1632,7 @@ class SeparateCompilerVisitor
 			self.add("{res} = {recv}->attrs[{a.const_color}].{ret.ctypename}; /* {a} on {recv.inspect} */")
 
 			# Check for Uninitialized attribute
-			if ret.ctype == "val*" and not ret isa MNullableType and not self.compiler.modelbuilder.toolcontext.opt_no_check_attr_isset.value then
+			if not ret.is_c_primitive and not ret isa MNullableType and not self.compiler.modelbuilder.toolcontext.opt_no_check_attr_isset.value then
 				self.add("if (unlikely({res} == NULL)) \{")
 				self.add_abort("Uninitialized attribute {a.name}")
 				self.add("\}")
@@ -1644,7 +1661,11 @@ class SeparateCompilerVisitor
 		self.require_declaration(a.const_color)
 		if self.compiler.modelbuilder.toolcontext.opt_no_union_attribute.value then
 			var attr = "{recv}->attrs[{a.const_color}]"
-			if mtype.ctype != "val*" then
+			if mtype.is_tagged then
+				# The attribute is not primitive, thus store it as tagged
+				var tv = autobox(value, compiler.mainmodule.object_type)
+				self.add("{attr} = {tv}; /* {a} on {recv.inspect} */")
+			else if mtype.is_c_primitive then
 				assert mtype isa MClassType
 				# The attribute is primitive, thus we store it in a box
 				# The trick is to create the box the first time then resuse the box
@@ -1770,7 +1791,7 @@ class SeparateCompilerVisitor
 				self.add("count_type_test_resolved_{tag}++;")
 			end
 		else
-			self.add("PRINT_ERROR(\"NOT YET IMPLEMENTED: type_test(%s, {mtype}).\\n\", \"{value.inspect}\"); show_backtrace(1);")
+			self.add("PRINT_ERROR(\"NOT YET IMPLEMENTED: type_test(%s, {mtype}).\\n\", \"{value.inspect}\"); fatal_exit(1);")
 		end
 
 		# check color is in table
@@ -1796,15 +1817,15 @@ class SeparateCompilerVisitor
 	do
 		var res = self.new_var(bool_type)
 		# Swap values to be symetric
-		if value2.mtype.ctype != "val*" and value1.mtype.ctype == "val*" then
+		if value2.mtype.is_c_primitive and not value1.mtype.is_c_primitive then
 			var tmp = value1
 			value1 = value2
 			value2 = tmp
 		end
-		if value1.mtype.ctype != "val*" then
+		if value1.mtype.is_c_primitive then
 			if value2.mtype == value1.mtype then
 				self.add("{res} = 1; /* is_same_type_test: compatible types {value1.mtype} vs. {value2.mtype} */")
-			else if value2.mtype.ctype != "val*" then
+			else if value2.mtype.is_c_primitive then
 				self.add("{res} = 0; /* is_same_type_test: incompatible types {value1.mtype} vs. {value2.mtype}*/")
 			else
 				var mtype1 = value1.mtype.as(MClassType)
@@ -1821,7 +1842,7 @@ class SeparateCompilerVisitor
 	do
 		var res = self.get_name("var_class_name")
 		self.add_decl("const char* {res};")
-		if value.mtype.ctype == "val*" then
+		if not value.mtype.is_c_primitive then
 			self.add "{res} = {value} == NULL ? \"null\" : {type_info(value)}->name;"
 		else if value.mtype isa MClassType and value.mtype.as(MClassType).mclass.kind == extern_kind and
 			value.mtype.as(MClassType).name != "NativeString" then
@@ -1836,15 +1857,15 @@ class SeparateCompilerVisitor
 	redef fun equal_test(value1, value2)
 	do
 		var res = self.new_var(bool_type)
-		if value2.mtype.ctype != "val*" and value1.mtype.ctype == "val*" then
+		if value2.mtype.is_c_primitive and not value1.mtype.is_c_primitive then
 			var tmp = value1
 			value1 = value2
 			value2 = tmp
 		end
-		if value1.mtype.ctype != "val*" then
+		if value1.mtype.is_c_primitive then
 			if value2.mtype == value1.mtype then
 				self.add("{res} = {value1} == {value2};")
-			else if value2.mtype.ctype != "val*" then
+			else if value2.mtype.is_c_primitive then
 				self.add("{res} = 0; /* incompatible types {value1.mtype} vs. {value2.mtype}*/")
 			else if value1.mtype.is_tagged then
 				self.add("{res} = ({value2} != NULL) && ({self.autobox(value2, value1.mtype)} == {value1});")
@@ -1877,11 +1898,11 @@ class SeparateCompilerVisitor
 
 		var incompatible = false
 		var primitive
-		if t1.ctype != "val*" then
+		if t1.is_c_primitive then
 			primitive = t1
 			if t1 == t2 then
 				# No need to compare class
-			else if t2.ctype != "val*" then
+			else if t2.is_c_primitive then
 				incompatible = true
 			else if can_be_primitive(value2) then
 				if t1.is_tagged then
@@ -1895,7 +1916,7 @@ class SeparateCompilerVisitor
 			else
 				incompatible = true
 			end
-		else if t2.ctype != "val*" then
+		else if t2.is_c_primitive then
 			primitive = t2
 			if can_be_primitive(value1) then
 				if t2.is_tagged then
@@ -1956,7 +1977,7 @@ class SeparateCompilerVisitor
 		var t = value.mcasttype.as_notnullable
 		if not t isa MClassType then return false
 		var k = t.mclass.kind
-		return k == interface_kind or t.ctype != "val*"
+		return k == interface_kind or t.is_c_primitive
 	end
 
 	fun maybe_null(value: RuntimeVariable): Bool
@@ -1967,8 +1988,8 @@ class SeparateCompilerVisitor
 
 	redef fun array_instance(array, elttype)
 	do
-		var nclass = self.get_class("NativeArray")
-		var arrayclass = self.get_class("Array")
+		var nclass = mmodule.native_array_class
+		var arrayclass = mmodule.array_class
 		var arraytype = arrayclass.get_mtype([elttype])
 		var res = self.init_instance(arraytype)
 		self.add("\{ /* {res} = array_instance Array[{elttype}] */")
@@ -1985,7 +2006,7 @@ class SeparateCompilerVisitor
 
 	redef fun native_array_instance(elttype: MType, length: RuntimeVariable): RuntimeVariable
 	do
-		var mtype = self.get_class("NativeArray").get_mtype([elttype])
+		var mtype = mmodule.native_array_type(elttype)
 		self.require_declaration("NEW_{mtype.mclass.c_name}")
 		assert mtype isa MGenericType
 		var compiler = self.compiler
@@ -2005,7 +2026,7 @@ class SeparateCompilerVisitor
 	redef fun native_array_def(pname, ret_type, arguments)
 	do
 		var elttype = arguments.first.mtype
-		var nclass = self.get_class("NativeArray")
+		var nclass = mmodule.native_array_class
 		var recv = "((struct instance_{nclass.c_name}*){arguments[0]})->values"
 		if pname == "[]" then
 			# Because the objects are boxed, return the box to avoid unnecessary (or broken) unboxing/reboxing
@@ -2026,12 +2047,20 @@ class SeparateCompilerVisitor
 		end
 	end
 
-	redef fun calloc_array(ret_type, arguments)
+	redef fun native_array_get(nat, i)
 	do
-		var mclass = self.get_class("ArrayCapable")
-		var ft = mclass.mparameters.first
-		var res = self.native_array_instance(ft, arguments[1])
-		self.ret(res)
+		var nclass = mmodule.native_array_class
+		var recv = "((struct instance_{nclass.c_name}*){nat})->values"
+		# Because the objects are boxed, return the box to avoid unnecessary (or broken) unboxing/reboxing
+		var res = self.new_expr("{recv}[{i}]", compiler.mainmodule.object_type)
+		return res
+	end
+
+	redef fun native_array_set(nat, i, val)
+	do
+		var nclass = mmodule.native_array_class
+		var recv = "((struct instance_{nclass.c_name}*){nat})->values"
+		self.add("{recv}[{i}]={val};")
 	end
 
 	fun link_unresolved_type(mclassdef: MClassDef, mtype: MType) do
@@ -2144,7 +2173,7 @@ class SeparateRuntimeFunction
 		for i in [0..called_signature.arity[ do
 			var mtype = called_signature.mparameters[i].mtype
 			if i == called_signature.vararg_rank then
-				mtype = mmethoddef.mclassdef.mmodule.get_primitive_class("Array").get_mtype([mtype])
+				mtype = mmethoddef.mclassdef.mmodule.array_type(mtype)
 			end
 			sig.append(", {mtype.ctype} p{i}")
 		end
@@ -2183,7 +2212,7 @@ class SeparateRuntimeFunction
 		for i in [0..msignature.arity[ do
 			var mtype = msignature.mparameters[i].mtype
 			if i == msignature.vararg_rank then
-				mtype = v.get_class("Array").get_mtype([mtype])
+				mtype = v.mmodule.array_type(mtype)
 			end
 			comment.append(", {mtype}")
 			var argvar = new RuntimeVariable("p{i}", mtype, mtype)
@@ -2230,7 +2259,7 @@ class SeparateRuntimeFunction
 		var selfvar = arguments.first
 		var ret = called_signature.return_mtype
 
-		if mmethoddef.is_intro and recv.ctype == "val*" then
+		if mmethoddef.is_intro and not recv.is_c_primitive then
 			var m = mmethoddef.mproperty
 			var n2 = "CALL_" + m.const_color
 			compiler.provide_declaration(n2, "{c_ret} {n2}{c_sig};")
@@ -2247,7 +2276,7 @@ class SeparateRuntimeFunction
 			v2.add "\}"
 
 		end
-		if mmethoddef.has_supercall and recv.ctype == "val*" then
+		if mmethoddef.has_supercall and not recv.is_c_primitive then
 			var m = mmethoddef
 			var n2 = "CALL_" + m.const_color
 			compiler.provide_declaration(n2, "{c_ret} {n2}{c_sig};")
@@ -2293,5 +2322,16 @@ redef class AMethPropdef
 		var m = mpropdef
 		if m != null and m.mproperty.is_init and m.is_extern then return false
 		return super
+	end
+end
+
+redef class AAttrPropdef
+	redef fun init_expr(v, recv)
+	do
+		super
+		if is_lazy and v.compiler.modelbuilder.toolcontext.opt_no_union_attribute.value then
+			var guard = self.mlazypropdef.mproperty
+			v.write_attribute(guard, recv, v.bool_instance(false))
+		end
 	end
 end

@@ -603,9 +603,9 @@ abstract class AbstractCompiler
 		var gccd_disable = modelbuilder.toolcontext.opt_no_gcc_directive.value
 		if gccd_disable.has("noreturn") or gccd_disable.has("all") then
 			# Signal handler function prototype
-			self.header.add_decl("void show_backtrace(int);")
+			self.header.add_decl("void fatal_exit(int);")
 		else
-			self.header.add_decl("void show_backtrace(int) __attribute__ ((noreturn));")
+			self.header.add_decl("void fatal_exit(int) __attribute__ ((noreturn));")
 		end
 
 		if gccd_disable.has("likely") or gccd_disable.has("all") then
@@ -741,12 +741,7 @@ extern void nitni_global_ref_decr( struct nitni_ref *ref );
 			v.compiler.header.add_decl("extern long count_isset_checks;")
 		end
 
-		v.add_decl("void sig_handler(int signo)\{")
-		v.add_decl("PRINT_ERROR(\"Caught signal : %s\\n\", strsignal(signo));")
-		v.add_decl("show_backtrace(signo);")
-		v.add_decl("\}")
-
-		v.add_decl("void show_backtrace (int signo) \{")
+		v.add_decl("static void show_backtrace(void) \{")
 		if ost == "nitstack" or ost == "libunwind" then
 			v.add_decl("char* opt = getenv(\"NIT_NO_STACK\");")
 			v.add_decl("unw_cursor_t cursor;")
@@ -776,7 +771,19 @@ extern void nitni_global_ref_decr( struct nitni_ref *ref );
 			v.add_decl("free(procname);")
 			v.add_decl("\}")
 		end
-		v.add_decl("exit(signo);")
+		v.add_decl("\}")
+
+		v.add_decl("void sig_handler(int signo)\{")
+		v.add_decl("PRINT_ERROR(\"Caught signal : %s\\n\", strsignal(signo));")
+		v.add_decl("show_backtrace();")
+		# rethrows
+		v.add_decl("signal(signo, SIG_DFL);")
+		v.add_decl("kill(getpid(), signo);")
+		v.add_decl("\}")
+
+		v.add_decl("void fatal_exit(int status) \{")
+		v.add_decl("show_backtrace();")
+		v.add_decl("exit(status);")
 		v.add_decl("\}")
 
 		if no_main then
@@ -1078,9 +1085,6 @@ abstract class AbstractCompilerVisitor
 		self.writer = new CodeWriter(compiler.files.last)
 	end
 
-	# Force to get the primitive class named `name` or abort
-	fun get_class(name: String): MClass do return self.compiler.mainmodule.get_primitive_class(name)
-
 	# Force to get the primitive property named `name` in the instance `recv` or abort
 	fun get_property(name: String, recv: MType): MMethod
 	do
@@ -1121,6 +1125,14 @@ abstract class AbstractCompilerVisitor
 	fun calloc_array(ret_type: MType, arguments: Array[RuntimeVariable]) is abstract
 
 	fun native_array_def(pname: String, ret_type: nullable MType, arguments: Array[RuntimeVariable]) is abstract
+
+	# Return an element of a native array.
+	# The method is unsafe and is just a direct wrapper for the specific implementation of native arrays
+	fun native_array_get(native_array: RuntimeVariable, index: Int): RuntimeVariable is abstract
+
+	# Store an element in a native array.
+	# The method is unsafe and is just a direct wrapper for the specific implementation of native arrays
+	fun native_array_set(native_array: RuntimeVariable, index: Int, value: RuntimeVariable) is abstract
 
 	# Evaluate `args` as expressions in the call of `mpropdef` on `recv`.
 	# This method is used to manage varargs in signatures and returns the real array
@@ -1395,7 +1407,7 @@ abstract class AbstractCompilerVisitor
 		var recv
 		var ctype = mtype.ctype
 		assert mtype.mclass.name != "NativeArray"
-		if ctype == "val*" then
+		if not mtype.is_c_primitive then
 			recv = init_instance(mtype)
 		else if ctype == "char*" then
 			recv = new_expr("NULL/*special!*/", mtype)
@@ -1416,37 +1428,64 @@ abstract class AbstractCompilerVisitor
 		end
 	end
 
+	# The currently processed module
+	#
+	# alias for `compiler.mainmodule`
+	fun mmodule: MModule do return compiler.mainmodule
+
 	# Generate an integer value
 	fun int_instance(value: Int): RuntimeVariable
 	do
-		var res = self.new_var(self.get_class("Int").mclass_type)
-		self.add("{res} = {value};")
+		var t = mmodule.int_type
+		var res = new RuntimeVariable("{value.to_s}l", t, t)
+		return res
+	end
+
+	# Generate a char value
+	fun char_instance(value: Char): RuntimeVariable
+	do
+		var t = mmodule.char_type
+		var res = new RuntimeVariable("'{value.to_s.escape_to_c}'", t, t)
+		return res
+	end
+
+	# Generate a float value
+	#
+	# FIXME pass a Float, not a string
+	fun float_instance(value: String): RuntimeVariable
+	do
+		var t = mmodule.float_type
+		var res = new RuntimeVariable("{value}", t, t)
 		return res
 	end
 
 	# Generate an integer value
 	fun bool_instance(value: Bool): RuntimeVariable
 	do
-		var res = self.new_var(self.get_class("Bool").mclass_type)
-		if value then
-			self.add("{res} = 1;")
-		else
-			self.add("{res} = 0;")
-		end
+		var s = if value then "1" else "0"
+		var res = new RuntimeVariable(s, bool_type, bool_type)
+		return res
+	end
+
+	# Generate the `null` value
+	fun null_instance: RuntimeVariable
+	do
+		var t = compiler.mainmodule.model.null_type
+		var res = new RuntimeVariable("((val*)NULL)", t, t)
 		return res
 	end
 
 	# Generate a string value
 	fun string_instance(string: String): RuntimeVariable
 	do
-		var mtype = self.get_class("String").mclass_type
+		var mtype = mmodule.string_type
 		var name = self.get_name("varonce")
 		self.add_decl("static {mtype.ctype} {name};")
 		var res = self.new_var(mtype)
 		self.add("if (likely({name}!=NULL)) \{")
 		self.add("{res} = {name};")
 		self.add("\} else \{")
-		var native_mtype = self.get_class("NativeString").mclass_type
+		var native_mtype = mmodule.native_string_type
 		var nat = self.new_var(native_mtype)
 		self.add("{nat} = \"{string.escape_to_c}\";")
 		var length = self.int_instance(string.length)
@@ -1557,7 +1596,7 @@ abstract class AbstractCompilerVisitor
 		else
 			self.add("PRINT_ERROR(\"\\n\");")
 		end
-		self.add("show_backtrace(1);")
+		self.add("fatal_exit(1);")
 	end
 
 	# Add a dynamic cast
@@ -1754,12 +1793,16 @@ redef class MType
 
 	# Short name of the `ctype` to use in unions
 	fun ctypename: String do return "val"
+
+	# Is the associated C type a primitive one?
+	#
+	# ENSURE `result == (ctype != "val*")`
+	fun is_c_primitive: Bool do return false
 end
 
 redef class MClassType
 
-	redef fun ctype: String
-	do
+	redef var ctype is lazy do
 		if mclass.name == "Int" then
 			return "long"
 		else if mclass.name == "Bool" then
@@ -1776,6 +1819,8 @@ redef class MClassType
 			return "val*"
 		end
 	end
+
+	redef var is_c_primitive is lazy do return ctype != "val*"
 
 	redef fun ctype_extern: String
 	do
@@ -2266,7 +2311,7 @@ redef class AAttrPropdef
 			if is_lazy then
 				var set
 				var ret = self.mpropdef.static_mtype
-				var useiset = ret.ctype == "val*" and not ret isa MNullableType
+				var useiset = not ret.is_c_primitive and not ret isa MNullableType
 				var guard = self.mlazypropdef.mproperty
 				if useiset then
 					set = v.isset_attribute(self.mpropdef.mproperty, recv)
@@ -2281,7 +2326,7 @@ redef class AAttrPropdef
 
 				v.assign(res, value)
 				if not useiset then
-					var true_v = v.new_expr("1", v.bool_type)
+					var true_v = v.bool_instance(true)
 					v.write_attribute(guard, arguments.first, true_v)
 				end
 				v.add("\}")
@@ -2294,9 +2339,9 @@ redef class AAttrPropdef
 			v.write_attribute(self.mpropdef.mproperty, arguments.first, arguments[1])
 			if is_lazy then
 				var ret = self.mpropdef.static_mtype
-				var useiset = ret.ctype == "val*" and not ret isa MNullableType
+				var useiset = not ret.is_c_primitive and not ret isa MNullableType
 				if not useiset then
-					v.write_attribute(self.mlazypropdef.mproperty, arguments.first, v.new_expr("1", v.bool_type))
+					v.write_attribute(self.mlazypropdef.mproperty, arguments.first, v.bool_instance(true))
 				end
 			end
 		else
@@ -2694,15 +2739,15 @@ redef class AOrElseExpr
 end
 
 redef class AIntExpr
-	redef fun expr(v) do return v.new_expr("{self.value.to_s}", self.mtype.as(not null))
+	redef fun expr(v) do return v.int_instance(self.value.as(not null))
 end
 
 redef class AFloatExpr
-	redef fun expr(v) do return v.new_expr("{self.n_float.text}", self.mtype.as(not null)) # FIXME use value, not n_float
+	redef fun expr(v) do return v.float_instance("{self.n_float.text}") # FIXME use value, not n_float
 end
 
 redef class ACharExpr
-	redef fun expr(v) do return v.new_expr("'{self.value.to_s.escape_to_c}'", self.mtype.as(not null))
+	redef fun expr(v) do return v.char_instance(self.value.as(not null))
 end
 
 redef class AArrayExpr
@@ -2730,14 +2775,64 @@ end
 redef class ASuperstringExpr
 	redef fun expr(v)
 	do
-		var array = new Array[RuntimeVariable]
+		var type_string = mtype.as(not null)
+
+		# Collect elements of the superstring
+		var array = new Array[AExpr]
 		for ne in self.n_exprs do
+			# Drop literal empty string.
+			# They appears in things like "{a}" that is ["", a, ""]
 			if ne isa AStringFormExpr and ne.value == "" then continue # skip empty sub-strings
-			var i = v.expr(ne, null)
-			array.add(i)
+			array.add(ne)
 		end
-		var a = v.array_instance(array, v.object_type)
-		var res = v.send(v.get_property("to_s", a.mtype), [a])
+
+		# Store the allocated native array in a static variable
+		# For reusing later
+		var varonce = v.get_name("varonce")
+		v.add("if (unlikely({varonce}==NULL)) \{")
+
+		# The native array that will contains the elements to_s-ized.
+		# For fast concatenation.
+		var a = v.native_array_instance(type_string, v.int_instance(array.length))
+
+		v.add_decl("static {a.mtype.ctype} {varonce};")
+
+		# Pre-fill the array with the literal string parts.
+		# So they do not need to be filled again when reused
+		for i in [0..array.length[ do
+			var ne = array[i]
+			if not ne isa AStringFormExpr then continue
+			var e = v.expr(ne, null)
+			v.native_array_set(a, i, e)
+		end
+
+		v.add("\} else \{")
+		# Take the native-array from the store.
+		# The point is to prevent that some recursive execution use (and corrupt) the same native array
+		# WARNING: not thread safe! (FIXME?)
+		v.add("{a} = {varonce};")
+		v.add("{varonce} = NULL;")
+		v.add("\}")
+
+		# Stringify the elements and put them in the native array
+		var to_s_method = v.get_property("to_s", v.object_type)
+		for i in [0..array.length[ do
+			var ne = array[i]
+			if ne isa AStringFormExpr then continue
+			var e = v.expr(ne, null)
+			# Skip the `to_s` if the element is already a String
+			if not e.mcasttype.is_subtype(v.compiler.mainmodule, null, type_string) then
+				e = v.send(to_s_method, [e]).as(not null)
+			end
+			v.native_array_set(a, i, e)
+		end
+
+		# Fast join the native string to get the result
+		var res = v.send(v.get_property("native_to_s", a.mtype), [a])
+
+		# We finish to work with the native array,
+		# so store it so that it can be reused
+		v.add("{varonce} = {a};")
 		return res
 	end
 end
@@ -2767,15 +2862,15 @@ redef class AOrangeExpr
 end
 
 redef class ATrueExpr
-	redef fun expr(v) do return v.new_expr("1", self.mtype.as(not null))
+	redef fun expr(v) do return v.bool_instance(true)
 end
 
 redef class AFalseExpr
-	redef fun expr(v) do return v.new_expr("0", self.mtype.as(not null))
+	redef fun expr(v) do return v.bool_instance(false)
 end
 
 redef class ANullExpr
-	redef fun expr(v) do return v.new_expr("NULL", self.mtype.as(not null))
+	redef fun expr(v) do return v.null_instance
 end
 
 redef class AIsaExpr
@@ -2803,7 +2898,7 @@ redef class AAsNotnullExpr
 		var i = v.expr(self.n_expr, null)
 		if v.compiler.modelbuilder.toolcontext.opt_no_check_assert.value then return i
 
-		if i.mtype.ctype != "val*" then return i
+		if i.mtype.is_c_primitive then return i
 
 		v.add("if (unlikely({i} == NULL)) \{")
 		v.add_abort("Cast failed")

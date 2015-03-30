@@ -206,7 +206,7 @@ class SeparateErasureCompiler
 
 		var rta = runtime_type_analysis
 		var is_dead = false # mclass.kind == abstract_kind or mclass.kind == interface_kind
-		if not is_dead and rta != null and not rta.live_classes.has(mclass) and mtype.ctype == "val*" and mclass.name != "NativeArray" then
+		if not is_dead and rta != null and not rta.live_classes.has(mclass) and not mtype.is_c_primitive and mclass.name != "NativeArray" then
 			is_dead = true
 		end
 
@@ -264,7 +264,7 @@ class SeparateErasureCompiler
 		v.add_decl("\}")
 		v.add_decl("\};")
 
-		if mtype.ctype != "val*" or mtype.mclass.name == "Pointer" then
+		if mtype.is_c_primitive or mtype.mclass.name == "Pointer" then
 			#Build instance struct
 			self.header.add_decl("struct instance_{c_name} \{")
 			self.header.add_decl("const struct class *class;")
@@ -529,7 +529,7 @@ class SeparateErasureCompilerVisitor
 		end
 
 		var class_ptr
-		if value.mtype.ctype == "val*" then
+		if not value.mtype.is_c_primitive then
 			class_ptr = "{value}->class->"
 		else
 			var mclass = value.mtype.as(MClassType).mclass
@@ -548,7 +548,7 @@ class SeparateErasureCompilerVisitor
 		else if mtype isa MVirtualType then
 			var recv = self.frame.arguments.first
 			var recv_ptr
-			if recv.mtype.ctype == "val*" then
+			if not recv.mtype.is_c_primitive then
 				recv_ptr = "{recv}->class->"
 			else
 				var mclass = recv.mtype.as(MClassType).mclass
@@ -615,7 +615,7 @@ class SeparateErasureCompilerVisitor
 			var res = self.new_var(mtype)
 			if compiler.runtime_type_analysis != null and not compiler.runtime_type_analysis.live_types.has(value.mtype.as(MClassType)) then
 				self.add("/*no boxing of {value.mtype}: {value.mtype} is not live! */")
-				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); show_backtrace(1);")
+				self.add("PRINT_ERROR(\"Dead code executed!\\n\"); fatal_exit(1);")
 				return res
 			end
 			self.require_declaration("BOX_{valtype.c_name}")
@@ -632,7 +632,7 @@ class SeparateErasureCompilerVisitor
 	do
 		var res = self.get_name("var_class_name")
 		self.add_decl("const char* {res};")
-		if value.mtype.ctype == "val*" then
+		if not value.mtype.is_c_primitive then
 			self.add "{res} = {value} == NULL ? \"null\" : {value}->class->name;"
 		else
 			self.require_declaration("class_{value.mtype.c_name}")
@@ -643,7 +643,7 @@ class SeparateErasureCompilerVisitor
 
 	redef fun native_array_instance(elttype, length)
 	do
-		var nclass = self.get_class("NativeArray")
+		var nclass = mmodule.native_array_class
 		var mtype = nclass.get_mtype([elttype])
 		var res = self.new_var(mtype)
 		res.is_exact = true

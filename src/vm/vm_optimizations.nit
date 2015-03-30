@@ -17,8 +17,7 @@
 # Optimization of the nitvm
 module vm_optimizations
 
-import vm
-import variables_numbering
+import virtual_machine
 
 redef class VirtualMachine
 	# List of known patterns (static type + global property)
