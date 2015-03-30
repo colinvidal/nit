@@ -527,8 +527,8 @@ do
 	return -1
 end
 
-# Preexistence mask to get all dependencies
-fun pmask_DEPENDENCIES: Int
+# Preexistence mask of dependencies
+fun pmask_DEPS: Int
 do
 	return 240
 end
@@ -549,10 +549,44 @@ do
 	# It must not write on dependencies bits
 	assert flag < 16
 
-	var deps = expr.preexistence_cache.bin_and(pmask_DEPENDENCIES)
-	deps = deps.bin_or(flag)
-	expr.preexistence_cache = deps
+	expr.preexistence_cache = expr.preexistence_cache.bin_and(pmask_DEPS).bin_or(flag)
 	return expr.preexistence_cache
+end
+
+# Get if the preexistence state of a expression matches with given flag
+fun get_preexistence_flag(expr: IRExpr, flag: Int): Bool
+do
+	return expr.preexistence_cache.bin_and(15) == flag
+end
+
+# Return true if the expression preexists (recursive case is interpreted as preexistent)
+fun is_preexists(expr: IRExpr): Bool
+do
+	return expr.preexistence_cache.bin_and(1) == 1 or expr.preexistence_cache == 0
+end
+
+# Return true if the preexistence state of the expression is perennial
+fun is_perennial(expr: IRExpr): Bool
+do
+	return expr.preexistence_cache.bin_and(4) == 4
+end
+
+# Merge dependecies and preexistence state of two expressions
+fun merge_preexistence(expr1: IRExpr, expr2: IRExpr): Int
+do
+	if get_preexistence_flag(expr1, pmask_NPRE_PER) or get_preexistence_flag(expr2, pmask_NPRE_PER) then
+		return pmask_NPRE_PER
+	else if get_preexistence_flag(expr1, pmask_RECURSIV) or get_preexistence_flag(expr2, pmask_RECURSIV) then
+		return pmask_RECURSIV
+	else
+		var deps = expr1.preexistence_cache.bin_and(pmask_DEPS)
+		deps = deps.bin_or(expr2.preexistence_cache.bin_and(pmask_DEPS))
+
+		var pre = expr1.preexistence_cache.bin_and(15)
+		pre = deps.bin_and(expr2.preexistence_cache.bin_and(15))
+
+		return pre
+	end
 end
 
 redef class IRExpr
@@ -582,4 +616,33 @@ redef class IRParam
 	end
 end
 
+redef class IRNew
+	redef fun preexists(reset)
+	do
+		if loaded then
+			set_preexistence_flag(self, pmask_PTYPE_PER)
+		else
+			set_preexistence_flag(self, pmask_NPRE_NPER)
+			reset.add(self)
+		end
 
+		return preexistence_cache
+	end
+end
+
+redef class IRSSAVar
+	redef fun preexists(reset)
+	do
+		if not is_preexists(self) then
+			preexistence_cache = dependency.preexists(reset)
+		end
+
+		return preexistence_cache
+	end
+end
+
+#redef class IRPhiVar
+#	redef fun preexists(reset)
+#	do
+#	end
+#end
