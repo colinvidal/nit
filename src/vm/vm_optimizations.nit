@@ -527,92 +527,94 @@ do
 	return -1
 end
 
-# Preexistence mask of dependencies
-fun pmask_DEPS: Int
-do
-	return 240
-end
-
-# Set a bit in a dependency range on the given offset to a preexistence value
-fun set_dependency_flag(expr: IRExpr, offset: Int): Int
-do
-	# It must not write on preexistence bits
-	assert offset > 15
-
-	expr.preexistence_cache = expr.preexistence_cache.bin_or(offset)
-	return expr.preexistence_cache
-end
-
-# Set a preexistence flag
-fun set_preexistence_flag(expr: IRExpr, flag: Int): Int
-do
-	# It must not write on dependencies bits
-	assert flag < 16
-
-	expr.preexistence_cache = expr.preexistence_cache.bin_and(pmask_DEPS).bin_or(flag)
-	return expr.preexistence_cache
-end
-
-# Get if the preexistence state of a expression matches with given flag
-fun get_preexistence_flag(expr: IRExpr, flag: Int): Bool
-do
-	return expr.preexistence_cache.bin_and(15) == flag
-end
-
-# Return true if the expression preexists (recursive case is interpreted as preexistent)
-fun is_preexists(expr: IRExpr): Bool
-do
-	return expr.preexistence_cache.bin_and(1) == 1 or expr.preexistence_cache == 0
-end
-
-# Return true if the preexistence state of the expression is perennial
-fun is_perennial(expr: IRExpr): Bool
-do
-	return expr.preexistence_cache.bin_and(4) == 4
-end
-
-# Merge dependecies and preexistence state of two expressions
-fun merge_preexistence(expr1: IRExpr, expr2: IRExpr): Int
-do
-	if get_preexistence_flag(expr1, pmask_NPRE_PER) or get_preexistence_flag(expr2, pmask_NPRE_PER) then
-		return pmask_NPRE_PER
-	else if get_preexistence_flag(expr1, pmask_RECURSIV) or get_preexistence_flag(expr2, pmask_RECURSIV) then
-		return pmask_RECURSIV
-	else
-		var deps = expr1.preexistence_cache.bin_and(pmask_DEPS)
-		deps = deps.bin_or(expr2.preexistence_cache.bin_and(pmask_DEPS))
-
-		var pre = expr1.preexistence_cache.bin_and(15)
-		pre = deps.bin_and(expr2.preexistence_cache.bin_and(15))
-
-		return pre
-	end
-end
-
 redef class IRExpr
 	# The cached preexistence of the expression
-	var preexistence_cache: Int = pmask_UNKNOWN
+	var preexist_cache: Int = pmask_UNKNOWN
 
 	# Compute the preexistence of the expression
 	# `reset` is the list of no perennial preexistences of the expression and it depdendencies
 	fun preexists(reset: List[IRExpr]): Int is abstract
+
+	# Set a bit in a dependency range on the given offset to a preexistence state
+	fun set_dependency_flag(offset: Int): Int
+	do
+		# It must not write on preexistence bits
+		assert offset > 15
+
+		preexist_cache = preexist_cache.bin_or(offset)
+		return preexist_cache
+	end
+
+	# Set a preexistence flag
+	fun set_preexistence_flag(flag: Int): Int
+	do
+		# It must not write on dependencies bits
+		assert flag < 16
+
+		preexist_cache = preexist_cache.bin_and(240).bin_or(flag)
+		return preexist_cache
+	end
+
+	# Get if the preexistence state of a expression matches with given flag
+	fun get_preexistence_flag(flag: Int): Bool
+	do
+		return preexist_cache.bin_and(15) == flag
+	end
+
+	# Return true if the preexistence of the expression isn't known
+	fun is_preexistence_unknown: Bool
+	do
+		return preexist_cache == pmask_UNKNOWN
+	end
+
+	# Return true if the expression preexists (recursive case is interpreted as preexistent)
+	fun is_preexists: Bool
+	do
+		return preexist_cache.bin_and(1) == 1 or preexist_cache == 0
+	end
+
+	# Return true if the preexistence state of the expression is perennial
+	fun is_perennial: Bool
+	do
+		return preexist_cache.bin_and(4) == 4
+	end
+
+	# Merge dependecies and preexistence state
+	fun merge_preexistence(expr: IRExpr): Int
+	do
+		if expr.get_preexistence_flag(pmask_NPRE_PER) then
+			preexist_cache = pmask_NPRE_PER
+		else if expr.get_preexistence_flag(pmask_RECURSIV) then
+			preexist_cache = pmask_RECURSIV
+		else
+			var pre = preexist_cache.bin_and(15)
+			var deps = preexist_cache.bin_and(240)
+
+			pre = pre.bin_and(expr.preexist_cache.bin_and(15))
+			deps = deps.bin_or(expr.preexist_cache.bin_and(240))
+			
+			preexist_cache = pre.bin_or(deps)
+		end
+
+		return preexist_cache
+	end
 end
 
 redef class IRLit
-	redef var preexistence_cache = pmask_PVAL_PER
+	redef var preexist_cache = pmask_PVAL_PER
 
 	redef fun preexists(reset)
 	do
-		return preexistence_cache
+		return preexist_cache
 	end
 end
 
 redef class IRParam
-	redef var preexistence_cache = pmask_PVAL_PER
+	redef var preexist_cache = pmask_PVAL_PER
 
 	redef fun preexists(reset)
 	do
-		return set_dependency_flag(self, offset)
+		return set_dependency_flag(offset)
 	end
 end
 
@@ -620,29 +622,81 @@ redef class IRNew
 	redef fun preexists(reset)
 	do
 		if loaded then
-			set_preexistence_flag(self, pmask_PTYPE_PER)
+			set_preexistence_flag(pmask_PTYPE_PER)
 		else
-			set_preexistence_flag(self, pmask_NPRE_NPER)
+			set_preexistence_flag(pmask_NPRE_NPER)
 			reset.add(self)
 		end
 
-		return preexistence_cache
+		return preexist_cache
 	end
 end
 
 redef class IRSSAVar
 	redef fun preexists(reset)
 	do
-		if not is_preexists(self) then
-			preexistence_cache = dependency.preexists(reset)
+		if is_preexistence_unknown then
+			preexist_cache = dependency.preexists(reset)
+			if not is_perennial then
+				reset.add(self)
+			end
 		end
 
-		return preexistence_cache
+		return preexist_cache
 	end
 end
 
-#redef class IRPhiVar
-#	redef fun preexists(reset)
-#	do
-#	end
-#end
+redef class IRPhiVar
+	redef fun preexists(reset)
+	do
+		if is_preexistence_unknown then
+			preexist_cache = pmask_PVAL_PER
+			for dep in dependencies do
+				merge_preexistence(dep)
+				if get_preexistence_flag(pmask_NPRE_PER) then
+					break
+				end
+			end
+
+			if not is_perennial then
+				reset.add(self)
+			end
+		end
+
+		return preexist_cache
+	end
+end
+
+
+redef class IRReadSite
+	redef fun preexists(reset)
+	do
+		if is_preexistence_unknown then
+			if immutable then
+				set_preexistence_flag(pmask_NPRE_PER)
+			else
+				recv.preexists(reset)
+				if recv.is_preexists then
+					if recv.is_perennial then
+						set_preexistence_flag(pmask_PVAL_PER)
+					else
+						set_preexistence_flag(pmask_PVAL_NPER)
+						reset.add(self)
+					end
+
+					# The receiver is always at position 0 of the variable environment 
+					set_dependency_flag(0)
+				else
+					if recv.is_perennial then
+						set_preexistence_flag(pmask_NPRE_PER)
+					else
+						set_preexistence_flag(pmask_NPRE_NPER)
+						reset.add(self)
+					end
+				end
+			end
+		end
+
+		return preexist_cache
+	end
+end

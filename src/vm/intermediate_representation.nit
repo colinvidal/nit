@@ -70,6 +70,9 @@ abstract class IRPropSite
 
 	# Static type of the receiver
 	var st: MType
+
+	# The expression of the receiver
+	var recv: IRExpr
 end
 
 # IR of object expression
@@ -95,6 +98,9 @@ end
 class IRReadSite
 	super IRExprSite
 	super IRAttrSite
+
+	# Tell if the attribute is immutable
+	var immutable = false
 end
 
 # IR of write attribute
