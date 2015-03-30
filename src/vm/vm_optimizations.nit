@@ -18,6 +18,7 @@
 module vm_optimizations
 
 import virtual_machine
+import variables_numbering
 
 redef class VirtualMachine
 	# List of known patterns (static type + global property)
@@ -36,7 +37,7 @@ redef class VirtualMachine
 		end
 
 		if not found then
-			var p = new MPattern(cs.recv, cs.mproperty, cs.mpropdef)
+			var p = new MPattern(cs.recv, cs.mproperty)
 			patterns.push(p)
 			return p.add_callsite(cs)
 		end
@@ -443,16 +444,20 @@ class MPattern
 	# Global property called
 	var gp: MMethod
 
-	# Local property called
-	var lp: MMethodDef
+	# Local properties candidates
+	var lps = new List[MMethodDef]
 
 	# CallSite using this pattern
 	var callsites = new List[CallSite]
 
-	# Add a callsite using this pattern
+	# Add a callsite using this pattern, and the candidate LP if didn't already known
 	fun add_callsite(cs: CallSite): nullable MPattern
 	do
 		if cs.recv == st and cs.mproperty == gp then
+			if not lps.has(cs.mpropdef) then
+				lps.add(cs.mpropdef)
+			end
+
 			if not callsites.has(cs) then
 				callsites.add(cs)
 			end
@@ -462,4 +467,52 @@ class MPattern
 
 		return null
 	end
+end
+
+# Preexistence mask of perennial value preexistence
+fun pmask_PVAL_PER: Int
+do
+	return 15
+end
+
+# Preexistence mask of perennial type preexistence
+fun pmask_PTYPE_PER: Int
+do
+	return 13
+end
+
+# Preexistence mask of no perennial value preexistence
+fun pmask_PVAL_NPER: Int
+do
+	return 11
+end
+
+# Preexistence mask of no perennial type preexistence
+fun pmask_PTYPE_NPER: Int
+do
+	return 9
+end
+
+# Preexistence mask of perennial no preexistence
+fun pmask_NPRE_PER: Int
+do
+	return 12
+end
+
+# Preexistence mask of no perennial no preexistence
+fun pmask_NPRE_NPER: Int
+do
+	return 8
+end
+
+# Preexistence mask of recursive calls
+fun pmask_RECURSIV: Int
+do
+	return 0
+end
+
+# Preexistence mask of unknown preexistence
+fun pmask_UNKNOWN: Int
+do
+	return -1
 end
