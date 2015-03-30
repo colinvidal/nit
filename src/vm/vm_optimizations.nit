@@ -19,6 +19,7 @@ module vm_optimizations
 
 import virtual_machine
 import variables_numbering
+import intermediate_representation
 
 redef class VirtualMachine
 	# List of known patterns (static type + global property)
@@ -450,6 +451,15 @@ class MPattern
 	# CallSite using this pattern
 	var callsites = new List[CallSite]
 
+	# Number of uncompiled calles (local properties)
+	var cuc = 0
+
+	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
+	var perennial_status = false
+
+	# If all LPs preexists and are perennial, encoding the resultant preexistence of the pattern
+	var lp_all_perennial: Int = pmask_UNKNOWN
+
 	# Add a callsite using this pattern, and the candidate LP if didn't already known
 	fun add_callsite(cs: CallSite): nullable MPattern
 	do
@@ -516,3 +526,60 @@ fun pmask_UNKNOWN: Int
 do
 	return -1
 end
+
+# Preexistence mask to get all dependencies
+fun pmask_DEPENDENCIES: Int
+do
+	return 240
+end
+
+# Set a bit in a dependency range on the given offset to a preexistence value
+fun set_dependency_flag(expr: IRExpr, offset: Int): Int
+do
+	# It must not write on preexistence bits
+	assert offset > 15
+
+	expr.preexistence_cache = expr.preexistence_cache.bin_or(offset)
+	return expr.preexistence_cache
+end
+
+# Set a preexistence flag
+fun set_preexistence_flag(expr: IRExpr, flag: Int): Int
+do
+	# It must not write on dependencies bits
+	assert flag < 16
+
+	var deps = expr.preexistence_cache.bin_and(pmask_DEPENDENCIES)
+	deps = deps.bin_or(flag)
+	expr.preexistence_cache = deps
+	return expr.preexistence_cache
+end
+
+redef class IRExpr
+	# The cached preexistence of the expression
+	var preexistence_cache: Int = pmask_UNKNOWN
+
+	# Compute the preexistence of the expression
+	# `reset` is the list of no perennial preexistences of the expression and it depdendencies
+	fun preexists(reset: List[IRExpr]): Int is abstract
+end
+
+redef class IRLit
+	redef var preexistence_cache = pmask_PVAL_PER
+
+	redef fun preexists(reset)
+	do
+		return preexistence_cache
+	end
+end
+
+redef class IRParam
+	redef var preexistence_cache = pmask_PVAL_PER
+
+	redef fun preexists(reset)
+	do
+		return set_dependency_flag(self, offset)
+	end
+end
+
+
