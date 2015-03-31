@@ -58,6 +58,8 @@ class BasicBlock
 		successors.add(successor)
 		successor.predecessors.add(self)
 	end
+
+	var treated: Bool = false
 end
 
 redef class Variable
@@ -170,21 +172,12 @@ redef class AMethPropdef
 
 		is_generated = true
 
-		print "Method = " + location.to_s
-		dump_tree
-		dump_bb(basic_block.as(not null))
-	end
-
-	# Debug a chain of basic blocks
-	fun dump_bb(b: BasicBlock)
-	do
-		print "Block = " + b.to_s
-		print "First = " + b.first.to_s + ", " + b.first.location.to_s
-		print "Last = " + b.last.to_s + ", "+ b.last.location.to_s + "\n\n"
-
-		for bb in b.successors do
-			print "Successor = "
-			dump_bb(bb)
+		if mpropdef != null then
+			if mpropdef.name == "foo" then
+				# Dump in a dot file the hierarchy
+				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
+				debug.dump(basic_block.as(not null))
+			end
 		end
 	end
 
@@ -242,6 +235,40 @@ redef class AMethPropdef
 	end
 end
 
+# Utility class for basic block and SSA
+class BlockDebug
+	var file: FileWriter
+
+	fun dump(block: BasicBlock)
+	do
+		# Write the basic blocks hierarchy in debug file
+		file.write("digraph basic_blocks\n\{\n")
+		var i = 0
+		file.write(print_block(block, i))
+		file.write("\n\}")
+
+		file.close
+	end
+
+	fun print_block(block: BasicBlock, i:Int): String
+	do
+		var s = "block{block.hash.to_s} [shape=record, label="+""""{block|{first}|{last}}"];"""+ "\n"
+		i += 1
+		block.treated = true
+
+		for b in block.successors do
+			s += "block{block.hash.to_s} -> " + " block{b.hash.to_s};\n"
+
+			if not b.treated then s += print_block(b, i)
+
+			# print "\tFirst = " + bb.first.to_s + ", " + bb.first.location.to_s
+			# print "\tLast = " + bb.last.to_s + ", "+ bb.last.location.to_s + "\n\n"
+		end
+
+		return s
+	end
+end
+
 redef class AAttrPropdef
 	redef fun compute_ssa(vm)
 	do
@@ -284,19 +311,25 @@ redef class AVarReassignExpr
 	end
 end
 
-# TODO : go to super block for phi fonctions ?
-# redef class AEscapeExpr
-# 	redef fun stmt(v)
-# 	do
-# 		var ne = self.n_expr
-# 		if ne != null then
-# 			var i = v.expr(ne)
-# 			if i == null then return
-# 			v.escapevalue = i
-# 		end
-# 		v.escapemark = self.escapemark
-# 	end
-# end
+redef class AEscapeExpr
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		# Finish the old block
+		old_block.last = self
+
+		# Update successor of old block
+		var found = false
+		var block = old_block
+		while not found do
+			if block.first isa ABlockExpr then found = true
+
+			block = block.predecessors.first
+		end
+
+		# The successor is the closer ABlockExpr in predecessor blocks
+		old_block.successors.add(block)
+	end
+end
 
 redef class AReturnExpr
 	redef fun compute_ssa(vm)
@@ -565,17 +598,17 @@ redef class ABlockExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		# Set the relation with the predecessor block
-		old_block.last = parent.as(not null)
+		#old_block.last = parent.as(not null)
 
 		# The beginning of the block is the first instruction
-		var block = new BasicBlock
-		block.first = self.n_expr.first
-		block.last = self.n_expr.first
+		#var block = new BasicBlock
+		#old_block.first = self.n_expr.first
+		old_block.last = self.n_expr.first
 
-		old_block.link(block)
+		#old_block.link(block)
 
 		# Recursively continue in the body of the block
-		for e in self.n_expr do e.generate_basicBlocks(vm, block)
+		for e in self.n_expr do e.generate_basicBlocks(vm, old_block)
 	end
 end
 
@@ -586,8 +619,11 @@ redef class AIfExpr
 		if self.n_else != null then self.n_else.compute_ssa(vm)
 	end
 
+	#TODO: les blocs des branches doivent pointer après le if
 	redef fun generate_basicBlocks(vm, old_block)
 	do
+		print "qsmdkqsmlskdmqlskdmlqksd"
+
 		# We start two new blocks if the if has two branches
 		old_block.last = self.n_expr
 		var block_then = new BasicBlock
@@ -647,7 +683,7 @@ redef class AWhileExpr
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		old_block.last = parent.as(not null)
+		old_block.last = self.n_expr
 
 		# The beginning of the block is the first instruction
 		var block = new BasicBlock
@@ -680,21 +716,18 @@ redef class ALoopExpr
 end
 
 redef class AForExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		#TODO
-		# Give a position to each variable declared in the header of the for
-		# if self.variables.length == 1 then
-		# 	self.variables.first.position = position
-		# 	self.variables[0].position = position
-		# 	position += 1
-		# else if self.variables.length == 2 then
-		# 	self.variables[0].position = position
-		# 	position += 1
-		# 	self.variables[1].position = position
-		# 	position += 1
-		# end
 		self.n_block.compute_ssa(vm)
+		old_block.last = parent.as(not null)
+
+		# The beginning of the block is the first instruction
+		var block = new BasicBlock
+		block.first = self.n_block.as(not null)
+		block.last = self.n_block.as(not null)
+
+		old_block.link(block)
+		self.n_block.generate_basicBlocks(vm, block)
 	end
 end
 
