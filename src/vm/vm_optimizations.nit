@@ -19,7 +19,7 @@ module vm_optimizations
 
 import virtual_machine
 import variables_numbering
-import intermediate_representation
+import model_optimizations
 
 redef class VirtualMachine
 	# List of known patterns (static type + global property)
@@ -437,48 +437,6 @@ redef class ModelBuilder
 	end
 end
 
-# Pattern of a callsite
-class MPattern
-	# Static type of the receiver
-	var st: MType
-
-	# Global property called
-	var gp: MMethod
-
-	# Local properties candidates
-	var lps = new List[MMethodDef]
-
-	# CallSite using this pattern
-	var callsites = new List[CallSite]
-
-	# Number of uncompiled calles (local properties)
-	var cuc = 0
-
-	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
-	var perennial_status = false
-
-	# If all LPs preexists and are perennial, encoding the resultant preexistence of the pattern
-	var lp_all_perennial: Int = pmask_UNKNOWN
-
-	# Add a callsite using this pattern, and the candidate LP if didn't already known
-	fun add_callsite(cs: CallSite): nullable MPattern
-	do
-		if cs.recv == st and cs.mproperty == gp then
-			if not lps.has(cs.mpropdef) then
-				lps.add(cs.mpropdef)
-			end
-
-			if not callsites.has(cs) then
-				callsites.add(cs)
-			end
-
-			return self
-		end
-
-		return null
-	end
-end
-
 # Preexistence mask of perennial value preexistence
 fun pmask_PVAL_PER: Int
 do
@@ -527,13 +485,13 @@ do
 	return -1
 end
 
-redef class IRExpr
+redef class MOExpr
 	# The cached preexistence of the expression
 	var preexist_cache: Int = pmask_UNKNOWN
 
 	# Compute the preexistence of the expression
 	# `reset` is the list of no perennial preexistences of the expression and it depdendencies
-	fun preexists(reset: List[IRExpr]): Int is abstract
+	fun preexists(reset: List[MOExpr]): Int is abstract
 
 	# Set a bit in a dependency range on the given offset to a preexistence state
 	fun set_dependency_flag(offset: Int): Int
@@ -580,7 +538,7 @@ redef class IRExpr
 	end
 
 	# Merge dependecies and preexistence state
-	fun merge_preexistence(expr: IRExpr): Int
+	fun merge_preexistence(expr: MOExpr): Int
 	do
 		if expr.get_preexistence_flag(pmask_NPRE_PER) then
 			preexist_cache = pmask_NPRE_PER
@@ -600,7 +558,7 @@ redef class IRExpr
 	end
 end
 
-redef class IRLit
+redef class MOLit
 	redef var preexist_cache = pmask_PVAL_PER
 
 	redef fun preexists(reset)
@@ -609,7 +567,7 @@ redef class IRLit
 	end
 end
 
-redef class IRParam
+redef class MOParam
 	redef var preexist_cache = pmask_PVAL_PER
 
 	redef fun preexists(reset)
@@ -618,7 +576,7 @@ redef class IRParam
 	end
 end
 
-redef class IRNew
+redef class MONew
 	redef fun preexists(reset)
 	do
 		if loaded then
@@ -632,7 +590,7 @@ redef class IRNew
 	end
 end
 
-redef class IRSSAVar
+redef class MOSSAVar
 	redef fun preexists(reset)
 	do
 		if is_preexistence_unknown then
@@ -646,7 +604,7 @@ redef class IRSSAVar
 	end
 end
 
-redef class IRPhiVar
+redef class MOPhiVar
 	redef fun preexists(reset)
 	do
 		if is_preexistence_unknown then
@@ -668,7 +626,7 @@ redef class IRPhiVar
 end
 
 
-redef class IRReadSite
+redef class MOReadSite
 	redef fun preexists(reset)
 	do
 		if is_preexistence_unknown then
@@ -701,7 +659,7 @@ redef class IRReadSite
 	end
 end
 
-redef class IRCallSite
+redef class MOCallSite
 	# 
 	fun check_args: Int
 	do
@@ -712,4 +670,15 @@ redef class IRCallSite
 	do
 		return -2
 	end
+end
+
+redef class MOPattern
+	# Number of uncompiled calles (local properties)
+	var cuc = 0
+
+	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
+	var perennial_status = false
+
+	# If all LPs preexists and are perennial, encoding the resultant preexistence of the pattern
+	var lp_all_perennial: Int = pmask_UNKNOWN
 end
