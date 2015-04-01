@@ -490,6 +490,16 @@ redef class ModelBuilder
 	end
 end
 
+# Preexistence masks
+# PVAL_PER:	0...1111
+# PTYPE_PER:	0...1101
+# PVAL_NPER:	0...1011
+# PTYPE_NPER:	0...1001
+# NPRE_PER:	0...1100
+# NPRE_NPER:	0...1000
+# RECURSIV:	0...0000
+# UNKNOWN:	1...
+
 # Preexistence mask of perennial value preexistence
 fun pmask_PVAL_PER: Int
 do
