@@ -424,7 +424,38 @@ redef class MMethodDef
 			return return_expr.preexist_cache
 		else
 			return_expr.set_preexistence_flag(pmask_RECURSIV)
+			if not return_expr.is_perennial then
+				reset.add(return_expr)
+			end
 			return return_expr.preexists(reset)
+		end
+	end
+
+	# Compute the preexistence of all invocation sites and return site of the method
+	fun preexists_all
+	do
+		var reset = new List[MOExpr]
+
+		preexists_return(reset)
+		if return_expr.get_preexistence_flag(pmask_RECURSIV) then
+			return_expr.set_preexistence_flag(pmask_PVAL_NPER)
+		end
+
+		# TODO: choose implementation of expr_return here
+
+		for expr in call_exprs do
+			var recv = expr.expr_recv
+
+			recv.preexists(reset)
+			if recv.get_preexistence_flag(pmask_RECURSIV) then
+				recv.set_preexistence_flag(pmask_PVAL_NPER)
+			end
+
+			# TODO: choose implementation of expr here
+		end
+
+		for expr in reset do
+			expr.init_preexist_cache
 		end
 	end
 end
@@ -568,6 +599,12 @@ redef class MOExpr
 		return preexist_cache.bin_and(4) == 4
 	end
 
+	# Initialize preexist_cache to UNKNOWN
+	fun init_preexist_cache
+	do
+		preexist_cache = pmask_UNKNOWN
+	end
+
 	# Merge dependecies and preexistence state
 	fun merge_preexistence(expr: MOExpr): Int
 	do
@@ -664,9 +701,9 @@ redef class MOReadSite
 			if immutable then
 				set_preexistence_flag(pmask_NPRE_PER)
 			else
-				recv.preexists(reset)
-				if recv.is_preexists then
-					if recv.is_perennial then
+				expr_recv.preexists(reset)
+				if expr_recv.is_preexists then
+					if expr_recv.is_perennial then
 						set_preexistence_flag(pmask_PVAL_PER)
 					else
 						set_preexistence_flag(pmask_PVAL_NPER)
@@ -676,7 +713,7 @@ redef class MOReadSite
 					# The receiver is always at position 0 of the environment 
 					set_dependency_flag(0)
 				else
-					if recv.is_perennial then
+					if expr_recv.is_perennial then
 						set_preexistence_flag(pmask_NPRE_PER)
 					else
 						set_preexistence_flag(pmask_NPRE_NPER)

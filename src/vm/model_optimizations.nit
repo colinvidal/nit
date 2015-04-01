@@ -99,7 +99,7 @@ abstract class MOPropSite
 	super MOSite
 
 	# The expression of the receiver
-	var recv: MOExpr
+	var expr_recv: MOExpr
 
 	# The pattern of the expression
 	var pattern: MOPattern
