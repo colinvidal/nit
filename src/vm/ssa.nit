@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Compute Single-Static Assignement form from an AST
+# Compute Single-Static Assignment form from an AST
 module ssa
 
 import variables_numbering
@@ -235,10 +235,11 @@ redef class AMethPropdef
 	end
 end
 
-# Utility class for basic block and SSA
+# Utility class for dump basic block and SSA to dot files
 class BlockDebug
 	var file: FileWriter
 
+	# Dump the hierarchy of BasicBlock from `block`
 	fun dump(block: BasicBlock)
 	do
 		# Write the basic blocks hierarchy in debug file
@@ -252,17 +253,23 @@ class BlockDebug
 
 	fun print_block(block: BasicBlock, i:Int): String
 	do
-		var s = "block{block.hash.to_s} [shape=record, label="+""""{block|{first}|{last}}"];"""+ "\n"
+		# Precise the type and location of the begin and end of current block
+		var s = "block{block.hash.to_s} [shape=record, label="+"\"\{"
+		s += "block" + block.hash.to_s
+		s += "|\{" + block.first.location.file.filename.to_s + block.first.location.line_start.to_s
+		s += " | " + block.first.to_s.escape_to_dot
+		s += "}|\{" + block.last.location.file.filename.to_s + block.last.location.line_end.to_s
+		s += " | " + block.last.to_s.escape_to_dot + "}}\"];"+ "\n"
+
 		i += 1
 		block.treated = true
 
 		for b in block.successors do
+			# Print edges to successors
 			s += "block{block.hash.to_s} -> " + " block{b.hash.to_s};\n"
 
+			# Print recursively child blocks
 			if not b.treated then s += print_block(b, i)
-
-			# print "\tFirst = " + bb.first.to_s + ", " + bb.first.location.to_s
-			# print "\tLast = " + bb.last.to_s + ", "+ bb.last.location.to_s + "\n\n"
 		end
 
 		return s
