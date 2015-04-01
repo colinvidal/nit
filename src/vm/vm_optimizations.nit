@@ -386,6 +386,9 @@ redef class ASendExpr
 end
 
 redef class MMethodDef
+	# Tell if the method has been compiled at least one time
+	var compiled = false
+
 	# List of known callsites inside a local property
 	var callsites = new List[CallSite]
 
@@ -409,10 +412,20 @@ redef class MMethodDef
 	# Return expression of the method
 	var return_expr: MOExpr
 
+	# List of expressions sites (contains callsites and read attribute)
+	var call_exprs = new List[MOExprSite]
+
 	# Compute the preexistence of the return of the method expression
 	fun preexists_return(reset: List[MOExpr]): Int
 	do
-		return return_expr.preexist_cache
+		if not compiled then
+			return pmask_NPRE_NPER
+		else if not return_expr.is_preexistence_unknown then
+			return return_expr.preexist_cache
+		else
+			return_expr.set_preexistence_flag(pmask_RECURSIV)
+			return return_expr.preexists(reset)
+		end
 	end
 end
 
