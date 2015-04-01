@@ -145,9 +145,11 @@ redef class AExpr
 	# Generate recursively basic block for this expression
 	# *`vm` Running instance of the virtual machine
 	# *`block` A basic block not completely filled
-	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock)
+	# Return the newest block
+	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock): BasicBlock
 	do
 		print "NOT YET IMPLEMENTED = " + self.class_name
+		return block
 	end
 end
 
@@ -168,13 +170,16 @@ redef class AMethPropdef
 		basic_block.last = self
 
 		# Recursively goes into the nodes
-		if n_block != null then n_block.generate_basicBlocks(vm, basic_block.as(not null))
+		if n_block != null then
+			n_block.generate_basicBlocks(vm, basic_block.as(not null))
+		end
 
 		is_generated = true
 
+		dump_tree
 		if mpropdef != null then
 			if mpropdef.name == "foo" then
-				# Dump in a dot file the hierarchy
+				# Dump the hierarchy in a dot file
 				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
 				debug.dump(basic_block.as(not null))
 			end
@@ -324,17 +329,7 @@ redef class AEscapeExpr
 		# Finish the old block
 		old_block.last = self
 
-		# Update successor of old block
-		var found = false
-		var block = old_block
-		while not found do
-			if block.first isa ABlockExpr then found = true
-
-			block = block.predecessors.first
-		end
-
-		# The successor is the closer ABlockExpr in predecessor blocks
-		old_block.successors.add(block)
+		return old_block
 	end
 end
 
@@ -351,6 +346,7 @@ redef class AReturnExpr
 	do
 		# The return just set the current block and stop the recursion
 		old_block.last = self
+		return old_block
 	end
 end
 
@@ -509,7 +505,7 @@ redef class ASendExpr
 		# because we create intra-procedural basic blocks here
 
 		# We do not need to recurse over the arguments since
-		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
@@ -602,20 +598,26 @@ redef class ABlockExpr
 		for e in self.n_expr do e.compute_ssa(vm)
 	end
 
+	# The block needs to know if a new block is created
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		# Set the relation with the predecessor block
-		#old_block.last = parent.as(not null)
+		old_block.last = self
 
-		# The beginning of the block is the first instruction
-		#var block = new BasicBlock
-		#old_block.first = self.n_expr.first
-		old_block.last = self.n_expr.first
+		var new_block = new BasicBlock
+		new_block.first = self
+		new_block.last = self
 
-		#old_block.link(block)
+		# Link the old block to the new
+		old_block.link(new_block)
+
+		var last_block = new_block
 
 		# Recursively continue in the body of the block
-		for e in self.n_expr do e.generate_basicBlocks(vm, old_block)
+		for e in self.n_expr do
+			last_block = e.generate_basicBlocks(vm, last_block)
+		end
+
+		return last_block
 	end
 end
 
@@ -626,13 +628,10 @@ redef class AIfExpr
 		if self.n_else != null then self.n_else.compute_ssa(vm)
 	end
 
-	#TODO: les blocs des branches doivent pointer après le if
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		print "qsmdkqsmlskdmqlskdmlqksd"
-
 		# We start two new blocks if the if has two branches
-		old_block.last = self.n_expr
+		old_block.last = self
 		var block_then = new BasicBlock
 
 		# Link the two to the predecessor
@@ -643,14 +642,25 @@ redef class AIfExpr
 		block_then.last = self.n_then.as(not null)
 		self.n_then.generate_basicBlocks(vm, block_then)
 
+		var block_else = new BasicBlock
+
 		if self.n_else != null then
-			var block_else = new BasicBlock
 			old_block.link(block_else)
 
 			block_else.first = self.n_else.as(not null)
 			block_else.last = self.n_else.as(not null)
 			self.n_else.generate_basicBlocks(vm, block_else)
 		end
+
+		# Create a new BasicBlock to represent the two successor
+		# branches of the if
+		var new_block = new BasicBlock
+		new_block.first = self
+		new_block.last = self
+		block_then.link(new_block)
+
+		if block_else.predecessors.length != 0 then block_else.link(new_block)
+		return new_block
 	end
 end
 
@@ -659,6 +669,29 @@ redef class AIfexprExpr
 	do
 		self.n_then.compute_ssa(vm)
 		self.n_else.compute_ssa(vm)
+	end
+
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		# We start two new blocks if the if has two branches
+		old_block.last = self
+		var block_then = new BasicBlock
+
+		# Link the two to the predecessor
+		old_block.link(block_then)
+
+		# Launch the recursion in two successors if they exist
+		block_then.first = self.n_then
+		block_then.last = self.n_then
+		self.n_then.generate_basicBlocks(vm, block_then)
+
+		var block_else = new BasicBlock
+		old_block.link(block_else)
+
+		block_else.first = self.n_else
+		block_else.last = self.n_else
+
+		return self.n_else.generate_basicBlocks(vm, block_else)
 	end
 end
 
@@ -678,7 +711,7 @@ redef class ADoExpr
 		block.last = self.n_block.as(not null)
 
 		old_block.link(block)
-		self.n_block.generate_basicBlocks(vm, block)
+		return self.n_block.generate_basicBlocks(vm, block)
 	end
 end
 
@@ -690,15 +723,23 @@ redef class AWhileExpr
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		old_block.last = self.n_expr
+		old_block.last = self
 
-		# The beginning of the block is the first instruction
+		# The beginning of the block is the test of the while
 		var block = new BasicBlock
-		block.first = self.n_block.as(not null)
+		block.first = self.n_expr
 		block.last = self.n_block.as(not null)
 
 		old_block.link(block)
-		self.n_block.generate_basicBlocks(vm, block)
+		var b = self.n_block.generate_basicBlocks(vm, block)
+
+		# var new_block = new BasicBlock
+		# new_block.first = self
+		# new_block.last = self
+		# block.link(new_block)
+
+		#block.link(b)
+		return b
 	end
 end
 
@@ -710,7 +751,7 @@ redef class ALoopExpr
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		old_block.last = parent.as(not null)
+		old_block.last = self
 
 		# The beginning of the block is the first instruction
 		var block = new BasicBlock
@@ -719,14 +760,16 @@ redef class ALoopExpr
 
 		old_block.link(block)
 		self.n_block.generate_basicBlocks(vm, block)
+
+		return block
 	end
 end
 
 redef class AForExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_block.compute_ssa(vm)
-		old_block.last = parent.as(not null)
+		#self.n_block.compute_ssa(vm)
+		old_block.last = self
 
 		# The beginning of the block is the first instruction
 		var block = new BasicBlock
@@ -735,6 +778,8 @@ redef class AForExpr
 
 		old_block.link(block)
 		self.n_block.generate_basicBlocks(vm, block)
+
+		return block
 	end
 end
 
