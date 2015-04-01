@@ -23,10 +23,10 @@ import model_optimizations
 
 redef class VirtualMachine
 	# List of known patterns (static type + global property)
-	var patterns = new List[MPattern]
+	var patterns = new List[MOPattern]
 
 	# Add pattern if it didn't already exists
-	fun add_pattern(cs: CallSite): nullable MPattern
+	fun add_pattern(cs: CallSite): nullable MOPattern
 	do
 		var found = false
 
@@ -38,7 +38,7 @@ redef class VirtualMachine
 		end
 
 		if not found then
-			var p = new MPattern(cs.recv, cs.mproperty)
+			var p = new MOPattern(cs.recv, cs.mproperty)
 			patterns.push(p)
 			return p.add_callsite(cs)
 		end
@@ -210,7 +210,7 @@ redef class CallSite
 	var id: Int
 
 	# Pattern that uses this call site
-	var pattern: MPattern
+	var pattern: MOPattern
 
 	# Optimize a method dispatch,
 	# If this method is always at the same position in virtual table, we can use direct access,
@@ -412,7 +412,7 @@ redef class ModelBuilder
 	do
 		super
 		var buf = "\n"
-		var known_patterns = new List[MPattern]
+		var known_patterns = new List[MOPattern]
 
 		for c in model.mclassdef_hierarchy do
 			for m in c.mpropdefs do
@@ -501,6 +501,15 @@ redef class MOExpr
 
 		preexist_cache = preexist_cache.bin_or(offset)
 		return preexist_cache
+	end
+
+	# True if the expression depends of the preexistence of a dependencie at `index`
+	fun is_dependency_flag(index: Int): Bool
+	do
+		# It must concern a dependency bit
+		assert index > 15
+
+		return 1.lshift(index).bin_and(preexist_cache) != 0
 	end
 
 	# Set a preexistence flag
@@ -660,15 +669,64 @@ redef class MOReadSite
 end
 
 redef class MOCallSite
-	# 
-	fun check_args: Int
+	# If the receiver expression of `self` depends of the preexistence of the arg at `index`, 
+	# check if `expr` depends of the preexistence of the same arg.
+	fun dep_matches(expr: MOExpr, index: Int): Bool
 	do
-		return -2
+		if is_dependency_flag(index) and not expr.is_dependency_flag(index) then
+			return false
+		end
+
+		return true
+	end
+
+	# Check if the preexistence of the arguments matches with the dependencies of the expression
+	# Then, merge the preexsitence values of all arguments with the expression preexistence
+	fun check_args(reset: List[MOExpr]): Int
+	do
+		var index = 0
+
+		for arg in given_args do
+			arg.preexists(reset)
+			if dep_matches(arg, index) then
+				merge_preexistence(arg)
+			else
+				set_preexistence_flag(pmask_NPRE_NPER)
+				reset.add(self)
+				return preexist_cache
+			end
+			index += 1
+		end
+
+		return preexist_cache
 	end
 
 	redef fun preexists(reset)
 	do
-		return -2
+		if pattern.cuc > 0 then
+			set_preexistence_flag(pmask_NPRE_NPER)
+			reset.add(self)
+		else if pattern.perennial_status then
+			set_preexistence_flag(pmask_NPRE_PER)
+		else if pattern.lp_all_perennial then
+			check_args(reset)
+		else
+			set_preexistence_flag(pmask_PVAL_PER)
+			for lp in pattern.lps do
+				merge_preexistence(preexists_return(lp, reset))
+				if get_preexistence_flag(pmask_NPRE_PER) then
+					break
+				else
+					check_args(reset)
+				end
+			end
+		end
+
+		if not is_perennial then
+			reset.add(self)
+		end
+
+		return preexist_cache	
 	end
 end
 
@@ -679,6 +737,6 @@ redef class MOPattern
 	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
 	var perennial_status = false
 
-	# If all LPs preexists and are perennial, encoding the resultant preexistence of the pattern
-	var lp_all_perennial: Int = pmask_UNKNOWN
+	# If all LPs preexists and are perennial, according to the current class hierarchie
+	var lp_all_perennial = false
 end
