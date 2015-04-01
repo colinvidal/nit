@@ -405,6 +405,15 @@ redef class MMethodDef
 			callsites.push(cs)
 		end
 	end
+
+	# Return expression of the method
+	var return_expr: MOExpr
+
+	# Compute the preexistence of the return of the method expression
+	fun preexists_return(reset: List[MOExpr]): Int
+	do
+		return return_expr.preexist_cache
+	end
 end
 
 redef class ModelBuilder
@@ -713,7 +722,8 @@ redef class MOCallSite
 		else
 			set_preexistence_flag(pmask_PVAL_PER)
 			for lp in pattern.lps do
-				merge_preexistence(preexists_return(lp, reset))
+				lp.preexists_return(reset)
+				merge_preexistence(lp.return_expr)
 				if get_preexistence_flag(pmask_NPRE_PER) then
 					break
 				else
