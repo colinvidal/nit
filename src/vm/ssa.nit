@@ -51,6 +51,8 @@ class BasicBlock
 	var predecessors = new Array[BasicBlock]
 
 	# Self is the old block to link to the new
+	# The two blocks are not linked if the current ends with
+	# a `AReturnExpr` or `ABreakExpr`
 	# i.e. self is the predecessor of `successor`
 	# `successor` The successor block
 	fun link(successor: BasicBlock)
@@ -58,6 +60,19 @@ class BasicBlock
 		# Do not link the two blocks if the current block end with a return
 		if last isa AReturnExpr then return
 
+		if last isa ABreakExpr then return
+
+		successors.add(successor)
+		successor.predecessors.add(self)
+	end
+
+	# Self is the old block to link to the new
+	# i.e. self is the predecessor of `successor`
+	# `successor` The successor block
+	fun link_special(successor: BasicBlock)
+	do
+		# Link the two blocks even if the current block
+		# ends with a return or a break
 		successors.add(successor)
 		successor.predecessors.add(self)
 	end
@@ -155,7 +170,7 @@ redef class AExpr
 	# Return the newest block
 	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock): BasicBlock
 	do
-		print "NOT YET IMPLEMENTED = " + self.class_name
+		#print "NOT YET IMPLEMENTED = " + self.class_name
 		return block
 	end
 end
@@ -351,7 +366,7 @@ redef class ABreakExpr
 		end
 
 		# Link the old_block to the first instruction of the loop
-		old_block.link(loop_block.successors.first)
+		old_block.link_special(loop_block.successors.first)
 
 		return old_block
 	end
@@ -503,12 +518,12 @@ end
 # 	end
 # end
 
-# redef class AParExpr
-# 	redef fun expr(v)
-# 	do
-# 		return v.expr(self.n_expr)
-# 	end
-# end
+redef class AParExpr
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		return self.n_expr.generate_basicBlocks(vm, old_block)
+	end
+end
 
 # redef class AOnceExpr
 # 	redef fun expr(v)
@@ -688,13 +703,14 @@ redef class AIfExpr
 		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
 
-		# Link the two to the predecessor
-		block_test.link(block_then)
-
 		# Launch the recursion in two successors if they exist
-		block_then.first = self.n_then.as(not null)
-		block_then.last = self.n_then.as(not null)
-		self.n_then.generate_basicBlocks(vm, block_then)
+		if self.n_then != null then
+			block_test.link(block_then)
+
+			block_then.first = self.n_then.as(not null)
+			block_then.last = self.n_then.as(not null)
+			self.n_then.generate_basicBlocks(vm, block_then)
+		end
 
 		var block_else = new BasicBlock
 
@@ -712,7 +728,7 @@ redef class AIfExpr
 		new_block.first = self
 		new_block.last = self
 
-		block_then.link(new_block)
+		if self.n_then != null then block_then.link(new_block)
 
 		# The new block needs to be filled by the caller
 		new_block.need_update = true
