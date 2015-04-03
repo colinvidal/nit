@@ -6,10 +6,10 @@ import virtual_machine
 # Pattern of a callsite
 class MOPattern
 	# Static type of the receiver
-	var st: MType
+	var rst: MType
 
 	# Global property called
-	var gp: MMethod
+	var gp: MProperty
 
 	# Local properties candidates
 	var lps = new List[MMethodDef]
@@ -20,7 +20,7 @@ class MOPattern
 	# Add a callsite using this pattern, and the candidate LP if didn't already known
 	fun add_callsite(cs: CallSite): nullable MOPattern
 	do
-		if cs.recv == st and cs.mproperty == gp then
+		if cs.recv == rst and cs.mproperty == gp then
 			if not lps.has(cs.mpropdef) then
 				lps.add(cs.mpropdef)
 			end
@@ -121,7 +121,7 @@ class MOCallSite
 	super MOExprSite
 
 	# Values of each arguments
-	var given_args: List[MOExpr]
+	var given_args = new List[MOExpr]
 end
 
 # MO of read attribute
