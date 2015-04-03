@@ -47,7 +47,7 @@ class BasicBlock
 	# Direct successors
 	var successors = new Array[BasicBlock]
 
-	# Direct precessors
+	# Direct predecessors
 	var predecessors = new Array[BasicBlock]
 
 	# Self is the old block to link to the new
@@ -303,6 +303,11 @@ class BlockDebug
 	end
 end
 
+# Used to factorize work on loop
+# Superclass of loops expressions
+class ALoopHelper
+end
+
 redef class AAttrPropdef
 	redef fun compute_ssa(vm)
 	do
@@ -356,7 +361,7 @@ redef class ABreakExpr
 		var loop_block = old_block
 		while not found do
 			var first = loop_block.first
-			if first isa AWhileExpr or first isa ALoopExpr or first isa ADoExpr or first isa AForExpr then
+			if first isa ALoopHelper then
 				found = true
 			end
 
@@ -668,6 +673,9 @@ redef class ABlockExpr
 				end
 			end
 
+			# Apply a special treatment for loops
+			if last_block.last isa ALoopHelper then update_loop(last_block, current_block)
+
 			if not current_block.last isa AEscapeExpr or current_block.last isa AReturnExpr then
 				# Re-affected the last block
 				current_block.last = self.n_expr[i]
@@ -677,6 +685,13 @@ redef class ABlockExpr
 		end
 
 		return last_block
+	end
+
+	#TODO
+	fun update_loop(old_block: BasicBlock, new_block: BasicBlock)
+	do
+		# The new block is a direct successor of the loop block
+		old_block.successors.add(new_block)
 	end
 end
 
@@ -692,20 +707,12 @@ redef class AIfExpr
 		# Terminate the previous block
 		old_block.last = self
 
-		# Create a new block for the test
-		var block_test = new BasicBlock
-		block_test.first = self.n_expr
-		block_test.last = self.n_expr
-
-		# Link the test to the previous block
-		old_block.link(block_test)
-
 		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
 
 		# Launch the recursion in two successors if they exist
 		if self.n_then != null then
-			block_test.link(block_then)
+			old_block.link(block_then)
 
 			block_then.first = self.n_then.as(not null)
 			block_then.last = self.n_then.as(not null)
@@ -715,7 +722,7 @@ redef class AIfExpr
 		var block_else = new BasicBlock
 
 		if self.n_else != null then
-			block_test.link(block_else)
+			old_block.link(block_else)
 
 			block_else.first = self.n_else.as(not null)
 			block_else.last = self.n_else.as(not null)
@@ -771,6 +778,8 @@ redef class AIfexprExpr
 end
 
 redef class ADoExpr
+	super ALoopHelper
+
 	redef fun compute_ssa(vm)
 	do
 		self.n_block.compute_ssa(vm)
@@ -791,6 +800,8 @@ redef class ADoExpr
 end
 
 redef class AWhileExpr
+	super ALoopHelper
+
 	redef fun compute_ssa(vm)
 	do
 		self.n_block.compute_ssa(vm)
@@ -806,18 +817,14 @@ redef class AWhileExpr
 		block.last = self.n_block.as(not null)
 
 		old_block.link(block)
-		var b = self.n_block.generate_basicBlocks(vm, block)
 
-		# var new_block = new BasicBlock
-		# new_block.first = self
-		# new_block.last = self
-		# block.link(new_block)
-
-		return b
+		return self.n_block.generate_basicBlocks(vm, block)
 	end
 end
 
 redef class ALoopExpr
+	super ALoopHelper
+
 	redef fun compute_ssa(vm)
 	do
 		self.n_block.compute_ssa(vm)
@@ -840,6 +847,8 @@ redef class ALoopExpr
 end
 
 redef class AForExpr
+	super ALoopHelper
+
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		#self.n_block.compute_ssa(vm)
