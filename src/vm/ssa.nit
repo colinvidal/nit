@@ -20,17 +20,25 @@ module ssa
 import variables_numbering
 import virtual_machine
 
+import astbuilder
+intrude import semantize::scope
+
 redef class VirtualMachine
+
+	var current_propdef: APropdef
+
 	redef fun new_frame(node, mpropdef, args)
 	do
-		var sup = super
-
 		# Compute SSA for method and attribute body
-		if node isa AMethPropdef or node isa AAttrPropdef then
-			# The first step is to generate the basic blocks
-			if not node.as(APropdef).is_generated then node.as(APropdef).generate_basicBlocks(self)
+		if node isa AMethPropdef then
+			if node.n_block != null then
+				current_propdef = node
+				# The first step is to generate the basic blocks
+				if not node.is_generated then node.generate_basicBlocks(self)
+			end
 		end
 
+		var sup = super
 		return sup
 	end
 end
@@ -47,12 +55,21 @@ class BasicBlock
 	# Direct successors
 	var successors = new Array[BasicBlock]
 
-	# Direct precessors
+	# Direct predecessors
 	var predecessors = new Array[BasicBlock]
 
+	# Parts of AST that contain a read to a variable
+	var read_sites = new Array[AVarFormExpr]
+
+	# Parts of AST that contain a write to a variable
+	var write_sites = new Array[AVarFormExpr]
+
+	# The iterated dominance frontier of this block
+	# i.e. the set of blocks this block dominate directly or indirectly
+	var dominance_frontier: Array[BasicBlock] = new Array[BasicBlock] is lazy
+
 	# Self is the old block to link to the new
-	# The two blocks are not linked if the current ends with
-	# a `AReturnExpr` or `ABreakExpr`
+	# The two blocks are not linked if the current ends with a `AReturnExpr` or `ABreakExpr`
 	# i.e. self is the predecessor of `successor`
 	# `successor` The successor block
 	fun link(successor: BasicBlock)
@@ -77,75 +94,102 @@ class BasicBlock
 		successor.predecessors.add(self)
 	end
 
-	# Used to dump the BasicBlock to dot
-	var treated: Bool = false
-
-	# Indicate the BasicBlock is newly created and needs to be updated
-	var need_update: Bool = false
-end
-
-redef class Variable
-	# The dependencies of this variable for SSA-Algorithm
-	var dependencies: Array[Variable] = new Array[Variable]
-
-	# The blocks in which this variable is assigned
-	var assignment_blocks: Array[ANode] = new Array[ANode] is lazy
-
-	# Part of the program where this variable is read
-	var read_blocks: Array[ANode] = new Array[ANode] is lazy
-end
-
-class PhiFunction
-	# The dependencies of a variable for SSA-Algorithm
-	var dependencies: Array[Variable] = new Array[Variable] is lazy
-
-	# The position in the AST of the phi-function
-	var location: ANode
-
-	# Set the dependencies for the phi-function
-	# *`block` block in which we go through the dominance-frontier
-	# *`v` The variable to looking for
-	fun add_dependencies(block: ANode, v: Variable)
-	do
-		# Look in which blocks of DF(block) `v` has been assigned
-		for b in block.dominance_frontier do
-			if v.assignment_blocks.has(b) then dependencies.add(v)
-		end
-	end
-end
-
-redef class ANode
-	# The iterated dominance frontier of this block
-	# i.e. the set of blocks this block dominate directly or indirectly
-	var dominance_frontier: Array[ANode] = new Array[ANode] is lazy
-
-	public fun compute_ssa(vm: VirtualMachine) do end
-
 	# Add the `block` to the dominance frontier of this block
-	fun add_df(block: ANode)
+	fun add_df(block: BasicBlock)
 	do
 		# Add this block recursively in super-blocks to compute the iterated
 		# dominance frontier
 		dominance_frontier.add(block)
 
-		var dominator = dominator_block
-		if dominator isa ABlockExpr then dominator.add_df(block)
+		for successor in block.successors do
+			# If this successor has not already been add to the dominance frontier
+			if not dominance_frontier.has(successor) then
+				add_df(successor)
+			end
+		end
 	end
 
-	# Return the block that dominate self
-	# It can be a `ANode` or the enclosing `APropdef`
-	fun dominator_block: ANode
+	fun compute_df
 	do
-		var block: ANode = parent.as(not null)
+		# Treat each block only one time
+		df_computed = true
 
-		# While parent is not a block, go up
-		while not block isa ABlockExpr do
-			if block isa APropdef then return block
+		for s in successors do
+			add_df(s)
 
-			block = block.parent.as(not null)
+			if not s.df_computed then s.compute_df
 		end
+	end
 
-		return block
+	# Used to dump the BasicBlock to dot
+	var treated: Bool = false
+
+	# If true, the iterated dominance frontier of this block has been computed
+	var df_computed: Bool = false
+
+	# Indicate the BasicBlock is newly created and needs to be updated
+	var need_update: Bool = false
+
+	# Indicate if the variables renaming step has been made for this block
+	var is_renaming: Bool = false
+
+	# The variables that are accessed in this block
+	var variables = new Array[Variable] is lazy
+
+	# The PhiFunction this block contains at the beginning
+	var phi_functions = new Array[PhiFunction] is lazy
+end
+
+redef class Variable
+	# The dependences of this variable for SSA-Algorithm
+	var dependences = new Array[Couple[Variable, BasicBlock]]
+
+	# The blocks in which this variable is assigned
+	var assignment_blocks: Array[BasicBlock] = new Array[BasicBlock] is lazy
+
+	# Part of the program where this variable is read
+	var read_blocks: Array[BasicBlock] = new Array[BasicBlock] is lazy
+
+	# The place in AST where this variable has been assigned
+	var reaching_def: nullable ANode = null
+
+	# The stack of this variable, used for SSA
+	var stack = new Array[Variable] is lazy
+
+	# The original Variable in case of renaming
+	var original_variable: nullable Variable = self
+end
+
+class PhiFunction
+	super Variable
+
+	# The position in the AST of the phi-function
+	var block: BasicBlock
+
+	# Set the dependences for the phi-function
+	# *`block` BasicBlock in which we go through the dominance-frontier
+	# *`v` The variable to looking for
+	fun add_dependences(block: BasicBlock, v: Variable)
+	do
+		# Look in which blocks of DF(block) `v` has been assigned
+		for b in block.predecessors do
+			if v.assignment_blocks.has(b) then
+				var dep = new Couple[Variable, BasicBlock](v, b)
+				dependences.add(dep)
+			end
+		end
+	end
+
+	redef fun to_s: String
+	do
+		var s = ""
+		s += " dependences = [ "
+		for d in dependences do
+			s += d.first.to_s + " "
+		end
+		s += "]"
+
+		return s
 	end
 end
 
@@ -160,7 +204,7 @@ redef class APropdef
 	var is_generated: Bool = false
 
 	# Generate all basic blocks for this code
-	fun generate_basicBlocks(vm:VirtualMachine) do end
+	fun generate_basicBlocks(vm: VirtualMachine) is abstract
 end
 
 redef class AExpr
@@ -191,6 +235,17 @@ redef class AMethPropdef
 		basic_block.first = self
 		basic_block.last = self
 
+		# If the method has a signature
+		if n_signature != null then
+			for p in n_signature.n_params do
+				# Add parameters to the local variables of the method
+				variables.add(p.variable.as(not null))
+			end
+		end
+
+		# Add the self variable
+		if self.selfvariable != null then variables.add(selfvariable.as(not null))
+
 		# Recursively goes into the nodes
 		if n_block != null then
 			n_block.generate_basicBlocks(vm, basic_block.as(not null))
@@ -198,54 +253,56 @@ redef class AMethPropdef
 
 		is_generated = true
 
-		# FIXME: just debug the foo method
-		if mpropdef != null then
-			if mpropdef.name == "foo" then
-				# Dump the hierarchy in a dot file
-				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
-				debug.dump(basic_block.as(not null))
-			end
+		# Once basic blocks were generated, compute SSA algorithm
+		if is_generated and mpropdef.name == "foo" then
+			compute_phi
+			rename_variables
+			ssa_destruction
 		end
 	end
 
-	redef fun compute_ssa(vm)
+	# Compute the first phase of SSA algorithm: placing phi-functions
+	# NOTE: `generate_basicBlocks` must has been called before
+	fun compute_phi
 	do
-		# TODO : handle self
-		if n_block != null then n_block.compute_ssa(vm)
+		var root_block = basic_block.as(not null)
 
-		# If the method has a signature
-		if n_signature != null then
-			# TODO: parameters
-			print "Parameters = " + n_signature.n_params.to_s
-		end
+		# Compute the iterated dominance frontier of the graph of basic blocks
+		root_block.compute_df
 
 		# Places where a phi-function is added per variable
-		var phi_blocks = new HashMap[Variable, Array[ANode]]
+		var phi_blocks = new HashMap[Variable, Array[BasicBlock]]
 
 		# For each variables in the propdef
 		for v in variables do
-			var phi_variables = new Array[ANode]
+			var phi_variables = new Array[BasicBlock]
 
-			var read_blocks = new Array[ANode]
+			var read_blocks = new Array[BasicBlock]
 			read_blocks.add_all(v.read_blocks)
 
 			# While we have not treated each part accessing `v`
 			while not read_blocks.is_empty do
 				# Remove a block from the set
-				var block = read_blocks.first
-				read_blocks.remove(block)
+				var block = read_blocks.shift
 
 				# For each block in the dominance frontier of `block`
 				for df in block.dominance_frontier do
 					# If we have not yet put a phi-function at the beginning of this block
 					if not phi_variables.has(df) then
-						print("Add a phi-function at the beginning of {df} for variable {v}")
 						phi_variables.add(df)
 
-						# Create a new phi-function and set its dependencies
-						var phi = new PhiFunction(df)
-						phi.add_dependencies(block, v)
+						# Create a new phi-function and set its dependences
+						var phi = new PhiFunction("phi", df)
+						phi.add_dependences(df, v)
+						phi.block = df
+						phi.original_variable = phi
+
+						# Indicate this phi-function is assigned in this block
+						phi.assignment_blocks.add(block)
 						phi_functions.add(phi)
+
+						# Add a phi-function at the beginning of df for variable v
+						df.phi_functions.add(phi)
 
 						if not v.read_blocks.has(df) then read_blocks.add(df)
 					end
@@ -255,9 +312,128 @@ redef class AMethPropdef
 			# Add `phi-variables` to the global map
 			phi_blocks[v] = phi_variables
 		end
+	end
 
-		for p in phi_functions do
-			print "\t" + p.location.to_s + ", " + p.dependencies.to_s
+	# Compute the second phase of SSA algorithm: renaming variables
+	# NOTE: `compute_phi` must has been called before
+	fun rename_variables
+	do
+		# A counter for each variable
+		# The key is the variable, the value the number of assignment into the variable
+		var counter = new HashMap[Variable, Int]
+
+		for v in variables do
+			counter[v] = 0
+			v.stack.push(v)
+		end
+
+		for phi in phi_functions do counter[phi] = 0
+
+		# Launch the recursive renaming from the root block
+		rename(basic_block.as(not null), counter)
+	end
+
+	# TODO: documentation
+	# Rename each variable in this block to comply to SSA-algorithm
+	fun rename(block: BasicBlock, counter: HashMap[Variable, Int])
+	do
+		if block.is_renaming then return
+
+		block.is_renaming = true
+
+		# For each phi-function of this block
+		for phi in block.phi_functions do
+			generate_name(phi, counter)
+
+			# Replace the phi into the block
+			block.phi_functions[block.phi_functions.index_of(phi)] = phi.original_variable.stack.last.as(PhiFunction)
+		end
+
+		# For each variable read in `block`
+		for vread in block.read_sites do
+			# Replace the old variable in AST
+			vread.variable = vread.variable.original_variable.stack.last
+		end
+
+		# For each variable write
+		for vwrite in block.write_sites do
+			generate_name(vwrite.variable.as(not null), counter)
+
+			# Replace the old variable by the last created
+			vwrite.variable = vwrite.variable.original_variable.stack.last
+		end
+
+		# Rename occurrence of old names in phi-function
+		for successor in block.dominance_frontier do
+			for sphi in successor.phi_functions do
+				# Go over the couples in the phi dependences to rename variables
+				for couple in sphi.dependences do
+					if couple.second == block then
+						# Rename this variable
+						couple.first = couple.first.original_variable.stack.last
+					end
+				end
+			end
+		end
+
+		# Recurse in successor blocks
+		for successor in block.successors do
+			rename(successor, counter)
+		end
+
+		# Pop old names off the stack for each phi-function
+		for phi in block.phi_functions do
+			if not phi.stack.is_empty then phi.stack.pop
+		end
+	end
+
+	# Generate a new version of the variable `v`
+	# *`v` The variable for which we generate a name
+	fun generate_name(v: Variable, counter: HashMap[Variable, Int])
+	do
+		var original_variable = v.original_variable.as(not null)
+
+		var i = counter[original_variable]
+
+		var new_version: Variable
+
+		# Create a new version of Variable
+		if original_variable isa PhiFunction then
+			var block = original_variable.block
+			new_version = new PhiFunction(original_variable.name + i.to_s, block)
+			new_version.dependences.add_all(original_variable.dependences)
+		else
+			new_version = new Variable(original_variable.name + i.to_s)
+			new_version.declared_type = original_variable.declared_type
+		end
+
+		# Recopy the fields into the new version
+		new_version.location = original_variable.location
+		new_version.original_variable = original_variable
+
+		# Push a new version on the stack
+		original_variable.stack.add(new_version)
+		counter[v] = i + 1
+	end
+
+	# Transform SSA-representation into an executable code (delete phi-functions)
+	fun ssa_destruction
+	do
+		var builder = new ASTBuilder(mpropdef.mclassdef.mmodule, mpropdef.mclassdef.bound_mtype)
+
+		# Iterate over all phi-functions
+		for phi in phi_functions do
+			#print "Phi = {phi.to_s}"
+
+			for dep in phi.dependences do
+				# dep.second is the block where we need to create a varassign
+				var var_read = builder.make_var_read(dep.first, dep.first.declared_type.as(not null))
+				var nvar = builder.make_var_assign(dep.first, var_read)
+
+				var block = dep.second.last.parent
+
+				block.as(ABlockExpr).add(nvar)
+			end
 		end
 	end
 end
@@ -282,9 +458,15 @@ class BlockDebug
 	do
 		# Precise the type and location of the begin and end of current block
 		var s = "block{block.hash.to_s} [shape=record, label="+"\"\{"
-		s += "block" + block.hash.to_s
+		s += "block" + block.to_s.escape_to_dot
 		s += "|\{" + block.first.location.file.filename.to_s + block.first.location.line_start.to_s
 		s += " | " + block.first.to_s.escape_to_dot
+
+		# Print phi-functions if any
+		for phi in block.phi_functions do
+			s += " | " + phi.to_s.escape_to_dot + " "
+		end
+
 		s += "}|\{" + block.last.location.file.filename.to_s + block.last.location.line_start.to_s
 		s += " | " + block.last.to_s.escape_to_dot + "}}\"];"+ "\n"
 
@@ -295,7 +477,7 @@ class BlockDebug
 			# Print edges to successors
 			s += "block{block.hash.to_s} -> " + " block{b.hash.to_s};\n"
 
-			# Print recursively child blocks
+			# Recursively print child blocks
 			if not b.treated then s += print_block(b, i)
 		end
 
@@ -303,45 +485,81 @@ class BlockDebug
 	end
 end
 
+# Used to factorize work on loop
+# Superclass of loops expressions
+class ALoopHelper
+end
+
+redef class AVarFormExpr
+	# The original variable
+	var original_variable: nullable Variable = variable
+end
+
+# TODO: treat attribute blocks
 redef class AAttrPropdef
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm)
 	do
-		# TODO : handle self
-		if n_block != null then n_block.compute_ssa(vm)
 	end
 end
 
 redef class AVarExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.variable.as(not null).read_blocks.add(dominator_block)
+		self.variable.as(not null).read_blocks.add(old_block)
+		old_block.variables.add(self.variable.as(not null))
+
+		self.variable.as(not null).original_variable = self.variable.as(not null)
+		# Save this read site in the block
+		old_block.read_sites.add(self)
+
+		return old_block
 	end
 end
 
 redef class AVardeclExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		# Add the corresponding variable to the enclosing mpropdef
-		vm.current_propdef.variables.add(self.variable.as(not null))
+		var decl = self.variable.as(not null)
 
-		self.n_expr.compute_ssa(vm)
+		# Add the corresponding variable to the enclosing mpropdef
+		vm.current_propdef.variables.add(decl)
+
+		decl.original_variable = decl
+		decl.assignment_blocks.add(old_block)
+		old_block.variables.add(decl)
+
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AVarAssignExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.variable.as(not null).assignment_blocks.add(dominator_block)
-		self.n_value.compute_ssa(vm)
+		self.variable.as(not null).assignment_blocks.add(old_block)
+		old_block.variables.add(self.variable.as(not null))
+		self.variable.as(not null).original_variable = self.variable.as(not null)
+
+		# Save this write site in the block
+		old_block.write_sites.add(self)
+
+		#TODO: test with transform module
+		vm.current_propdef.variables.add(self.variable.as(not null))
+
+		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AVarReassignExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.variable.as(not null).read_blocks.add(dominator_block)
-		self.variable.as(not null).assignment_blocks.add(dominator_block)
-		self.n_value.compute_ssa(vm)
+		self.variable.as(not null).assignment_blocks.add(old_block)
+		old_block.variables.add(self.variable.as(not null))
+		self.variable.as(not null).original_variable = self.variable.as(not null)
+
+		# Save this write site in the block
+		old_block.write_sites.add(self)
+		vm.current_propdef.variables.add(self.variable.as(not null))
+		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
 end
 
@@ -356,7 +574,7 @@ redef class ABreakExpr
 		var loop_block = old_block
 		while not found do
 			var first = loop_block.first
-			if first isa AWhileExpr or first isa ALoopExpr or first isa ADoExpr or first isa AForExpr then
+			if first isa ALoopHelper then
 				found = true
 			end
 
@@ -380,18 +598,13 @@ redef class AContinueExpr
 	end
 end
 
+# TODO : memoize returns
 redef class AReturnExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_expr.compute_ssa(vm)
-
-		var returnvar = vm.current_propdef.as(AMethPropdef).returnvar
-		returnvar.assignment_blocks.add(dominator_block)
-	end
-
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		# The return just set the current block and stop the recursion
+		if self.n_expr != null then old_block = self.n_expr.generate_basicBlocks(vm, old_block)
+
 		old_block.last = self
 		return old_block
 	end
@@ -417,106 +630,98 @@ end
 # end
 
 redef class AOrExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AImpliesExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AAndExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class ANotExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_expr.compute_ssa(vm)
-	end
+	# redef fun compute_ssa(vm)
+	# do
+	# 	self.n_expr.compute_ssa(vm)
+	# end
 end
 
 redef class AOrElseExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AArrayExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		for nexpr in self.n_exprs do nexpr.compute_ssa(vm)
+		for nexpr in self.n_exprs do
+			old_block = nexpr.generate_basicBlocks(vm, old_block)
+		end
+
+		return old_block
 	end
 end
 
 redef class ASuperstringExpr
-	redef fun compute_ssa(vm)
-	do
-		for nexpr in self.n_exprs do nexpr.compute_ssa(vm)
-	end
+	# redef fun compute_ssa(vm)
+	# do
+	# 	for nexpr in self.n_exprs do nexpr.compute_ssa(vm)
+	# end
 end
 
 redef class ACrangeExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AOrangeExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_expr2.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_expr2.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AIsaExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
-# redef class AAsCastExpr
-# 	redef fun expr(v)
-# 	do
-# 		var i = v.expr(self.n_expr)
-# 		if i == null then return null
-# 		var mtype = self.mtype.as(not null)
-# 		var amtype = v.unanchor_type(mtype)
-# 		if not v.is_subtype(i.mtype, amtype) then
-# 			fatal(v, "Cast failed. Expected `{amtype}`, got `{i.mtype}`")
-# 		end
-# 		return i
-# 	end
-# end
+redef class AAsCastExpr
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		return self.n_expr.generate_basicBlocks(vm, old_block)
+	end
+end
 
-# redef class AAsNotnullExpr
-# 	redef fun expr(v)
-# 	do
-# 		var i = v.expr(self.n_expr)
-# 		if i == null then return null
-# 		if i.mtype isa MNullType then
-# 			fatal(v, "Cast failed")
-# 		end
-# 		return i
-# 	end
-# end
+redef class AAsNotnullExpr
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		return self.n_expr.generate_basicBlocks(vm, old_block)
+	end
+end
 
 redef class AParExpr
 	redef fun generate_basicBlocks(vm, old_block)
@@ -525,7 +730,7 @@ redef class AParExpr
 	end
 end
 
-# redef class AOnceExpr
+redef class AOnceExpr
 # 	redef fun expr(v)
 # 	do
 # 		if v.onces.has_key(self) then
@@ -537,19 +742,17 @@ end
 # 			return res
 # 		end
 # 	end
-# end
+end
 
+#TODO: for send expression, store them into the model
 redef class ASendExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_expr.compute_ssa(vm)
-		for e in self.raw_arguments do e.compute_ssa(vm)
-	end
-
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		# A call does not finish the current block
 		# because we create intra-procedural basic blocks here
+
+		# Recursively goes into arguments to find variables if any
+		for e in self.raw_arguments do e.generate_basicBlocks(vm, old_block)
 
 		# We do not need to recurse over the arguments since
 		return self.n_expr.generate_basicBlocks(vm, old_block)
@@ -557,11 +760,14 @@ redef class ASendExpr
 end
 
 redef class ASendReassignFormExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
-		self.n_value.compute_ssa(vm)
-		for e in self.raw_arguments do e.compute_ssa(vm)
+		self.n_expr.generate_basicBlocks(vm, old_block)
+
+		# Recursively goes into arguments to find variables if any
+		for e in self.raw_arguments do e.generate_basicBlocks(vm, old_block)
+
+		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
 end
 
@@ -600,51 +806,46 @@ end
 # 	end
 # end
 
+# TODO: Store the new into the model
 redef class ANewExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		for e in self.n_args.n_exprs do e.compute_ssa(vm)
+		for e in self.n_args.n_exprs do e.generate_basicBlocks(vm, old_block)
+
+		return old_block
 	end
 end
 
+# TODO: Store attribute access sites in model
 redef class AAttrExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AAttrAssignExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AAttrReassignExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class AIssetAttrExpr
-	redef fun compute_ssa(vm)
+	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.n_expr.compute_ssa(vm)
+		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
 
 redef class ABlockExpr
-	redef fun compute_ssa(vm)
-	do
-		# Go in the enclosing block to set the dominance frontier
-		var block = dominator_block
-		if block isa ABlockExpr then block.add_df(self)
-
-		for e in self.n_expr do e.compute_ssa(vm)
-	end
-
 	# The block needs to know if a new block is created
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -668,6 +869,10 @@ redef class ABlockExpr
 				end
 			end
 
+			# Apply a special treatment for loops
+			# TODO: finish the comment
+			if last_block.last isa ALoopHelper then last_block.successors.add(current_block)
+
 			if not current_block.last isa AEscapeExpr or current_block.last isa AReturnExpr then
 				# Re-affected the last block
 				current_block.last = self.n_expr[i]
@@ -681,31 +886,17 @@ redef class ABlockExpr
 end
 
 redef class AIfExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_then.compute_ssa(vm)
-		if self.n_else != null then self.n_else.compute_ssa(vm)
-	end
-
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		# Terminate the previous block
 		old_block.last = self
-
-		# Create a new block for the test
-		var block_test = new BasicBlock
-		block_test.first = self.n_expr
-		block_test.last = self.n_expr
-
-		# Link the test to the previous block
-		old_block.link(block_test)
 
 		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
 
 		# Launch the recursion in two successors if they exist
 		if self.n_then != null then
-			block_test.link(block_then)
+			old_block.link(block_then)
 
 			block_then.first = self.n_then.as(not null)
 			block_then.last = self.n_then.as(not null)
@@ -715,7 +906,7 @@ redef class AIfExpr
 		var block_else = new BasicBlock
 
 		if self.n_else != null then
-			block_test.link(block_else)
+			old_block.link(block_else)
 
 			block_else.first = self.n_else.as(not null)
 			block_else.last = self.n_else.as(not null)
@@ -740,41 +931,48 @@ redef class AIfExpr
 end
 
 redef class AIfexprExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_then.compute_ssa(vm)
-		self.n_else.compute_ssa(vm)
-	end
-
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		# We start two new blocks if the if has two branches
+		# Terminate the previous block
 		old_block.last = self
+
+		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
 
-		# Link the two to the predecessor
+		# Launch the recursion in two successors if they exist
 		old_block.link(block_then)
 
-		# Launch the recursion in two successors if they exist
 		block_then.first = self.n_then
 		block_then.last = self.n_then
 		self.n_then.generate_basicBlocks(vm, block_then)
 
 		var block_else = new BasicBlock
+
 		old_block.link(block_else)
 
 		block_else.first = self.n_else
 		block_else.last = self.n_else
+		self.n_else.generate_basicBlocks(vm, block_else)
 
-		return self.n_else.generate_basicBlocks(vm, block_else)
+		# Create a new BasicBlock to represent the two successor
+		# branches of the if
+		var new_block = new BasicBlock
+		new_block.first = self
+		new_block.last = self
+
+		block_then.link(new_block)
+
+		# The new block needs to be filled by the caller
+		new_block.need_update = true
+
+		block_else.link(new_block)
+
+		return new_block
 	end
 end
 
 redef class ADoExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_block.compute_ssa(vm)
-	end
+	super ALoopHelper
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -791,10 +989,7 @@ redef class ADoExpr
 end
 
 redef class AWhileExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_block.compute_ssa(vm)
-	end
+	super ALoopHelper
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -806,22 +1001,14 @@ redef class AWhileExpr
 		block.last = self.n_block.as(not null)
 
 		old_block.link(block)
-		var b = self.n_block.generate_basicBlocks(vm, block)
 
-		# var new_block = new BasicBlock
-		# new_block.first = self
-		# new_block.last = self
-		# block.link(new_block)
-
-		return b
+		self.n_expr.generate_basicBlocks(vm, old_block)
+		return self.n_block.generate_basicBlocks(vm, block)
 	end
 end
 
 redef class ALoopExpr
-	redef fun compute_ssa(vm)
-	do
-		self.n_block.compute_ssa(vm)
-	end
+	super ALoopHelper
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -840,15 +1027,21 @@ redef class ALoopExpr
 end
 
 redef class AForExpr
+	super ALoopHelper
+
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		#self.n_block.compute_ssa(vm)
 		old_block.last = self
 
 		# The beginning of the block is the first instruction
 		var block = new BasicBlock
 		block.first = self.n_block.as(not null)
 		block.last = self.n_block.as(not null)
+
+		# Collect the variables declared in the for
+		for v in variables do
+			vm.current_propdef.variables.add(v)
+		end
 
 		old_block.link(block)
 		self.n_block.generate_basicBlocks(vm, block)
