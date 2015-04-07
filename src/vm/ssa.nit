@@ -81,7 +81,6 @@ class BasicBlock
 		successor.predecessors.add(self)
 	end
 
-	#TODO : finish this
 	# Add the `block` to the dominance frontier of this block
 	fun add_df(block: BasicBlock)
 	do
@@ -89,28 +88,40 @@ class BasicBlock
 		# dominance frontier
 		dominance_frontier.add(block)
 
-		for dominator in predecessors do
-			dominator.add_df(block)
+		for successor in block.successors do
+			# If this successor is not self and not already been add to the dominance frontier
+			if successor != self and not dominance_frontier.has(successor) then
+				add_df(successor)
+			end
 		end
 	end
 
 	fun compute_df
 	do
-		var current_block = self
+		# Treat each block only one time
+		df_computed = true
 
 		for s in successors do
-			s.compute_df
+			add_df(s)
+
+			if not s.df_computed then s.compute_df
 		end
 	end
 
 	# Used to dump the BasicBlock to dot
 	var treated: Bool = false
 
+	# If true, the iterated dominance frontier of this block has been computed
+	var df_computed: Bool = false
+
 	# Indicate the BasicBlock is newly created and needs to be updated
 	var need_update: Bool = false
 
 	# The variables that are accessed in this block
 	var variables = new Array[Variable] is lazy
+
+	# The PhiFunction this block contains at the beginning
+	var phi_functions = new Array[PhiFunction] is lazy
 end
 
 redef class Variable
@@ -140,6 +151,18 @@ class PhiFunction
 		for b in block.dominance_frontier do
 			if v.assignment_blocks.has(b) then dependences.add(v)
 		end
+	end
+
+	redef fun to_s: String
+	do
+		var s = ""
+		s += " dependences = [ "
+		for d in dependences do
+			s += d.to_s + " "
+		end
+		s += "]"
+
+		return s
 	end
 end
 
@@ -195,6 +218,9 @@ redef class AMethPropdef
 			is_generated = true
 		end
 
+		# Once basic blocks were generated, compute SSA algorithm
+		if is_generated then compute_ssa(vm)
+
 		# TODO: debug the foo method
 		if mpropdef != null then
 			if mpropdef.name == "foo" then
@@ -203,9 +229,6 @@ redef class AMethPropdef
 				debug.dump(basic_block.as(not null))
 			end
 		end
-
-		# Once basic blocks were generated, compute SSA algorithm
-		if is_generated then compute_ssa(vm)
 	end
 
 	redef fun compute_ssa(vm)
@@ -217,7 +240,7 @@ redef class AMethPropdef
 
 		# If the method has a signature
 		if n_signature != null then
-			# TODO: parameters
+			# TODO: treat parameters
 			print "Parameters = " + n_signature.n_params.to_s
 		end
 
@@ -241,13 +264,16 @@ redef class AMethPropdef
 				for df in block.dominance_frontier do
 					# If we have not yet put a phi-function at the beginning of this block
 					if not phi_variables.has(df) then
-						print("Add a phi-function at the beginning of {df} for variable {v}")
 						phi_variables.add(df)
 
 						# Create a new phi-function and set its dependencies
 						var phi = new PhiFunction(df)
 						phi.add_dependences(block, v)
+						phi.location = df
 						phi_functions.add(phi)
+
+						# Add a phi-function at the beginning of df for variable v
+						df.phi_functions.add(phi)
 
 						if not v.read_blocks.has(df) then read_blocks.add(df)
 					end
@@ -256,10 +282,6 @@ redef class AMethPropdef
 
 			# Add `phi-variables` to the global map
 			phi_blocks[v] = phi_variables
-		end
-
-		for p in phi_functions do
-			print "\t" + p.location.to_s + ", " + p.dependences.to_s
 		end
 	end
 end
@@ -287,6 +309,12 @@ class BlockDebug
 		s += "block" + block.hash.to_s
 		s += "|\{" + block.first.location.file.filename.to_s + block.first.location.line_start.to_s
 		s += " | " + block.first.to_s.escape_to_dot
+
+		# Print phi-functions if any
+		for phi in block.phi_functions do
+			s += " | " + phi.to_s.escape_to_dot + " "
+		end
+
 		s += "}|\{" + block.last.location.file.filename.to_s + block.last.location.line_start.to_s
 		s += " | " + block.last.to_s.escape_to_dot + "}}\"];"+ "\n"
 
@@ -396,6 +424,7 @@ redef class AContinueExpr
 	end
 end
 
+# TODO : memoize returns
 redef class AReturnExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
