@@ -89,8 +89,8 @@ class BasicBlock
 		dominance_frontier.add(block)
 
 		for successor in block.successors do
-			# If this successor is not self and not already been add to the dominance frontier
-			if successor != self and not dominance_frontier.has(successor) then
+			# If this successor has not already been add to the dominance frontier
+			if not dominance_frontier.has(successor) then
 				add_df(successor)
 			end
 		end
@@ -154,7 +154,8 @@ class PhiFunction
 	fun add_dependences(block: BasicBlock, v: Variable)
 	do
 		# Look in which blocks of DF(block) `v` has been assigned
-		for b in block.dominance_frontier do
+		for b in block.predecessors do
+			print "{b}"
 			if v.assignment_blocks.has(b) then dependences.add(v)
 		end
 	end
@@ -221,7 +222,7 @@ redef class AMethPropdef
 		end
 
 		# Once basic blocks were generated, compute SSA algorithm
-		if is_generated then
+		if is_generated and mpropdef.name == "foo" then
 			compute_phi
 			rename_variables
 		end
@@ -232,7 +233,10 @@ redef class AMethPropdef
 				# Dump the hierarchy in a dot file
 				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
 				debug.dump(basic_block.as(not null))
-				dump_tree
+
+				for phi in phi_functions do
+					print "{phi}" + phi.to_s
+				end
 			end
 		end
 	end
@@ -265,8 +269,7 @@ redef class AMethPropdef
 			# While we have not treated each part accessing `v`
 			while not read_blocks.is_empty do
 				# Remove a block from the set
-				var block = read_blocks.first
-				read_blocks.remove(block)
+				var block = read_blocks.shift
 
 				# For each block in the dominance frontier of `block`
 				for df in block.dominance_frontier do
@@ -276,7 +279,7 @@ redef class AMethPropdef
 
 						# Create a new phi-function and set its dependences
 						var phi = new PhiFunction("phi", df)
-						phi.add_dependences(block, v)
+						phi.add_dependences(df, v)
 						phi.block = df
 
 						# Indicate this phi-function is assigned in this block
@@ -367,6 +370,9 @@ redef class AMethPropdef
 	fun update_reachingdef(v: Variable, block: BasicBlock)
 	do
 		# v.reaching_def is the current closest definition of this variable
+		var r: nullable AExpr = null
+
+
 		# if v.assignment_blocks.has(block) then
 			v.reaching_def = block.first #TODO: For now just assigned the first expression
 		# else
@@ -406,7 +412,7 @@ class BlockDebug
 	do
 		# Precise the type and location of the begin and end of current block
 		var s = "block{block.hash.to_s} [shape=record, label="+"\"\{"
-		s += "block" + block.hash.to_s
+		s += "block" + block.to_s.escape_to_dot
 		s += "|\{" + block.first.location.file.filename.to_s + block.first.location.line_start.to_s
 		s += " | " + block.first.to_s.escape_to_dot
 
