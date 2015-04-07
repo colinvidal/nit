@@ -117,6 +117,9 @@ class BasicBlock
 	# Indicate the BasicBlock is newly created and needs to be updated
 	var need_update: Bool = false
 
+	# Indicate if the variables renaming step has been made for this block
+	var variables_renaming: Bool = false
+
 	# The variables that are accessed in this block
 	var variables = new Array[Variable] is lazy
 
@@ -133,14 +136,17 @@ redef class Variable
 
 	# Part of the program where this variable is read
 	var read_blocks: Array[BasicBlock] = new Array[BasicBlock] is lazy
+
+	# The place in AST where this variable has been assigned
+	var reaching_def: nullable ANode = null
 end
 
 class PhiFunction
-	# The dependences of a variable for SSA-Algorithm
-	var dependences: Array[Variable] = new Array[Variable] is lazy
+	super Variable
+	super AExpr
 
 	# The position in the AST of the phi-function
-	var location: BasicBlock
+	var block: BasicBlock
 
 	# Set the dependences for the phi-function
 	# *`block` BasicBlock in which we go through the dominance-frontier
@@ -177,11 +183,7 @@ redef class APropdef
 	var is_generated: Bool = false
 
 	# Generate all basic blocks for this code
-	fun generate_basicBlocks(vm:VirtualMachine) is abstract
-
-	# Compute SSA algorithm
-	# NOTE: `generate_basicBlocks` must has been called before
-	fun compute_ssa(vm: VirtualMachine) is abstract
+	fun generate_basicBlocks(vm: VirtualMachine) is abstract
 end
 
 redef class AExpr
@@ -219,7 +221,10 @@ redef class AMethPropdef
 		end
 
 		# Once basic blocks were generated, compute SSA algorithm
-		if is_generated then compute_ssa(vm)
+		if is_generated then
+			compute_phi
+			rename_variables
+		end
 
 		# TODO: debug the foo method
 		if mpropdef != null then
@@ -227,11 +232,14 @@ redef class AMethPropdef
 				# Dump the hierarchy in a dot file
 				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
 				debug.dump(basic_block.as(not null))
+				dump_tree
 			end
 		end
 	end
 
-	redef fun compute_ssa(vm)
+	# Compute the first phase of SSA algorithm: placing phi-functions
+	# NOTE: `generate_basicBlocks` must has been called before
+	fun compute_phi
 	do
 		var root_block = basic_block.as(not null)
 
@@ -266,10 +274,13 @@ redef class AMethPropdef
 					if not phi_variables.has(df) then
 						phi_variables.add(df)
 
-						# Create a new phi-function and set its dependencies
-						var phi = new PhiFunction(df)
+						# Create a new phi-function and set its dependences
+						var phi = new PhiFunction("phi", df)
 						phi.add_dependences(block, v)
-						phi.location = df
+						phi.block = df
+
+						# Indicate this phi-function is assigned in this block
+						phi.assignment_blocks.add(block)
 						phi_functions.add(phi)
 
 						# Add a phi-function at the beginning of df for variable v
@@ -283,6 +294,95 @@ redef class AMethPropdef
 			# Add `phi-variables` to the global map
 			phi_blocks[v] = phi_variables
 		end
+	end
+
+	# Compute the second phase of SSA algorithm: renaming variables
+	# NOTE: `compute_phi` must has been called before
+	fun rename_variables
+	do
+		var root_block = basic_block.as(not null)
+
+		var blocks = new Array[BasicBlock]
+		blocks.add(root_block)
+
+		while not blocks.is_empty do
+			var block = blocks.shift
+			block.variables_renaming = true
+
+			# For each real variable in this block
+			for variable in block.variables do
+				update_reachingdef(variable, block)
+			end
+
+			var array_var = new Array[Variable]
+			array_var.add_all(block.variables)
+			array_var.add_all(block.phi_functions)
+
+			# Renaming variable and phi-functions
+			for variable in array_var do
+				update_reachingdef(variable, block)
+
+				# Create a new version of this variable
+				# TODO : copy the fields of the old to the new
+
+				# Replace the old variable by the new one
+				var index = block.variables.index_of(variable)
+				var new_version: Variable
+				if index != -1 then
+					new_version = new Variable(variable.name + "1")
+
+					block.variables[index] = new_version
+					new_version.reaching_def = variable.reaching_def
+					variable.reaching_def = new_version.reaching_def
+				else
+					new_version = new PhiFunction(variable.name + "1", block)
+
+					index = block.phi_functions.index_of(variable.as(PhiFunction))
+					block.phi_functions[index] = new_version
+
+					new_version.reaching_def = variable.reaching_def
+					variable.reaching_def = new_version.reaching_def
+				end
+
+				# Saving the old dependences
+				new_version.dependences.add_all(variable.dependences)
+			end
+
+			# Recursively goes into successor blocks
+			for s in block.successors do
+				for phi in s.phi_functions do
+					for dependence in phi.dependences do
+						# Update def
+						update_reachingdef(dependence, block)
+					end
+				end
+
+				# Add successor block to the blocks
+				if not s.variables_renaming then blocks.add(s)
+			end
+		end
+	end
+
+	# TODO: méthode pourrie
+	fun update_reachingdef(v: Variable, block: BasicBlock)
+	do
+		# v.reaching_def is the current closest definition of this variable
+		# if v.assignment_blocks.has(block) then
+			v.reaching_def = block.first #TODO: For now just assigned the first expression
+		# else
+		# 	# Assign the phi-variable to this reachingdef
+		# 	for phi in block.phi_functions do
+		# 		if phi.dependences.has(v) then
+		# 			v.reaching_def = phi
+		# 			return
+		# 		end
+		# 	end
+
+		# 	# If no assignment has been found, go in super-blocks
+		# 	for s in block.successors do
+		# 		update_reachingdef(v, s)
+		# 	end
+		# end
 	end
 end
 
@@ -762,6 +862,7 @@ redef class AIfExpr
 	end
 end
 
+# TODO : same as AIfExpr
 redef class AIfexprExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
