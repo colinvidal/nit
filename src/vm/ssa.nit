@@ -118,7 +118,7 @@ class BasicBlock
 	var need_update: Bool = false
 
 	# Indicate if the variables renaming step has been made for this block
-	var variables_renaming: Bool = false
+	var is_renaming: Bool = false
 
 	# The variables that are accessed in this block
 	var variables = new Array[Variable] is lazy
@@ -129,7 +129,7 @@ end
 
 redef class Variable
 	# The dependences of this variable for SSA-Algorithm
-	var dependences: Array[Variable] = new Array[Variable]
+	var dependences = new Array[Couple[Variable, BasicBlock]]
 
 	# The blocks in which this variable is assigned
 	var assignment_blocks: Array[BasicBlock] = new Array[BasicBlock] is lazy
@@ -139,6 +139,12 @@ redef class Variable
 
 	# The place in AST where this variable has been assigned
 	var reaching_def: nullable ANode = null
+
+	# The stack of this variable, used for SSA
+	var stack = new Array[Int] is lazy
+
+	# The original name of the variable
+	var original_name: String
 end
 
 class PhiFunction
@@ -155,8 +161,10 @@ class PhiFunction
 	do
 		# Look in which blocks of DF(block) `v` has been assigned
 		for b in block.predecessors do
-			print "{b}"
-			if v.assignment_blocks.has(b) then dependences.add(v)
+			if v.assignment_blocks.has(b) then
+				var dep = new Couple[Variable, BasicBlock](v, b)
+				dependences.add(dep)
+			end
 		end
 	end
 
@@ -165,7 +173,7 @@ class PhiFunction
 		var s = ""
 		s += " dependences = [ "
 		for d in dependences do
-			s += d.to_s + " "
+			s += d.first.to_s + " "
 		end
 		s += "]"
 
@@ -194,7 +202,7 @@ redef class AExpr
 	# Return the newest block
 	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock): BasicBlock
 	do
-		#print "NOT YET IMPLEMENTED = " + self.class_name
+		print "NOT YET IMPLEMENTED = " + self.class_name
 		return block
 	end
 end
@@ -236,6 +244,12 @@ redef class AMethPropdef
 
 				for phi in phi_functions do
 					print "{phi}" + phi.to_s
+				end
+
+				dump_tree
+
+				for v in variables do
+					print "{v}" + v.read_blocks.to_s
 				end
 			end
 		end
@@ -281,6 +295,7 @@ redef class AMethPropdef
 						var phi = new PhiFunction("phi", df)
 						phi.add_dependences(df, v)
 						phi.block = df
+						phi.original_name = phi.name
 
 						# Indicate this phi-function is assigned in this block
 						phi.assignment_blocks.add(block)
@@ -303,92 +318,101 @@ redef class AMethPropdef
 	# NOTE: `compute_phi` must has been called before
 	fun rename_variables
 	do
-		var root_block = basic_block.as(not null)
+		# A counter for each variable
+		# The key is the variable, the value the number of assignment into the variable
+		var counter = new HashMap[Variable, Int]
 
-		var blocks = new Array[BasicBlock]
-		blocks.add(root_block)
-
-		while not blocks.is_empty do
-			var block = blocks.shift
-			block.variables_renaming = true
-
-			# For each real variable in this block
-			for variable in block.variables do
-				update_reachingdef(variable, block)
-			end
-
-			var array_var = new Array[Variable]
-			array_var.add_all(block.variables)
-			array_var.add_all(block.phi_functions)
-
-			# Renaming variable and phi-functions
-			for variable in array_var do
-				update_reachingdef(variable, block)
-
-				# Create a new version of this variable
-				# TODO : copy the fields of the old to the new
-
-				# Replace the old variable by the new one
-				var index = block.variables.index_of(variable)
-				var new_version: Variable
-				if index != -1 then
-					new_version = new Variable(variable.name + "1")
-
-					block.variables[index] = new_version
-					new_version.reaching_def = variable.reaching_def
-					variable.reaching_def = new_version.reaching_def
-				else
-					new_version = new PhiFunction(variable.name + "1", block)
-
-					index = block.phi_functions.index_of(variable.as(PhiFunction))
-					block.phi_functions[index] = new_version
-
-					new_version.reaching_def = variable.reaching_def
-					variable.reaching_def = new_version.reaching_def
-				end
-
-				# Saving the old dependences
-				new_version.dependences.add_all(variable.dependences)
-			end
-
-			# Recursively goes into successor blocks
-			for s in block.successors do
-				for phi in s.phi_functions do
-					for dependence in phi.dependences do
-						# Update def
-						update_reachingdef(dependence, block)
-					end
-				end
-
-				# Add successor block to the blocks
-				if not s.variables_renaming then blocks.add(s)
-			end
+		for v in variables do
+			counter[v] = 0
 		end
+
+		for phi in phi_functions do
+			counter[phi] = 0
+		end
+
+		# Launch the recursive renaming from the root block
+		rename(basic_block.as(not null), counter)
 	end
 
-	# TODO: méthode pourrie
-	fun update_reachingdef(v: Variable, block: BasicBlock)
+	#TODO : instead of only renaming variable, create new ones
+	#TODO: documentation
+	# Rename each variable in this block to comply to SSA-algorithm
+	fun rename(block: BasicBlock, counter: HashMap[Variable, Int])
 	do
-		# v.reaching_def is the current closest definition of this variable
-		var r: nullable AExpr = null
+		if block.is_renaming then return
 
+		block.is_renaming = true
 
-		# if v.assignment_blocks.has(block) then
-			v.reaching_def = block.first #TODO: For now just assigned the first expression
-		# else
-		# 	# Assign the phi-variable to this reachingdef
-		# 	for phi in block.phi_functions do
-		# 		if phi.dependences.has(v) then
-		# 			v.reaching_def = phi
-		# 			return
-		# 		end
-		# 	end
+		# For each phi-function of this block
+		for phi in block.phi_functions do
+			generate_name(phi, counter)
+			var vi_name = phi.stack.last
 
-		# 	# If no assignment has been found, go in super-blocks
-		# 	for s in block.successors do
-		# 		update_reachingdef(v, s)
-		# 	end
-		# end
+			phi.name = phi.original_name + phi.stack.last.to_s
+			# Create a new version of variable and replace it in `block`
+			# var new_version = new PhiFunction(vi_name.to_s, block)
+			# new_version.dependences.add_all(phi.dependences)
+
+			# block.phi_functions[block.phi_functions.index_of(phi)] = new_version
+		end
+
+		# For each variable read in `block`
+		for vread in variables do
+			if vread.read_blocks.has(block) then
+				# Rename only if we need to
+				if not vread.stack.is_empty then
+					var new_version = new Variable(vread.original_name + vread.stack.last.to_s)
+					new_version.location = vread.location
+					vread = new_version
+					#vread.name = vread.original_name + vread.stack.last.to_s
+				end
+			end
+		end
+
+		# For each variable write
+		for vwrite in variables do
+			if vwrite.assignment_blocks.has(block) then
+				generate_name(vwrite, counter)
+
+				# TODO See if this is enough
+				var new_version = new Variable(vwrite.original_name + vwrite.stack.last.to_s)
+				new_version.location = vwrite.location
+				vwrite = new_version
+
+				#vwrite.name = vwrite.original_name + vwrite.stack.last.to_s
+			end
+		end
+
+		# Rename occurrence of old names in phi-function
+		for successor in block.dominance_frontier do
+			for sphi in successor.phi_functions do
+				# Go over the couples in the phi dependences to rename variables
+				for couple in sphi.dependences do
+					if couple.second == block then
+						# Rename this variable
+						couple.first.name = couple.first.original_name + couple.first.stack.last.to_s
+					end
+				end
+			end
+		end
+
+		# Recurse in successor blocks
+		for successor in block.successors do
+			rename(successor, counter)
+		end
+
+		# TODO : pop old name off the stack
+	end
+
+	# Generate a new version of the variable `v`
+	# *`v` The variable for which we generate a name
+	fun generate_name(v: Variable, counter: HashMap[Variable, Int])
+	do
+		var i = counter[v]
+		v.stack.add(i)
+
+		# Push a new version on the stack
+		counter[v] = i + 1
 	end
 end
 
@@ -444,7 +468,7 @@ end
 class ALoopHelper
 end
 
-# TODO
+# TODO: treat attribute blocks
 redef class AAttrPropdef
 	redef fun generate_basicBlocks(vm)
 	do
@@ -464,8 +488,14 @@ end
 redef class AVardeclExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
+		var decl = self.variable.as(not null)
+
 		# Add the corresponding variable to the enclosing mpropdef
-		vm.current_propdef.variables.add(self.variable.as(not null))
+		vm.current_propdef.variables.add(decl)
+
+		decl.original_name = decl.name
+		decl.assignment_blocks.add(old_block)
+		old_block.variables.add(decl)
 
 		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
@@ -475,8 +505,6 @@ redef class AVarAssignExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		self.variable.as(not null).assignment_blocks.add(old_block)
-
-		self.variable.as(not null).read_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
 
 		return self.n_value.generate_basicBlocks(vm, old_block)
