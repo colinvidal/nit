@@ -20,10 +20,11 @@ module ssa
 import variables_numbering
 import virtual_machine
 
+intrude import semantize::scope
+
 redef class VirtualMachine
 	redef fun new_frame(node, mpropdef, args)
 	do
-		var sup = super
 
 		# Compute SSA for method and attribute body
 		if node isa AMethPropdef or node isa AAttrPropdef then
@@ -31,6 +32,7 @@ redef class VirtualMachine
 			if not node.as(APropdef).is_generated then node.as(APropdef).generate_basicBlocks(self)
 		end
 
+		var sup = super
 		return sup
 	end
 end
@@ -50,13 +52,18 @@ class BasicBlock
 	# Direct predecessors
 	var predecessors = new Array[BasicBlock]
 
+	# Parts of AST that contain a read to a variable
+	var read_sites = new Array[AVarFormExpr]
+
+	# Parts of AST that contain a write to a variable
+	var write_sites = new Array[AVarFormExpr]
+
 	# The iterated dominance frontier of this block
 	# i.e. the set of blocks this block dominate directly or indirectly
 	var dominance_frontier: Array[BasicBlock] = new Array[BasicBlock] is lazy
 
 	# Self is the old block to link to the new
-	# The two blocks are not linked if the current ends with
-	# a `AReturnExpr` or `ABreakExpr`
+	# The two blocks are not linked if the current ends with a `AReturnExpr` or `ABreakExpr`
 	# i.e. self is the predecessor of `successor`
 	# `successor` The successor block
 	fun link(successor: BasicBlock)
@@ -145,6 +152,10 @@ redef class Variable
 
 	# The original name of the variable
 	var original_name: String
+
+	var original_variable: nullable Variable = self
+
+	var versions = new Array[Variable]
 end
 
 class PhiFunction
@@ -242,15 +253,12 @@ redef class AMethPropdef
 				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
 				debug.dump(basic_block.as(not null))
 
+				print phi_functions.length.to_s
 				for phi in phi_functions do
 					print "{phi}" + phi.to_s
 				end
 
 				dump_tree
-
-				for v in variables do
-					print "{v}" + v.read_blocks.to_s
-				end
 			end
 		end
 	end
@@ -266,7 +274,7 @@ redef class AMethPropdef
 
 		# If the method has a signature
 		if n_signature != null then
-			# TODO: treat parameters
+			# TODO: A Variable must know if it is a parameter
 			print "Parameters = " + n_signature.n_params.to_s
 		end
 
@@ -324,6 +332,7 @@ redef class AMethPropdef
 
 		for v in variables do
 			counter[v] = 0
+			v.versions.add(v)
 		end
 
 		for phi in phi_functions do
@@ -343,6 +352,7 @@ redef class AMethPropdef
 
 		block.is_renaming = true
 
+		print "{block}"
 		# For each phi-function of this block
 		for phi in block.phi_functions do
 			generate_name(phi, counter)
@@ -350,37 +360,31 @@ redef class AMethPropdef
 
 			phi.name = phi.original_name + phi.stack.last.to_s
 			# Create a new version of variable and replace it in `block`
-			# var new_version = new PhiFunction(vi_name.to_s, block)
+			# var new_version = new PhiFunction(phi.original_name + phi.stack.last.to_s, block)
 			# new_version.dependences.add_all(phi.dependences)
 
 			# block.phi_functions[block.phi_functions.index_of(phi)] = new_version
 		end
 
 		# For each variable read in `block`
-		for vread in variables do
-			if vread.read_blocks.has(block) then
-				# Rename only if we need to
-				if not vread.stack.is_empty then
-					var new_version = new Variable(vread.original_name + vread.stack.last.to_s)
-					new_version.location = vread.location
-					vread = new_version
-					#vread.name = vread.original_name + vread.stack.last.to_s
-				end
+		for vread in block.read_sites do
+			# Rename only if we need to
+			if not vread.variable.original_variable.versions.is_empty then
+				# Replace the old variable in AST
+				vread.variable = vread.variable.original_variable.versions.last
 			end
 		end
 
 		# For each variable write
-		for vwrite in variables do
-			if vwrite.assignment_blocks.has(block) then
-				generate_name(vwrite, counter)
+		for vwrite in block.write_sites do
+			generate_name(vwrite.variable.as(not null), counter)
 
-				# TODO See if this is enough
-				var new_version = new Variable(vwrite.original_name + vwrite.stack.last.to_s)
-				new_version.location = vwrite.location
-				vwrite = new_version
+			var new_version = new Variable(vwrite.variable.original_name + vwrite.variable.stack.last.to_s)
+			new_version.location = vwrite.variable.location
+			# new_version.original_variable = vwrite.original_variable
+			# new_version.original_variable.versions.add(new_version)
 
-				#vwrite.name = vwrite.original_name + vwrite.stack.last.to_s
-			end
+			vwrite.variable = new_version
 		end
 
 		# Rename occurrence of old names in phi-function
@@ -389,8 +393,10 @@ redef class AMethPropdef
 				# Go over the couples in the phi dependences to rename variables
 				for couple in sphi.dependences do
 					if couple.second == block then
-						# Rename this variable
-						couple.first.name = couple.first.original_name + couple.first.stack.last.to_s
+						if not couple.first.stack.is_empty then
+							# Rename this variable
+							couple.first.name = couple.first.original_name + couple.first.stack.last.to_s
+						end
 					end
 				end
 			end
@@ -408,6 +414,10 @@ redef class AMethPropdef
 	# *`v` The variable for which we generate a name
 	fun generate_name(v: Variable, counter: HashMap[Variable, Int])
 	do
+		print v.to_s + v.location.to_s
+
+		if not counter.has_key(v) then counter[v] = 0
+
 		var i = counter[v]
 		v.stack.add(i)
 
@@ -468,6 +478,11 @@ end
 class ALoopHelper
 end
 
+redef class AVarFormExpr
+	# The original variable
+	var original_variable: nullable Variable = variable
+end
+
 # TODO: treat attribute blocks
 redef class AAttrPropdef
 	redef fun generate_basicBlocks(vm)
@@ -480,6 +495,9 @@ redef class AVarExpr
 	do
 		self.variable.as(not null).read_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
+
+		# Save this read site in the block
+		old_block.read_sites.add(self)
 
 		return old_block
 	end
@@ -507,6 +525,9 @@ redef class AVarAssignExpr
 		self.variable.as(not null).assignment_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
 
+		# Save this write site in the block
+		old_block.write_sites.add(self)
+
 		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
 end
@@ -514,10 +535,13 @@ end
 redef class AVarReassignExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		self.variable.as(not null).read_blocks.add(old_block)
+		#self.variable.as(not null).read_blocks.add(old_block)
 		self.variable.as(not null).assignment_blocks.add(old_block)
 
 		old_block.variables.add(self.variable.as(not null))
+
+		# Save this write site in the block
+		old_block.write_sites.add(self)
 
 		return self.n_value.generate_basicBlocks(vm, old_block)
 	end

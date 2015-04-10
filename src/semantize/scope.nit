@@ -413,7 +413,7 @@ end
 
 redef class AVarFormExpr
 	# The associated variable
-	var variable: nullable Variable
+	var variable: nullable Variable is writable
 end
 
 redef class ACallFormExpr
