@@ -28,7 +28,6 @@ redef class VirtualMachine
 
 	redef fun new_frame(node, mpropdef, args)
 	do
-
 		# Compute SSA for method and attribute body
 		if node isa AMethPropdef then
 			if node.n_block != null then
@@ -214,7 +213,7 @@ redef class AExpr
 	# Return the newest block
 	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock): BasicBlock
 	do
-		print "NOT YET IMPLEMENTED = " + self.class_name
+		#print "NOT YET IMPLEMENTED = " + self.class_name
 		return block
 	end
 end
@@ -243,7 +242,7 @@ redef class AMethPropdef
 		is_generated = true
 
 		# Once basic blocks were generated, compute SSA algorithm
-		if is_generated and mpropdef.name == "foo" then
+		if is_generated then
 			compute_phi
 			rename_variables
 		end
@@ -259,8 +258,6 @@ redef class AMethPropdef
 				for phi in phi_functions do
 					print "{phi}" + phi.to_s
 				end
-
-				dump_tree
 			end
 		end
 	end
@@ -277,7 +274,7 @@ redef class AMethPropdef
 		# If the method has a signature
 		if n_signature != null then
 			# TODO: A Variable must know if it is a parameter
-			print "Parameters = " + n_signature.n_params.to_s
+			#print "Parameters = " + n_signature.n_params.to_s
 		end
 
 		# Places where a phi-function is added per variable
@@ -355,8 +352,15 @@ redef class AMethPropdef
 		for phi in block.phi_functions do
 			generate_name(phi, counter)
 
-			#Replace the phi into the block
-			phi = phi.original_variable.stack.last.as(PhiFunction)
+			# Replace the phi into the block
+			block.phi_functions[block.phi_functions.index_of(phi)] = phi.original_variable.stack.last.as(PhiFunction)
+		end
+
+		# For each variable read in `block`
+		for vread in block.read_sites do
+			# Replace the old variable in AST
+			print "Replacement of {vread.variable.as(not null)} by {vread.variable.original_variable.stack.last}"
+			vread.variable = vread.variable.original_variable.stack.last
 		end
 
 		# For each variable write
@@ -365,13 +369,6 @@ redef class AMethPropdef
 
 			# Replace the old variable by the last created
 			vwrite.variable = vwrite.variable.original_variable.stack.last
-		end
-
-
-		# For each variable read in `block`
-		for vread in block.read_sites do
-			# Replace the old variable in AST
-			vread.variable = vread.variable.original_variable.stack.last
 		end
 
 		# Rename occurrence of old names in phi-function
@@ -404,10 +401,6 @@ redef class AMethPropdef
 	do
 		var original_variable = v.original_variable.as(not null)
 
-		print "{original_variable}"
-		for key, value in counter do
-			print "\t {key} -> {value}"
-		end
 		var i = counter[original_variable]
 
 		var new_version: Variable
@@ -418,7 +411,7 @@ redef class AMethPropdef
 			new_version = new PhiFunction(original_variable.name + i.to_s, block)
 			new_version.dependences.add_all(original_variable.dependences)
 
-			block.phi_functions[block.phi_functions.index_of(v.as(PhiFunction))] = new_version
+			#block.phi_functions[block.phi_functions.index_of(v.as(PhiFunction))] = new_version
 		else
 			# Create a new version of variable and replace it in `block`
 			new_version = new Variable(original_variable.name + i.to_s)
@@ -533,10 +526,13 @@ redef class AVarAssignExpr
 	do
 		self.variable.as(not null).assignment_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
-
 		self.variable.as(not null).original_variable = self.variable.as(not null)
+
 		# Save this write site in the block
 		old_block.write_sites.add(self)
+
+		#TODO: test with transform module
+		vm.current_propdef.variables.add(self.variable.as(not null))
 
 		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
@@ -545,14 +541,13 @@ end
 redef class AVarReassignExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		#self.variable.as(not null).read_blocks.add(old_block)
 		self.variable.as(not null).assignment_blocks.add(old_block)
-
 		old_block.variables.add(self.variable.as(not null))
 		self.variable.as(not null).original_variable = self.variable.as(not null)
+
 		# Save this write site in the block
 		old_block.write_sites.add(self)
-
+		vm.current_propdef.variables.add(self.variable.as(not null))
 		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
 end
