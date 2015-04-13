@@ -23,13 +23,19 @@ import virtual_machine
 intrude import semantize::scope
 
 redef class VirtualMachine
+
+	var current_propdef: APropdef
+
 	redef fun new_frame(node, mpropdef, args)
 	do
 
 		# Compute SSA for method and attribute body
-		if node isa AMethPropdef or node isa AAttrPropdef then
-			# The first step is to generate the basic blocks
-			if not node.as(APropdef).is_generated then node.as(APropdef).generate_basicBlocks(self)
+		if node isa AMethPropdef then
+			if node.n_block != null then
+				current_propdef = node
+				# The first step is to generate the basic blocks
+				if not node.is_generated then node.generate_basicBlocks(self)
+			end
 		end
 
 		var sup = super
@@ -148,19 +154,14 @@ redef class Variable
 	var reaching_def: nullable ANode = null
 
 	# The stack of this variable, used for SSA
-	var stack = new Array[Int] is lazy
+	var stack = new Array[Variable] is lazy
 
-	# The original name of the variable
-	var original_name: String
-
+	# The original Variable in case of renaming
 	var original_variable: nullable Variable = self
-
-	var versions = new Array[Variable]
 end
 
 class PhiFunction
 	super Variable
-	super AExpr
 
 	# The position in the AST of the phi-function
 	var block: BasicBlock
@@ -235,10 +236,11 @@ redef class AMethPropdef
 		basic_block.last = self
 
 		# Recursively goes into the nodes
-		if n_block != null then
+		if n_block != null and mpropdef.name == "foo" then
 			n_block.generate_basicBlocks(vm, basic_block.as(not null))
-			is_generated = true
 		end
+
+		is_generated = true
 
 		# Once basic blocks were generated, compute SSA algorithm
 		if is_generated and mpropdef.name == "foo" then
@@ -303,7 +305,7 @@ redef class AMethPropdef
 						var phi = new PhiFunction("phi", df)
 						phi.add_dependences(df, v)
 						phi.block = df
-						phi.original_name = phi.name
+						phi.original_variable = phi
 
 						# Indicate this phi-function is assigned in this block
 						phi.assignment_blocks.add(block)
@@ -332,18 +334,15 @@ redef class AMethPropdef
 
 		for v in variables do
 			counter[v] = 0
-			v.versions.add(v)
+			v.stack.push(v)
 		end
 
-		for phi in phi_functions do
-			counter[phi] = 0
-		end
+		for phi in phi_functions do counter[phi] = 0
 
 		# Launch the recursive renaming from the root block
 		rename(basic_block.as(not null), counter)
 	end
 
-	#TODO : instead of only renaming variable, create new ones
 	#TODO: documentation
 	# Rename each variable in this block to comply to SSA-algorithm
 	fun rename(block: BasicBlock, counter: HashMap[Variable, Int])
@@ -352,39 +351,27 @@ redef class AMethPropdef
 
 		block.is_renaming = true
 
-		print "{block}"
 		# For each phi-function of this block
 		for phi in block.phi_functions do
 			generate_name(phi, counter)
-			var vi_name = phi.stack.last
 
-			phi.name = phi.original_name + phi.stack.last.to_s
-			# Create a new version of variable and replace it in `block`
-			# var new_version = new PhiFunction(phi.original_name + phi.stack.last.to_s, block)
-			# new_version.dependences.add_all(phi.dependences)
-
-			# block.phi_functions[block.phi_functions.index_of(phi)] = new_version
-		end
-
-		# For each variable read in `block`
-		for vread in block.read_sites do
-			# Rename only if we need to
-			if not vread.variable.original_variable.versions.is_empty then
-				# Replace the old variable in AST
-				vread.variable = vread.variable.original_variable.versions.last
-			end
+			#Replace the phi into the block
+			phi = phi.original_variable.stack.last.as(PhiFunction)
 		end
 
 		# For each variable write
 		for vwrite in block.write_sites do
 			generate_name(vwrite.variable.as(not null), counter)
 
-			var new_version = new Variable(vwrite.variable.original_name + vwrite.variable.stack.last.to_s)
-			new_version.location = vwrite.variable.location
-			# new_version.original_variable = vwrite.original_variable
-			# new_version.original_variable.versions.add(new_version)
+			# Replace the old variable by the last created
+			vwrite.variable = vwrite.variable.original_variable.stack.last
+		end
 
-			vwrite.variable = new_version
+
+		# For each variable read in `block`
+		for vread in block.read_sites do
+			# Replace the old variable in AST
+			vread.variable = vread.variable.original_variable.stack.last
 		end
 
 		# Rename occurrence of old names in phi-function
@@ -393,10 +380,8 @@ redef class AMethPropdef
 				# Go over the couples in the phi dependences to rename variables
 				for couple in sphi.dependences do
 					if couple.second == block then
-						if not couple.first.stack.is_empty then
-							# Rename this variable
-							couple.first.name = couple.first.original_name + couple.first.stack.last.to_s
-						end
+						# Rename this variable
+						couple.first = couple.first.original_variable.stack.last
 					end
 				end
 			end
@@ -407,21 +392,44 @@ redef class AMethPropdef
 			rename(successor, counter)
 		end
 
-		# TODO : pop old name off the stack
+		# Pop old names off the stack for each phi-function
+		for phi in block.phi_functions do
+			if not phi.stack.is_empty then phi.stack.pop
+		end
 	end
 
 	# Generate a new version of the variable `v`
 	# *`v` The variable for which we generate a name
 	fun generate_name(v: Variable, counter: HashMap[Variable, Int])
 	do
-		print v.to_s + v.location.to_s
+		var original_variable = v.original_variable.as(not null)
 
-		if not counter.has_key(v) then counter[v] = 0
+		print "{original_variable}"
+		for key, value in counter do
+			print "\t {key} -> {value}"
+		end
+		var i = counter[original_variable]
 
-		var i = counter[v]
-		v.stack.add(i)
+		var new_version: Variable
+
+		# Create a new version of Variable
+		if original_variable isa PhiFunction then
+			var block = original_variable.block
+			new_version = new PhiFunction(original_variable.name + i.to_s, block)
+			new_version.dependences.add_all(original_variable.dependences)
+
+			block.phi_functions[block.phi_functions.index_of(v.as(PhiFunction))] = new_version
+		else
+			# Create a new version of variable and replace it in `block`
+			new_version = new Variable(original_variable.name + i.to_s)
+		end
+
+		# Recopy the fields into the new version
+		new_version.location = original_variable.location
+		new_version.original_variable = original_variable
 
 		# Push a new version on the stack
+		original_variable.stack.add(new_version)
 		counter[v] = i + 1
 	end
 end
@@ -496,6 +504,7 @@ redef class AVarExpr
 		self.variable.as(not null).read_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
 
+		self.variable.as(not null).original_variable = self.variable.as(not null)
 		# Save this read site in the block
 		old_block.read_sites.add(self)
 
@@ -511,7 +520,7 @@ redef class AVardeclExpr
 		# Add the corresponding variable to the enclosing mpropdef
 		vm.current_propdef.variables.add(decl)
 
-		decl.original_name = decl.name
+		decl.original_variable = decl
 		decl.assignment_blocks.add(old_block)
 		old_block.variables.add(decl)
 
@@ -525,6 +534,7 @@ redef class AVarAssignExpr
 		self.variable.as(not null).assignment_blocks.add(old_block)
 		old_block.variables.add(self.variable.as(not null))
 
+		self.variable.as(not null).original_variable = self.variable.as(not null)
 		# Save this write site in the block
 		old_block.write_sites.add(self)
 
@@ -539,7 +549,7 @@ redef class AVarReassignExpr
 		self.variable.as(not null).assignment_blocks.add(old_block)
 
 		old_block.variables.add(self.variable.as(not null))
-
+		self.variable.as(not null).original_variable = self.variable.as(not null)
 		# Save this write site in the block
 		old_block.write_sites.add(self)
 
