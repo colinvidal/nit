@@ -101,8 +101,9 @@ abstract class MOPropSite
 	# The expression of the receiver
 	var expr_recv: MOExpr
 
-	# The pattern of the expression
-	var pattern: MOPattern
+	# The CallSite of the expression
+	# TODO: type callsite by MOExprSite ?
+	var callsite: CallSite
 end
 
 # MO of object expression

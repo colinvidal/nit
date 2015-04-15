@@ -53,7 +53,8 @@ redef class VirtualMachine
 	do
 		var ret = super
 		if mpropdef isa MMethodDef then
-			mpropdef.compiled = true
+			mpropdef.preexists_all
+#			mpropdef.compiled = true
 		end
 		return ret
 	end
@@ -224,6 +225,9 @@ redef class CallSite
 	# Pattern that uses this call site
 	var pattern: MOPattern
 
+	# MOPropSite associated to this CallSite
+	var moexprsite: MOExprSite
+
 	# Optimize a method dispatch,
 	# If this method is always at the same position in virtual table, we can use direct access,
 	# Otherwise we must use perfect hashing
@@ -386,24 +390,63 @@ redef class AAsCastExpr
 	end
 end
 
-redef class ASendExpr
+redef class Variable
+	# Represents the view of the variable in the optimizing representation
+	var movar: nullable MOVar
 
+	# Create (if doesn't exists) the movar corresponding to AST node, and return it
+	fun get_movar(node: AExpr): MOVar
+	do
+		if movar == null then
+			if node isa ASelfExpr then
+				movar = new MOParam(0)
+			else if node isa AVarExpr then
+				# A variable read
+				if node.variable.parameter then
+					movar = new MOParam(node.variable.position + 1)
+				else
+					movar = new MOSSAVar(-1, new MOParam(1))
+				end
+			end
+			assert movar != null
+		end
+		return movar.as(not null)
+	end
+end
+
+redef class AExpr
+	# True if self is a literal node
+	fun is_lit: Bool
+	do
+		if self isa AIntExpr then return true
+		if self isa ACharExpr then return true
+		if self isa ANullExpr then return true
+		if self isa AStringFormExpr then return true
+		if self isa ATrueExpr then return true
+		if self isa AFalseExpr then return true
+		return false
+	end
+end
+
+redef class ASendExpr
+	# Site invocation associated with this node
 	var mocallsite: MOCallSite
 
-	redef fun numbering(v: VirtualMachine, pos: Int): Int
-	do
-		v.current_propdef.mpropdef.as(MMethodDef).add_callsite(v, callsite.as(not null))
-		for arg in raw_arguments do
-			arg.numbering(v, pos)
-		end
+#	redef fun numbering(v: VirtualMachine, pos: Int): Int
+#	do
+#		v.current_propdef.mpropdef.as(MMethodDef).add_callsite(v, callsite.as(not null))
+#		for arg in raw_arguments do
+#			arg.numbering(v, pos)
+#		end
+#
+#		# test preexistence sur parametres
+#		var fake_recv = new MOParam(1)
+#		var expr = new MOCallSite(fake_recv, callsite.pattern)
+#		v.current_propdef.mpropdef.as(MMethodDef).call_exprs.add(expr)
+#
+#		return n_expr.numbering(v, pos)
+#	end
 
-		# test preexistence sur parametres
-		var fake_recv = new MOParam(1)
-		var expr = new MOCallSite(fake_recv, callsite.pattern)
-		v.current_propdef.mpropdef.as(MMethodDef).call_exprs.add(expr)
-
-		return n_expr.numbering(v, pos)
-	end
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -415,22 +458,43 @@ redef class ASendExpr
 		if n_expr isa ASendExpr then
 			# A Callsite
 			recv = n_expr.as(ASendExpr).mocallsite
+
+			# Simulate that a parameter is return by the receiver
+			recv.callsite.mpropdef.return_expr = new MOParam(2)
+		else if n_expr isa ASelfExpr then
+			recv = n_expr.as(ASelfExpr).variable.get_movar(n_expr)
 		else if n_expr isa AVarExpr then
-			# A variable read
-			if n_expr.as(AVarExpr).variable.parameter then
-				recv = new MOParam(n_expr.as(AVarExpr).variable.position)
-			else
-				recv = new MOSSAVar(-1, new MOParam(1))
-			end
+			recv = n_expr.as(AVarExpr).variable.get_movar(n_expr)
+		else if n_expr.is_lit then
+			recv = new MOLit
 		else
-			recv = new MOSSAVar(-1, new MOParam(1))
+			recv = new MOSSAVar(-1, new MOParam(3))
 		end
 
-		# TODO : get the pattern
-		mocallsite = new MOCallSite(recv, callsite.pattern)
+		# Add call site to the LP owning it (witch will create pattern if dosen't exists)
+		vm.current_propdef.mpropdef.as(MMethodDef).add_callsite(vm, callsite.as(not null))
+
+		# Create and assign MOCallSite to the callsite
+		mocallsite = new MOCallSite(recv, callsite.as(not null))
+		callsite.as(not null).moexprsite = mocallsite
+
+		# Add MOCallSite to the LP owning it
+		vm.current_propdef.mpropdef.as(MMethodDef).call_exprs.add(mocallsite)
+
+		# Expressions arguments given to the method called
 		# mocallsite.given_args.add_all(raw_arguments)
 
 		return sup
+	end
+end
+
+redef class Int
+	# Display 8 lower bits of preexitence value
+	fun preexists_bits: Array[Int]
+	do
+		var bs = bits.reversed
+		for i in [0..23] do bs.shift
+		return bs
 	end
 end
 
@@ -483,14 +547,20 @@ redef class MMethodDef
 	# Compute the preexistence of all invocation sites and return site of the method
 	fun preexists_all
 	do
+		if compiled then return
+		compiled = true
+
+		print("\npreexists_all of " + self.to_s)
 		var reset = new List[MOExpr]
+		var preexist: Int
 
 		if return_expr != null then
-			preexists_return(reset)
 			if return_expr.get_preexistence_flag(pmask_RECURSIV) then
 				return_expr.set_preexistence_flag(pmask_PVAL_NPER)
 			end
 
+			preexist = return_expr.preexist_cache
+			print("\tpreexist of return : " + return_expr.to_s + " " + preexist.to_s + " " + preexist.preexists_bits.to_s)
 			# TODO: choose implementation of expr_return here
 		end
 
@@ -498,12 +568,13 @@ redef class MMethodDef
 			var recv = expr.expr_recv
 
 			recv.preexists(reset)
-			print("preexist " + recv.to_s + " > " + recv.preexist_cache.to_s)
 			if recv.get_preexistence_flag(pmask_RECURSIV) then
 				recv.set_preexistence_flag(pmask_PVAL_NPER)
 			end
-			expr.preexist_cache = recv.preexist_cache
+			expr.preexist_cache_value = recv.preexist_cache
 
+			preexist = recv.preexist_cache
+			print("\tpreexist of expr " + recv.to_s + "." + expr.to_s + " " + preexist.to_s + " " + preexist.preexists_bits.to_s)
 			# TODO: choose implementation of expr here
 		end
 
@@ -513,47 +584,50 @@ redef class MMethodDef
 	end
 end
 
-redef class ModelBuilder
-	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
-	do
-		super
-		var buf = "\n"
-		var known_patterns = new List[MOPattern]
-
-		for c in model.mclassdef_hierarchy do
-			for m in c.mpropdefs do
-				if m isa MMethodDef then
-					buf += m.to_s + "\n"
-					for cs in m.callsites do
-						buf += "\t {cs.to_s}\n"
-						if not known_patterns.has(cs.pattern) then
-							known_patterns.add(cs.pattern)
-						end
-					end
-				end
-			end
-		end
-
-		buf += "*** NITVM: List of known patterns ***\n"
-		for p in known_patterns do
-			buf += "{p.rst}.{p.gp.name}\n"
-		end
-
-		self.toolcontext.info("*** NITVM: list of callsites by mpropdef ***" + buf, 1)
-
-		buf = ""
-		for p in known_patterns do
-			for lp in p.lps do
-				for expr in lp.call_exprs do
-					lp.preexists_all
-					buf += "preexist_cache of " + expr.pattern.rst.to_s
-					buf += "#" + expr.pattern.gp.to_s + ": " + expr.preexist_cache.to_s + "\n"
-				end
-			end
-		end
-		self.toolcontext.info("*** NITVM: test preexistence ***\n" + buf, 1)
-	end
-end
+#redef class ModelBuilder
+#	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+#	do
+#		super
+#		var buf = "\n"
+#		var known_patterns = new List[MOPattern]
+#
+#		for c in model.mclassdef_hierarchy do
+#			for m in c.mpropdefs do
+#				if m isa MMethodDef then
+#					buf += m.to_s + "\n"
+#					for cs in m.callsites do
+#						buf += "\t {cs.to_s}\n"
+#						if not known_patterns.has(cs.pattern) then
+#							known_patterns.add(cs.pattern)
+#						end
+#					end
+#				end
+#			end
+#		end
+#
+#		buf += "*** NITVM: List of known patterns ***\n"
+#		for p in known_patterns do
+#			buf += "{p.rst}.{p.gp.name}\n"
+#		end
+#
+#		self.toolcontext.info("*** NITVM: list of callsites by mpropdef ***" + buf, 1)
+#
+#		buf = ""
+#		for p in known_patterns do
+#			for lp in p.lps do
+#				for expr in lp.call_exprs do
+#					print("preexist_all of " + lp.to_s)
+#					lp.preexists_all
+#					buf += "preexist_cache of " + expr.callsite.pattern.rst.to_s 
+#					buf += "#" + expr.callsite.pattern.gp.to_s 
+#					buf += " [" + expr.to_s + "] "
+#					buf += ": " + expr.preexist_cache.to_s + "\n"
+#				end
+#			end
+#		end
+#		self.toolcontext.info("*** NITVM: test preexistence ***\n" + buf, 1)
+#	end
+#end
 
 # Preexistence masks
 # PVAL_PER:	0...1111
@@ -615,17 +689,23 @@ end
 
 redef class MOExpr
 	# The cached preexistence of the expression
-	var preexist_cache: Int = pmask_UNKNOWN
+	var preexist_cache_value: Int = pmask_UNKNOWN
 
 	# Compute the preexistence of the expression
 	# `reset` is the list of no perennial preexistences of the expression and it depdendencies
 	fun preexists(reset: List[MOExpr]): Int is abstract
 
+	# Return the preexist_cache_value
+	fun preexist_cache: Int
+	do
+		return preexist_cache_value
+	end
+
 	# Set a bit in a dependency range on the given offset to a preexistence state
 	# Shift 4 bits (preexistence status) + the offset of dependency, and set bit to 1
 	fun set_dependency_flag(offset: Int): Int
 	do
-		preexist_cache = preexist_cache.bin_or(1.lshift(4 + offset))
+		preexist_cache_value = preexist_cache.bin_or(1.lshift(4 + offset))
 		return preexist_cache
 	end
 
@@ -644,7 +724,7 @@ redef class MOExpr
 		# It must not write on dependencies bits
 		assert flag < 16
 
-		preexist_cache = preexist_cache.bin_and(240).bin_or(flag)
+		preexist_cache_value = preexist_cache.bin_or(flag)
 		return preexist_cache
 	end
 
@@ -657,13 +737,13 @@ redef class MOExpr
 	# Return true if the preexistence of the expression isn't known
 	fun is_preexistence_unknown: Bool
 	do
-		return preexist_cache == pmask_UNKNOWN
+		return preexist_cache_value == pmask_UNKNOWN
 	end
 
 	# Return true if the expression preexists (recursive case is interpreted as preexistent)
 	fun is_preexists: Bool
 	do
-		return preexist_cache.bin_and(1) == 1 or preexist_cache == 0
+		return preexist_cache.bin_and(1) == 1 or preexist_cache_value == 0
 	end
 
 	# Return true if the preexistence state of the expression is perennial
@@ -675,16 +755,16 @@ redef class MOExpr
 	# Initialize preexist_cache to UNKNOWN
 	fun init_preexist_cache
 	do
-		preexist_cache = pmask_UNKNOWN
+		preexist_cache_value = pmask_UNKNOWN
 	end
 
 	# Merge dependecies and preexistence state
 	fun merge_preexistence(expr: MOExpr): Int
 	do
 		if expr.get_preexistence_flag(pmask_NPRE_PER) then
-			preexist_cache = pmask_NPRE_PER
+			preexist_cache_value = pmask_NPRE_PER
 		else if expr.get_preexistence_flag(pmask_RECURSIV) then
-			preexist_cache = pmask_RECURSIV
+			preexist_cache_value = pmask_RECURSIV
 		else
 			var pre = preexist_cache.bin_and(15)
 			var deps = preexist_cache.bin_and(240)
@@ -692,7 +772,7 @@ redef class MOExpr
 			pre = pre.bin_and(expr.preexist_cache.bin_and(15))
 			deps = deps.bin_or(expr.preexist_cache.bin_and(240))
 
-			preexist_cache = pre.bin_or(deps)
+			preexist_cache_value = pre.bin_or(deps)
 		end
 
 		return preexist_cache
@@ -700,7 +780,7 @@ redef class MOExpr
 end
 
 redef class MOLit
-	redef var preexist_cache = pmask_PVAL_PER
+	redef var preexist_cache_value = pmask_PVAL_PER
 
 	redef fun preexists(reset)
 	do
@@ -709,11 +789,17 @@ redef class MOLit
 end
 
 redef class MOParam
-	redef var preexist_cache = pmask_PVAL_PER
+	redef var preexist_cache_value = pmask_PVAL_PER
+
+	init
+	do
+		set_dependency_flag(offset)
+	end
 
 	redef fun preexists(reset)
 	do
-		return set_dependency_flag(offset)
+#		return set_dependency_flag(offset)
+		return preexist_cache
 	end
 end
 
@@ -735,7 +821,7 @@ redef class MOSSAVar
 	redef fun preexists(reset)
 	do
 		if is_preexistence_unknown then
-			preexist_cache = dependency.preexists(reset)
+			preexist_cache_value = dependency.preexists(reset)
 			if not is_perennial then
 				reset.add(self)
 			end
@@ -749,7 +835,7 @@ redef class MOPhiVar
 	redef fun preexists(reset)
 	do
 		if is_preexistence_unknown then
-			preexist_cache = pmask_PVAL_PER
+			preexist_cache_value = pmask_PVAL_PER
 			for dep in dependencies do
 				merge_preexistence(dep)
 				if get_preexistence_flag(pmask_NPRE_PER) then
@@ -801,6 +887,9 @@ redef class MOReadSite
 end
 
 redef class MOCallSite
+	# The preexistence from the merge of preexistence of all expr_return
+	var global_preexistence: Int
+
 	# If the receiver expression of `self` depends of the preexistence of the arg at `index`,
 	# check if `expr` depends of the preexistence of the same arg.
 	fun dep_matches(expr: MOExpr, index: Int): Bool
@@ -824,27 +913,25 @@ redef class MOCallSite
 				merge_preexistence(arg)
 			else
 				set_preexistence_flag(pmask_NPRE_NPER)
-				reset.add(self)
 				return preexist_cache
 			end
 			index += 1
 		end
-
-		return preexist_cache
+		return global_preexistence
 	end
 
 	redef fun preexists(reset)
 	do
-		if pattern.cuc > 0 then
-			set_preexistence_flag(pmask_NPRE_NPER)
-			reset.add(self)
-		else if pattern.perennial_status then
-			set_preexistence_flag(pmask_NPRE_PER)
-		else if pattern.lp_all_perennial then
+		if callsite.pattern.cuc > 0 then
+			global_preexistence = pmask_NPRE_NPER
+		else if callsite.pattern.perennial_status then
+			global_preexistence = pmask_NPRE_PER
+		else if callsite.pattern.lp_all_perennial then 
+			global_preexistence = pmask_PVAL_PER
 			check_args(reset)
 		else
-			set_preexistence_flag(pmask_PVAL_PER)
-			for lp in pattern.lps do
+			global_preexistence = pmask_PVAL_PER
+			for lp in callsite.pattern.lps do
 				lp.preexists_return(reset)
 				merge_preexistence(lp.return_expr.as(not null))
 				if get_preexistence_flag(pmask_NPRE_PER) then
@@ -855,11 +942,45 @@ redef class MOCallSite
 			end
 		end
 
-		if not is_perennial then
-			reset.add(self)
+		return global_preexistence
+	end
+
+	redef fun get_preexistence_flag(flag: Int)
+	do
+		return global_preexistence.bin_and(15) == flag
+	end
+
+	redef fun set_preexistence_flag(flag: Int)
+	do
+		# It must not write on dependencies bits
+		assert flag < 16
+
+		global_preexistence = global_preexistence.bin_or(flag)
+		return global_preexistence
+	end
+
+	redef fun merge_preexistence(expr)
+	do
+		if expr.get_preexistence_flag(pmask_NPRE_PER) then
+			global_preexistence = pmask_NPRE_PER
+		else if expr.get_preexistence_flag(pmask_RECURSIV) then
+			global_preexistence = pmask_RECURSIV
+		else
+			var pre = global_preexistence.bin_and(15)
+			var deps = global_preexistence.bin_and(240)
+
+			pre = pre.bin_and(expr.preexist_cache.bin_and(15))
+			deps = deps.bin_or(expr.preexist_cache.bin_and(240))
+
+			global_preexistence = pre.bin_or(deps)
 		end
 
-		return preexist_cache
+		return global_preexistence
+	end
+
+	redef fun preexist_cache
+	do
+		return global_preexistence
 	end
 end
 
@@ -870,6 +991,6 @@ redef class MOPattern
 	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
 	var perennial_status = false
 
-	# If all LPs preexists and are perennial, according to the current class hierarchie
+	# If all LPs preexists and are perennial, according to the current class hierarchy
 	var lp_all_perennial = false
 end
