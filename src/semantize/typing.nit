@@ -505,7 +505,7 @@ end
 
 redef class Variable
 	# The declared type of the variable
-	var declared_type: nullable MType
+	var declared_type: nullable MType is writable
 end
 
 redef class FlowContext

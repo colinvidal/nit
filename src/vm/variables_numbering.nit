@@ -63,6 +63,7 @@ redef class VirtualMachine
 
 		# Putting self at the beginning of the environment
 		f.variables[0] = args[0]
+
 		return f
 	end
 
