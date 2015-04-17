@@ -3,8 +3,31 @@ module model_optimizations
 
 import virtual_machine
 
+# Root hierarchy of patterns
+abstract class MOPattern
+end
+
+# Pattern of instantiation sites
+class MONewPattern
+	super MOPattern
+
+	# Class associated to the pattern
+	var cls: MClass
+
+	# MONew expressions using this pattern
+	var newexprs = new List[MONew]
+
+	# Tell if the class is loaded
+	fun is_loaded: Bool
+	do
+		return cls.loaded
+	end
+end
+
 # Pattern of a callsite
-class MOPattern
+class MOExprSitePattern
+	super MOPattern
+
 	# Static type of the receiver
 	var rst: MType
 
@@ -12,31 +35,13 @@ class MOPattern
 	var gp: MProperty
 
 	# Local properties candidates
-	var lps = new List[MMethodDef]
+	var lps = new HashSet[MMethodDef]
 
-	# CallSite using this pattern
-	var callsites = new List[CallSite]
-
-	# Add a callsite using this pattern, and the candidate LP if didn't already known
-	fun add_callsite(cs: CallSite): nullable MOPattern
-	do
-		if cs.recv == rst and cs.mproperty == gp then
-			if not lps.has(cs.mpropdef) then
-				lps.add(cs.mpropdef)
-			end
-
-			if not callsites.has(cs) then
-				callsites.add(cs)
-			end
-
-			return self
-		end
-
-		return null
-	end
+	# Exprsites using this pattern
+	var exprsites = new HashSet[MOExprSite]
 end
 
-# Root hierarchy
+# Root hierarchy of expressions
 abstract class MOExpr
 end
 
@@ -73,8 +78,11 @@ end
 class MONew
 	super MOExpr
 
-	# Tell if the class is loaded
-	var loaded: Bool
+	# The local property containing this expression
+	var lp: MMethodDef
+
+	# The pattern of this expression
+	var pattern: MONewPattern is writable, noinit
 end
 
 # MO of literals
@@ -82,7 +90,7 @@ class MOLit
 	super MOExpr
 end
 
-# MO of a object site (method call, subtype test, attribute access)
+# Root hierarchy of objets sites
 abstract class MOSite
 end
 
@@ -100,16 +108,18 @@ abstract class MOPropSite
 
 	# The expression of the receiver
 	var expr_recv: MOExpr
-
-	# The CallSite of the expression
-	# TODO: type callsite by MOExprSite ?
-	var callsite: CallSite
 end
 
 # MO of object expression
 abstract class MOExprSite
 	super MOPropSite
 	super MOExpr
+
+	# The local property containing this expression
+	var lp: MMethodDef
+
+	# The pattern using by this expression site
+	var pattern: MOExprSitePattern is writable, noinit
 end
 
 # MO of attribute access

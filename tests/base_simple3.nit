@@ -49,32 +49,18 @@ end
 fun foo do 2.output
 fun bar(i: Int) do i.output
 fun baz: Int do return 4
-fun barR(i: Int): Int do return i
 
 1.output
-#foo
-# le MOParam (receveur) de bar(3) et barR(4) devrait être le même : ajouter un 
-# attribut MOParam(0) dans les noeuds ASelf et AImplicitSelf
-
+foo
 bar(3)
-self.bar(3)
+baz.output
 
-var test = self
-test.bar(5)
-test.bar(6)
+var a = new A
+a.run
 
-barR(4).output
+var b = new B(8)
+b.run
 
-# barR(4).output 95 (mais ne devrait pas dépendre du param 0, ça devrait être donc 47)
-
-#baz.output
-
-#var a = new A
-#a.run
-#
-#var b = new B(8)
-#b.run
-#
-#var c = new C(9)
-#c.val1.output
-#c.val2.output
+var c = new C(9)
+c.val1.output
+c.val2.output
