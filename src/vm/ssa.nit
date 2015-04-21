@@ -144,6 +144,9 @@ redef class Variable
 	# The dependences of this variable for SSA-Algorithm
 	var dependences = new Array[Couple[Variable, BasicBlock]]
 
+	# The expressions of AST of this variable depends
+	var dep_exprs = new Array[AExpr]
+
 	# The blocks in which this variable is assigned
 	var assignment_blocks: Array[BasicBlock] = new Array[BasicBlock] is lazy
 
@@ -203,6 +206,11 @@ redef class APropdef
 	# If true, the basic blocks where generated
 	var is_generated: Bool = false
 
+	# The return variable of the propdef
+	# Create an empty variable for the return of the method
+	# and treat returns like variable assignments
+	var returnvar: Variable = new Variable("returnvar")
+
 	# Generate all basic blocks for this code
 	fun generate_basicBlocks(vm: VirtualMachine) is abstract
 end
@@ -221,11 +229,6 @@ end
 
 redef class AMethPropdef
 
-	# The return variable of the propdef
-	# Create an empty variable for the return of the method
-	# and treat returns like variable assignments
-	var returnvar: Variable = new Variable("returnvar")
-
 	# The PhiFunction this method contains
 	var phi_functions = new Array[PhiFunction]
 
@@ -243,6 +246,9 @@ redef class AMethPropdef
 			end
 		end
 
+		# Add the return variable
+		variables.add(returnvar)
+
 		# Add the self variable
 		if self.selfvariable != null then variables.add(selfvariable.as(not null))
 
@@ -254,10 +260,10 @@ redef class AMethPropdef
 		is_generated = true
 
 		# Once basic blocks were generated, compute SSA algorithm
-		if is_generated and mpropdef.name == "foo" then
+		if is_generated then
 			compute_phi
 			rename_variables
-			ssa_destruction
+			ssa_destruction(vm)
 		end
 	end
 
@@ -282,7 +288,7 @@ redef class AMethPropdef
 
 			# While we have not treated each part accessing `v`
 			while not read_blocks.is_empty do
-				# Remove a block from the set
+				# Remove a block from the array
 				var block = read_blocks.shift
 
 				# For each block in the dominance frontier of `block`
@@ -359,8 +365,17 @@ redef class AMethPropdef
 		for vwrite in block.write_sites do
 			generate_name(vwrite.variable.as(not null), counter)
 
+			var new_version = vwrite.variable.original_variable.stack.last
+
+			# Set dependence of the new variable
+			if vwrite isa AVarReassignExpr then
+				new_version.dep_exprs.add(vwrite.n_value)
+			else if vwrite isa AVarAssignExpr then
+				new_version.dep_exprs.add(vwrite.n_value)
+			end
+
 			# Replace the old variable by the last created
-			vwrite.variable = vwrite.variable.original_variable.stack.last
+			vwrite.variable = new_version
 		end
 
 		# Rename occurrence of old names in phi-function
@@ -402,9 +417,11 @@ redef class AMethPropdef
 			var block = original_variable.block
 			new_version = new PhiFunction(original_variable.name + i.to_s, block)
 			new_version.dependences.add_all(original_variable.dependences)
+			phi_functions.add(new_version)
 		else
 			new_version = new Variable(original_variable.name + i.to_s)
 			new_version.declared_type = original_variable.declared_type
+			variables.add(new_version)
 		end
 
 		# Recopy the fields into the new version
@@ -417,14 +434,13 @@ redef class AMethPropdef
 	end
 
 	# Transform SSA-representation into an executable code (delete phi-functions)
-	fun ssa_destruction
+	# `vm` Current instance of the virtual machine
+	fun ssa_destruction(vm: VirtualMachine)
 	do
 		var builder = new ASTBuilder(mpropdef.mclassdef.mmodule, mpropdef.mclassdef.bound_mtype)
 
 		# Iterate over all phi-functions
 		for phi in phi_functions do
-			#print "Phi = {phi.to_s}"
-
 			for dep in phi.dependences do
 				# dep.second is the block where we need to create a varassign
 				var var_read = builder.make_var_read(dep.first, dep.first.declared_type.as(not null))
@@ -433,6 +449,8 @@ redef class AMethPropdef
 				var block = dep.second.last.parent
 
 				block.as(ABlockExpr).add(nvar)
+
+				vm.current_propdef.variables.add(dep.first)
 			end
 		end
 	end
@@ -528,7 +546,12 @@ redef class AVardeclExpr
 		decl.assignment_blocks.add(old_block)
 		old_block.variables.add(decl)
 
-		return self.n_expr.generate_basicBlocks(vm, old_block)
+		if self.n_expr != null then
+			self.variable.dep_exprs.add(self.n_expr.as(not null))
+			old_block = self.n_expr.generate_basicBlocks(vm, old_block)
+		end
+
+		return old_block
 	end
 end
 
@@ -598,14 +621,18 @@ redef class AContinueExpr
 	end
 end
 
-# TODO : memoize returns
 redef class AReturnExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		# The return just set the current block and stop the recursion
-		if self.n_expr != null then old_block = self.n_expr.generate_basicBlocks(vm, old_block)
+		if self.n_expr != null then
+			old_block = self.n_expr.generate_basicBlocks(vm, old_block)
+			# Store the return expression in the dependences of the dedicated returnvar
+			vm.current_propdef.returnvar.dep_exprs.add(n_expr.as(not null))
+		end
 
 		old_block.last = self
+
 		return old_block
 	end
 end
@@ -744,7 +771,6 @@ redef class AOnceExpr
 # 	end
 end
 
-#TODO: for send expression, store them into the model
 redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -754,7 +780,6 @@ redef class ASendExpr
 		# Recursively goes into arguments to find variables if any
 		for e in self.raw_arguments do e.generate_basicBlocks(vm, old_block)
 
-		# We do not need to recurse over the arguments since
 		return self.n_expr.generate_basicBlocks(vm, old_block)
 	end
 end
@@ -806,7 +831,6 @@ end
 # 	end
 # end
 
-# TODO: Store the new into the model
 redef class ANewExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -816,7 +840,6 @@ redef class ANewExpr
 	end
 end
 
-# TODO: Store attribute access sites in model
 redef class AAttrExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
