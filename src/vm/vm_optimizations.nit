@@ -618,14 +618,10 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_preexist
 	do
-		var flag = return_expr.is_preexists
-		
-		var cpy = new List[MOExpr]
-		cpy.add_all(exprs_preexist_mut)
-		for expr in cpy do
-			expr.init_preexist_cache
-			exprs_preexist_mut.remove(expr)
-		end
+		var flag = return_expr.is_preexists # TODO
+	
+		for expr in exprs_preexist_mut do expr.init_preexist_cache
+		exprs_preexist_mut.clear
 
 		if flag then for p in callers do p.propage_preexist
 	end
@@ -636,12 +632,8 @@ redef class MMethodDef
 	do
 		var flag = not return_expr.is_preexists
 
-		var cpy = new List[MOExpr]
-		cpy.add_all(exprs_npreexist_mut)
-		for expr in cpy do
-			expr.init_preexist_cache
-			exprs_npreexist_mut.remove(expr)
-		end
+		for expr in exprs_npreexist_mut do expr.init_preexist_cache
+		exprs_npreexist_mut.clear
 
 		if flag then for p in callers do p.propage_npreexist
 	end
@@ -710,6 +702,8 @@ end
 # NPRE_PER:	0...1100
 # NPRE_NPER:	0...1000
 # RECURSIV:	0...0000
+# PRE_PER:	0...0101
+# PRE_NPER:	0...0001
 # UNKNOWN:	1...
 
 # Preexistence mask of perennial value preexistence
@@ -760,6 +754,20 @@ do
 	return -1
 end
 
+# Preexistence (val or type) perennial
+# WARNING: USE ONLY WITH get_preexistence_flag
+fun pmask_PRE_PER: Int
+do
+	return 5
+end
+
+# Preexistence (val or type) non perennial
+# WARNING: USE ONLY WITH get_preexistence_flag
+fun pmask_PER_NPER: Int
+do
+	return 1
+end
+
 redef class MOExpr
 	# The cached preexistence of the expression (the return of the expression)
 	var preexist_expr_value: Int = pmask_UNKNOWN
@@ -798,6 +806,14 @@ redef class MOExpr
 	fun get_preexistence_flag(flag: Int): Bool
 	do
 		return preexist_expr_value.bin_and(15) == flag
+
+#		if flag == pmask_RECURSIV then 
+#			return preexist_expr_value.bin_and(15) == 0
+#		else if flag == pmask_UNKNOWN then
+#			return preexist_expr_value == flag
+#		else
+#			return preexist_expr_value.bin_and(15).bin_or(flag) > 0
+#		end
 	end
 
 	# Return true if the preexistence of the expression isn't known
