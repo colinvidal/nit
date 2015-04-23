@@ -6,6 +6,11 @@ class B
 	super A
 end
 
+class C
+	super B 
+	redef fun foo do end
+end
+
 redef class Int
 	fun faz do end
 end
@@ -13,9 +18,12 @@ end
 fun useA(load: Bool)
 do 
 	var a: A = new A
+	var c: nullable C
 
 	if load then 
 		a = new B
+	else
+		c = new C
 	end
 end
 

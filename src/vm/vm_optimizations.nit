@@ -79,28 +79,33 @@ redef class VirtualMachine
 	end
 
 	# Handle new local property for update optimizing model
-	fun handle_new_branch(lp: MMethodDef)
+	fun handle_new_branch(lp: MPropDef)
 	do
+		print("{lp.mclassdef} redefines {lp.name}")
+		
 		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-		var compatibles_patterns = new List[MOExprSitePattern]
-		for p in exprsites_patterns do
-			if is_subtype(lp.mclassdef.mclass.mclass_type, p.rst) then
-				if p.gp == lp.mproperty then compatibles_patterns.add(p)
-			end
-		end
-
-		for p in compatibles_patterns do
-			p.lps.add(lp)
-			p.cuc += 1
-
-			if p.cuc == 1 then
-				for expr in p.exprsites do
-					if expr.is_preexists then
-						expr.lp.propage_preexist
-					end
-				end
-			end
-		end
+#		var compatibles_patterns = new List[MOExprSitePattern]
+#		for p in exprsites_patterns do
+#			for cls in scls do
+#				if p.gp == local_redef and cls.mclass_type == p.rst then
+#
+#					compatibles_patterns.add(p)
+#				end
+#			end
+#		end
+#
+#		for p in compatibles_patterns do
+#			p.lps.add(lp)
+#			p.cuc += 1
+#
+#			if p.cuc == 1 then
+#				for expr in p.exprsites do
+#					if expr.is_preexists then
+#						expr.lp.propage_preexist
+#					end
+#				end
+#			end
+#		end
 	end
 
 	redef fun new_frame(node, mpropdef, args)
@@ -163,8 +168,16 @@ redef class VirtualMachine
 
 	redef fun create_class(mclass)
 	do
+		# mclassdef.mpropdef (intro & redef)
 		super
 		handle_class_loading(mclass)
+
+		for classdef in mclass.mclassdefs do
+			for i in [1..classdef.mpropdefs.length - 1] do
+				var mdef = classdef.mpropdefs[i]
+				if not mdef.is_intro then handle_new_branch(mdef)
+			end
+		end
 	end
 end
 
@@ -617,7 +630,7 @@ redef class MMethodDef
 		if compiled then return
 		compiled = true
 
-		print("preexist_all of " + self.to_s)
+		print("preexist_all of {self}")
 		var preexist: Int
 
 		if return_expr != null then
@@ -626,14 +639,14 @@ redef class MMethodDef
 			end
 
 			preexist = return_expr.preexist_expr_value
-			print("\tpreexist of return : " + return_expr.to_s + " " + preexist.to_s + " " + preexist.preexists_bits.to_s)
+			print("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
 		end
 	
 		for expr in moexprs do
 			expr.preexist_expr
 			preexist = expr.preexist_expr_value
-			print("\tpreexist of expr " + expr.to_s + " " + preexist.to_s + " " + preexist.preexists_bits.to_s)
-			if expr isa MONew then print("\t\t" + "class " + expr.pattern.cls.to_s + " is loaded? " + expr.pattern.is_loaded.to_s)
+			print("\tpreexist of expr {expr} {preexist} {preexist.preexists_bits}")
+			if expr isa MONew then print("\t\t" + "class {expr.pattern.cls} is loaded? {expr.pattern.is_loaded}")
 
 			# TODO: choose implementation here
 		end
@@ -641,7 +654,7 @@ redef class MMethodDef
 		for exprsite in moexprsites do
 			exprsite.preexist_site
 			preexist = exprsite.preexist_site_value
-			print("\tpreexist of exprsite " + exprsite.expr_recv.to_s + "." + exprsite.to_s + " " + preexist.to_s + " " + preexist.preexists_bits.to_s)
+			print("\tpreexist of exprsite {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 
 			# TODO:choose implementation here
 		end
@@ -996,7 +1009,7 @@ redef class MONewPattern
 				var old = newexpr.preexist_expr_value.preexists_bits.to_s
 				newexpr.set_preexistence_flag(pmask_PVAL_PER)
 				var cur = newexpr.preexist_expr_value.preexists_bits.to_s
-				print("update prexistence " + newexpr.to_s + " in " + newexpr.lp.to_s + " from " + old + " to " + cur)
+				print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
 			end
 		end
 	end
