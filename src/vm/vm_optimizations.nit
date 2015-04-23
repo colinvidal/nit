@@ -618,7 +618,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_preexist
 	do
-		var flag = return_expr.is_preexists # TODO
+		var flag = return_expr.is_preexists and not return_expr.is_perennial
 	
 		for expr in exprs_preexist_mut do expr.init_preexist_cache
 		exprs_preexist_mut.clear
@@ -630,7 +630,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_npreexist
 	do
-		var flag = not return_expr.is_preexists
+		var flag = not return_expr.is_preexists and not return_expr.is_perennial
 
 		for expr in exprs_npreexist_mut do expr.init_preexist_cache
 		exprs_npreexist_mut.clear
@@ -693,78 +693,101 @@ redef class MMethodDef
 	end
 end
 
-# Preexistence masks
-# PVAL_PER:	0...1111
-# PTYPE_PER:	0...1101
-# PVAL_NPER:	0...1011
-# PTYPE_NPER:	0...1001
-# NPRE_PER:	0...1100
-# NPRE_NPER:	0...1000
-# RECURSIV:	0...0000
-# PRE_PER:	0...0101
-# PRE_NPER:	0...0001
-# UNKNOWN:	1...
+# Preexistence mask of unknown
+fun pmask_UNKNOWN: Int
+do
+	return 1.lshift(6)
+end
+
+# Preexistence mask of recursive
+fun pmask_RECURSIVE: Int
+do
+	return 1.lshift(5)
+end
+
+# Preesitence mask of preexistence
+# WARNING: NEVER USE WITH set_preexistence_flag
+fun pmask_PREESITENCE: Int
+do
+	return 1.lshift(4)
+end
+
+# Preexistence mask of preexistence by val
+# WARNING: NEVER USE WITH set_preexistence_flag
+fun pmask_PVAL: Int
+do
+	return pmask_PREESITENCE.bin_or(1.lshift(3))
+end
+
+# Preexistence mask of preexistence by type
+# WARNING: NEVER USE WITH set_preexistence_flag
+fun pmask_PTYPE: Int
+do
+	return pmask_PREESITENCE.bin_or(1.lshift(2))
+end
+
+# Preexistence mask for perennial (immutable)
+# WARNING: NEVER USE WITH set_preexistence_flag
+fun pmask_PERENNIAL: Int
+do
+	return 1.lshift(1)
+end
+
+# Preexistence mask for no perennial (mutable)
+# WARNING: NEVER USE WITH set_preexistence_flag
+fun pmask_NOPERENNIAL: Int
+do
+	return 1
+end
 
 # Preexistence mask of perennial value preexistence
 fun pmask_PVAL_PER: Int
 do
-	return 15
+	return pmask_PVAL.bin_or(pmask_PERENNIAL)
 end
 
 # Preexistence mask of perennial type preexistence
 fun pmask_PTYPE_PER: Int
 do
-	return 13
+	return pmask_PTYPE.bin_or(pmask_PERENNIAL)
 end
 
 # Preexistence mask of no perennial value preexistence
 fun pmask_PVAL_NPER: Int
 do
-	return 11
+	return pmask_PVAL.bin_or(pmask_NOPERENNIAL)
 end
 
 # Preexistence mask of no perennial type preexistence
 fun pmask_PTYPE_NPER: Int
 do
-	return 9
+	return pmask_PTYPE.bin_or(pmask_NOPERENNIAL)
 end
 
 # Preexistence mask of perennial no preexistence
 fun pmask_NPRE_PER: Int
 do
-	return 12
+	return pmask_PERENNIAL
 end
 
 # Preexistence mask of no perennial no preexistence
 fun pmask_NPRE_NPER: Int
 do
-	return 8
-end
-
-# Preexistence mask of recursive calls
-fun pmask_RECURSIV: Int
-do
-	return 0
-end
-
-# Preexistence mask of unknown preexistence
-fun pmask_UNKNOWN: Int
-do
-	return -1
+	return pmask_NOPERENNIAL
 end
 
 # Preexistence (val or type) perennial
-# WARNING: USE ONLY WITH get_preexistence_flag
+# WARNING: NEVER USE WITH set_preexistence_flag
 fun pmask_PRE_PER: Int
 do
-	return 5
+	return pmask_PREESITENCE.bin_or(pmask_PERENNIAL)
 end
 
 # Preexistence (val or type) non perennial
-# WARNING: USE ONLY WITH get_preexistence_flag
+# WARNING: NEVER USE WITH set_preexistence_flag
 fun pmask_PER_NPER: Int
 do
-	return 1
+	return pmask_PREESITENCE.bin_or(pmask_NOPERENNIAL)
 end
 
 redef class MOExpr
@@ -775,10 +798,10 @@ redef class MOExpr
 	fun preexist_expr: Int is abstract
 
 	# Set a bit in a dependency range on the given offset to a preexistence state
-	# Shift 4 bits (preexistence status) + the offset of dependency, and set bit to 1
+	# Shift 7 bits (preexistence status) + the offset of dependency, and set bit to 1
 	fun set_dependency_flag(offset: Int): Int
 	do
-		preexist_expr_value = preexist_expr_value.bin_or(1.lshift(4 + offset))
+		preexist_expr_value = preexist_expr_value.bin_or(1.lshift(7 + offset))
 		return preexist_expr_value
 	end
 
@@ -786,61 +809,29 @@ redef class MOExpr
 	fun is_dependency_flag(index: Int): Bool
 	do
 		# It must concern a dependency bit
-		assert index > 15
+		assert index > 127
 
 		return 1.lshift(index).bin_and(preexist_expr_value) != 0
 	end
 
 	# Set a preexistence flag
-	fun set_preexistence_flag(flag: Int): Int
+	fun set_preexistence_flag(flag: Int)
 	do
 		# It must not write on dependencies bits
-		assert flag < 16
+		assert flag < 128
 
+		# Remove old preexistence status flags
+		preexist_expr_value = preexist_expr_value.rshift(7)
+		preexist_expr_value = preexist_expr_value.lshift(7)
+
+		# Set new flag
 		preexist_expr_value = preexist_expr_value.bin_or(flag)
-		return preexist_expr_value
 	end
 
 	# Get if the preexistence state of a expression matches with given flag
 	fun get_preexistence_flag(flag: Int): Bool
 	do
-		var ret: Bool
-
-#		if flag == pmask_RECURSIV then
-#			ret = preexist_expr_value == pmask_RECURSIV
-#		else
-#			ret = preexist_expr_value.bin_and(flag) == flag
-#		end
-
-		ret = preexist_expr_value.bin_and(15) == flag
-
-#		print("get_preexistence_flag flag={flag} pre={preexist_expr_value} ret={ret}")
-
-		return ret
-	end
-
-	# Return true if the preexistence of the expression isn't known
-	fun is_preexistence_unknown: Bool
-	do
-		return preexist_expr_value == pmask_UNKNOWN
-	end
-
-	# Return true if the expression preexists (recursive case is interpreted as preexistent)
-	fun is_preexists: Bool
-	do
-		return preexist_expr_value.bin_and(1) == 1 or preexist_expr_value == 0
-	end
-
-	# Return true if the preexistence state of the expression is perennial
-	fun is_perennial: Bool
-	do
-		return preexist_expr_value.bin_and(4) == 4
-	end
-
-	# Initialize preexist_cache to UNKNOWN
-	fun init_preexist_cache
-	do
-		preexist_expr_value = pmask_UNKNOWN
+		return preexist_expr_value.bin_and(flag) == flag
 	end
 
 	# Merge dependecies and preexistence state
@@ -848,13 +839,13 @@ redef class MOExpr
 	do
 		if expr.get_preexistence_flag(pmask_NPRE_PER) then
 			preexist_expr_value = pmask_NPRE_PER
-		else if expr.get_preexistence_flag(pmask_RECURSIV) then
-			preexist_expr_value = pmask_RECURSIV
+		else if expr.get_preexistence_flag(pmask_RECURSIVE) then
+			preexist_expr_value = pmask_RECURSIVE
 		else
-			var pre = preexist_expr_value.bin_and(15)
-			var deps = preexist_expr_value.bin_and(240)
+			var pre = preexist_expr_value.bin_and(127)
+			var deps = preexist_expr_value.rshift(7).lshift(7)
 
-			pre = pre.bin_and(expr.preexist_expr_value.bin_and(15))
+			pre = pre.bin_and(expr.preexist_expr_value.bin_and(127))
 			deps = deps.bin_or(expr.preexist_expr_value.bin_and(240))
 
 			preexist_expr_value = pre.bin_or(deps)
