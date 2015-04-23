@@ -680,8 +680,7 @@ redef class MMethodDef
 		end
 
 		for exprsite in moexprsites do
-			exprsite.preexist_site
-			preexist = exprsite.preexist_site_value
+			preexist = exprsite.preexist_site
 			print("\tpreexist of exprsite {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 
 			# TODO:choose implementation here
@@ -805,15 +804,19 @@ redef class MOExpr
 	# Get if the preexistence state of a expression matches with given flag
 	fun get_preexistence_flag(flag: Int): Bool
 	do
-		return preexist_expr_value.bin_and(15) == flag
+		var ret: Bool
 
-#		if flag == pmask_RECURSIV then 
-#			return preexist_expr_value.bin_and(15) == 0
-#		else if flag == pmask_UNKNOWN then
-#			return preexist_expr_value == flag
+#		if flag == pmask_RECURSIV then
+#			ret = preexist_expr_value == pmask_RECURSIV
 #		else
-#			return preexist_expr_value.bin_and(15).bin_or(flag) > 0
+#			ret = preexist_expr_value.bin_and(flag) == flag
 #		end
+
+		ret = preexist_expr_value.bin_and(15) == flag
+
+#		print("get_preexistence_flag flag={flag} pre={preexist_expr_value} ret={ret}")
+
+		return ret
 	end
 
 	# Return true if the preexistence of the expression isn't known
@@ -1014,17 +1017,12 @@ end
 
 
 redef class MOPropSite
-	# The preexistence value of the site call
-	var preexist_site_value: Int = pmask_UNKNOWN
-
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
 		expr_recv.preexist_expr
-
 		if expr_recv.get_preexistence_flag(pmask_RECURSIV) then expr_recv.set_preexistence_flag(pmask_PVAL_NPER)
-		preexist_site_value = expr_recv.preexist_expr
-		return preexist_site_value
+		return expr_recv.preexist_expr_value
 	end
 end
 
