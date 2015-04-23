@@ -78,34 +78,27 @@ redef class VirtualMachine
 		for p in new_patterns do p.handle_class_loading(cls)
 	end
 
+	# For tests only, to remove !
+	fun debug_if_not_internal(module_str: String): Bool
+	do
+		if module_str == "kernel" then return false
+		if module_str == "string" then return false
+		if module_str == "numeric" then return false
+		return true
+	end
+
 	# Handle new local property for update optimizing model
 	fun handle_new_branch(lp: MPropDef)
 	do
-		print("{lp.mclassdef} redefines {lp.name}")
-		
+		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
+
 		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-#		var compatibles_patterns = new List[MOExprSitePattern]
-#		for p in exprsites_patterns do
-#			for cls in scls do
-#				if p.gp == local_redef and cls.mclass_type == p.rst then
-#
-#					compatibles_patterns.add(p)
-#				end
-#			end
-#		end
-#
-#		for p in compatibles_patterns do
-#			p.lps.add(lp)
-#			p.cuc += 1
-#
-#			if p.cuc == 1 then
-#				for expr in p.exprsites do
-#					if expr.is_preexists then
-#						expr.lp.propage_preexist
-#					end
-#				end
-#			end
-#		end
+		var compatibles_patterns = new List[MOExprSitePattern]
+		for p in exprsites_patterns do
+			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
+		end
+
+		for p in compatibles_patterns do p.handle_new_branch(lp)
 	end
 
 	redef fun new_frame(node, mpropdef, args)
@@ -466,8 +459,11 @@ redef class Variable
 				# A variable read
 				if node.variable.parameter then
 					movar = new MOParam(node.variable.position + 1)
-				else
+				else if node.variable.dep_exprs.length == 1 then
+					print("ast ssavar {self}")
 					movar = new MOSSAVar(-1, new MOParam(1))
+				else
+					print("ast phivar {self}")
 				end
 			end
 			assert movar != null
@@ -501,6 +497,44 @@ redef class AExpr
 		if self isa AFalseExpr then return true
 		return false
 	end
+
+	# Convert AST node into MOExpression
+	fun case_ast2mo(a_expr: AExpr): MOExpr
+	do
+		var mo_expr: MOExpr
+
+		if a_expr isa ASendExpr then
+			# A Callsite
+			mo_expr = a_expr.mocallsite
+
+			# Simulate that a parameter is return by the receiver
+			a_expr.callsite.mpropdef.return_expr = new MOParam(2)
+		else if a_expr isa ASelfExpr then
+			mo_expr = a_expr.variable.get_movar(a_expr)
+		else if a_expr isa AVarExpr then
+			mo_expr = a_expr.variable.get_movar(a_expr)
+		else if a_expr.is_lit then
+			mo_expr = new MOLit
+		else
+			mo_expr = new MOSSAVar(-1, new MOParam(3))
+		end
+
+		return mo_expr
+	end
+end
+
+redef class AMethPropdef
+	# list of return expression of the optimizing model
+	var mo_dep_exprs = new List[MOExpr]
+
+	redef fun generate_basicBlocks(vm)
+	do
+		super(vm)
+
+		for aexpr in returnvar.dep_exprs do
+		end
+		print("ast apropdef {mpropdef.as(not null)} varreturn:{returnvar.dep_exprs}")
+	end
 end
 
 redef class ASendExpr
@@ -510,24 +544,8 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		var recv: MOExpr
-
-		if n_expr isa ASendExpr then
-			# A Callsite
-			recv = n_expr.as(ASendExpr).mocallsite
-
-			# Simulate that a parameter is return by the receiver
-			n_expr.as(ASendExpr).callsite.mpropdef.return_expr = new MOParam(2)
-		else if n_expr isa ASelfExpr then
-			recv = n_expr.as(ASelfExpr).variable.get_movar(n_expr)
-		else if n_expr isa AVarExpr then
-			recv = n_expr.as(AVarExpr).variable.get_movar(n_expr)
-		else if n_expr.is_lit then
-			recv = new MOLit
-		else
-			recv = new MOSSAVar(-1, new MOParam(3))
-		end
-
+		var recv = case_ast2mo(n_expr)
+		
 		var lp = vm.current_propdef.mpropdef.as(MMethodDef)
 		mocallsite = new MOCallSite(recv, lp)
 		lp.moexprsites.add(mocallsite)
@@ -996,6 +1014,38 @@ redef class MOExprSitePattern
 	fun propage_npreexist
 	do
 		for lp in lps do lp.propage_npreexist
+	end
+
+
+	# True if a lp is compatible with self pattern (eg. if the lp has
+	# the gp of self and if rst of lp is a subtype of rst of the pattern)
+	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
+	do
+		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
+			if gp == lp.mproperty then return true
+		end
+		return false
+	end
+
+	# Add a new branch on the pattern
+	# Set non preesitent all non perenial preexistent expressions known by this pattern 
+	# If the expression if the return of a lp, propage the callers
+	fun handle_new_branch(lp: MPropDef)
+	do
+		lps.add(lp.as(MMethodDef))
+		cuc += 1
+
+		if cuc == 1 then
+			for expr in exprsites do
+				if expr.is_preexists and not expr.is_perennial then
+#					var old = expr.preexist_site_value
+					print("\texpr NEEDS [TODO] switch to non preexist {expr}")
+#					if expr.lp.return_expr == expr then
+#						expr.lp.propage_preexist
+#					end
+				end
+			end
+		end
 	end
 end
 
