@@ -17,11 +17,12 @@
 # Compute Single-Static Assignment form from an AST
 module ssa
 
-import variables_numbering
 import virtual_machine
 
 import astbuilder
 intrude import semantize::scope
+intrude import semantize::typing
+intrude import variables_numbering
 
 redef class VirtualMachine
 
@@ -29,6 +30,7 @@ redef class VirtualMachine
 
 	redef fun new_frame(node, mpropdef, args)
 	do
+		var sup = super
 		# Compute SSA for method and attribute body
 		if node isa AMethPropdef then
 			if node.n_block != null then
@@ -38,7 +40,6 @@ redef class VirtualMachine
 			end
 		end
 
-		var sup = super
 		return sup
 	end
 end
@@ -264,6 +265,10 @@ redef class AMethPropdef
 			compute_phi
 			rename_variables
 			ssa_destruction(vm)
+			if mpropdef.name == "main" then
+				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
+				debug.dump(basic_block.as(not null))
+			end
 		end
 	end
 
@@ -302,6 +307,7 @@ redef class AMethPropdef
 						phi.add_dependences(df, v)
 						phi.block = df
 						phi.original_variable = phi
+						phi.declared_type = v.declared_type
 
 						# Indicate this phi-function is assigned in this block
 						phi.assignment_blocks.add(block)
@@ -349,7 +355,7 @@ redef class AMethPropdef
 
 		# For each phi-function of this block
 		for phi in block.phi_functions do
-			generate_name(phi, counter)
+			generate_name(phi, counter, block.first)
 
 			# Replace the phi into the block
 			block.phi_functions[block.phi_functions.index_of(phi)] = phi.original_variable.stack.last.as(PhiFunction)
@@ -363,7 +369,7 @@ redef class AMethPropdef
 
 		# For each variable write
 		for vwrite in block.write_sites do
-			generate_name(vwrite.variable.as(not null), counter)
+			generate_name(vwrite.variable.as(not null), counter, vwrite)
 
 			var new_version = vwrite.variable.original_variable.stack.last
 
@@ -404,7 +410,8 @@ redef class AMethPropdef
 
 	# Generate a new version of the variable `v`
 	# *`v` The variable for which we generate a name
-	fun generate_name(v: Variable, counter: HashMap[Variable, Int])
+	# * `expr` The AST node in which the assignment of v is made
+	fun generate_name(v: Variable, counter: HashMap[Variable, Int], expr: ANode)
 	do
 		var original_variable = v.original_variable.as(not null)
 
@@ -420,13 +427,15 @@ redef class AMethPropdef
 			phi_functions.add(new_version)
 		else
 			new_version = new Variable(original_variable.name + i.to_s)
-			new_version.declared_type = original_variable.declared_type
+			new_version.declared_type = expr.as(AVarFormExpr).variable.declared_type
+			new_version.is_adapted = v.is_adapted
 			variables.add(new_version)
 		end
 
 		# Recopy the fields into the new version
-		new_version.location = original_variable.location
+		new_version.location = expr.location
 		new_version.original_variable = original_variable
+		new_version.position = original_variable.position
 
 		# Push a new version on the stack
 		original_variable.stack.add(new_version)
@@ -448,7 +457,8 @@ redef class AMethPropdef
 
 				var block = dep.second.last.parent
 
-				block.as(ABlockExpr).add(nvar)
+				#TODO: fixe this
+				if block isa ABlockExpr then block.add(nvar)
 
 				vm.current_propdef.variables.add(dep.first)
 			end
@@ -592,22 +602,8 @@ redef class ABreakExpr
 		# Finish the old block
 		old_block.last = self
 
-		# Search the enclosing loop
-		var found = false
-		var loop_block = old_block
-		while not found do
-			var first = loop_block.first
-			if first isa ALoopHelper then
-				found = true
-			end
-
-			if loop_block.predecessors.length == 0 then break
-
-			loop_block = loop_block.predecessors.first
-		end
-
 		# Link the old_block to the first instruction of the loop
-		old_block.link_special(loop_block.successors.first)
+		#old_block.link_special(loop_block.successors.first)
 
 		return old_block
 	end
@@ -681,10 +677,10 @@ redef class AAndExpr
 end
 
 redef class ANotExpr
-	# redef fun compute_ssa(vm)
-	# do
-	# 	self.n_expr.compute_ssa(vm)
-	# end
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		return self.n_expr.generate_basicBlocks(vm, old_block)
+	end
 end
 
 redef class AOrElseExpr
@@ -707,10 +703,12 @@ redef class AArrayExpr
 end
 
 redef class ASuperstringExpr
-	# redef fun compute_ssa(vm)
-	# do
-	# 	for nexpr in self.n_exprs do nexpr.compute_ssa(vm)
-	# end
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		for nexpr in self.n_exprs do old_block = nexpr.generate_basicBlocks(vm, old_block)
+
+		return old_block
+	end
 end
 
 redef class ACrangeExpr
@@ -796,40 +794,15 @@ redef class ASendReassignFormExpr
 	end
 end
 
-# redef class ASuperExpr
-# 	redef fun expr(v)
-# 	do
-# 		var recv = v.frame.arguments.first
+redef class ASuperExpr
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		# Recursively goes into arguments to find variables if any
+		for arg in self.n_args.n_exprs do arg.generate_basicBlocks(vm, old_block)
 
-# 		var callsite = self.callsite
-# 		if callsite != null then
-# 			var args = v.varargize(callsite.mpropdef, recv, self.n_args.n_exprs)
-# 			if args == null then return null
-# 			# Add additional arguments for the super init call
-# 			if args.length == 1 then
-# 				for i in [0..callsite.msignature.arity[ do
-# 					args.add(v.frame.arguments[i+1])
-# 				end
-# 			end
-# 			# Super init call
-# 			var res = v.callsite(callsite, args)
-# 			return res
-# 		end
-
-# 		# standard call-next-method
-# 		var mpropdef = self.mpropdef
-# 		mpropdef = mpropdef.lookup_next_definition(v.mainmodule, recv.mtype)
-
-# 		var args = v.varargize(mpropdef, recv, self.n_args.n_exprs)
-# 		if args == null then return null
-
-# 		if args.length == 1 then
-# 			args = v.frame.arguments
-# 		end
-# 		var res = v.call(mpropdef, args)
-# 		return res
-# 	end
-# end
+		return old_block
+	end
+end
 
 redef class ANewExpr
 	redef fun generate_basicBlocks(vm, old_block)
@@ -891,10 +864,6 @@ redef class ABlockExpr
 					current_block.last = last_block.last
 				end
 			end
-
-			# Apply a special treatment for loops
-			# TODO: finish the comment
-			if last_block.last isa ALoopHelper then last_block.successors.add(current_block)
 
 			if not current_block.last isa AEscapeExpr or current_block.last isa AReturnExpr then
 				# Re-affected the last block
@@ -1026,7 +995,18 @@ redef class AWhileExpr
 		old_block.link(block)
 
 		self.n_expr.generate_basicBlocks(vm, old_block)
-		return self.n_block.generate_basicBlocks(vm, block)
+		var inside_block = self.n_block.generate_basicBlocks(vm, block)
+
+		# Link the inside of the block to the previous block
+		block.link_special(old_block)
+
+		# Create a new Block after the while
+		var new_block = new BasicBlock
+		new_block.need_update = true
+
+		old_block.link_special(new_block)
+
+		return new_block
 	end
 end
 
@@ -1058,7 +1038,7 @@ redef class AForExpr
 
 		# The beginning of the block is the first instruction
 		var block = new BasicBlock
-		block.first = self.n_block.as(not null)
+		block.first = self.n_expr
 		block.last = self.n_block.as(not null)
 
 		# Collect the variables declared in the for
@@ -1067,10 +1047,12 @@ redef class AForExpr
 		end
 
 		old_block.link(block)
-		self.n_block.generate_basicBlocks(vm, block)
 
-		return block
+		block.link(old_block)
+
+		var new_block = new BasicBlock
+		new_block.need_update = true
+
+		return new_block
 	end
 end
-
-# TODO : récolter les new dans une propriété locale
