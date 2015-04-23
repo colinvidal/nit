@@ -485,7 +485,7 @@ redef class ANewExpr
 	end
 end
 
-redef class AExpr
+redef class ANode
 	# True if self is a literal node
 	fun is_lit: Bool
 	do
@@ -499,21 +499,11 @@ redef class AExpr
 	end
 
 	# Convert AST node into MOExpression
-	fun case_ast2mo(a_expr: AExpr): MOExpr
+	fun ast2mo: MOExpr
 	do
 		var mo_expr: MOExpr
-
-		if a_expr isa ASendExpr then
-			# A Callsite
-			mo_expr = a_expr.mocallsite
-
-			# Simulate that a parameter is return by the receiver
-			a_expr.callsite.mpropdef.return_expr = new MOParam(2)
-		else if a_expr isa ASelfExpr then
-			mo_expr = a_expr.variable.get_movar(a_expr)
-		else if a_expr isa AVarExpr then
-			mo_expr = a_expr.variable.get_movar(a_expr)
-		else if a_expr.is_lit then
+		
+		if is_lit then
 			mo_expr = new MOLit
 		else
 			mo_expr = new MOSSAVar(-1, new MOParam(3))
@@ -523,17 +513,37 @@ redef class AExpr
 	end
 end
 
+redef class ASelfExpr
+	redef fun ast2mo
+	do
+		return variable.get_movar(self)
+	end
+end
+
+redef class AVarExpr
+	redef fun ast2mo
+	do
+		return variable.get_movar(self)
+	end
+end
+
 redef class AMethPropdef
 	# list of return expression of the optimizing model
-	var mo_dep_exprs = new List[MOExpr]
+	var mo_dep_exprs: MOVar
 
 	redef fun generate_basicBlocks(vm)
 	do
 		super(vm)
 
-		for aexpr in returnvar.dep_exprs do
+		if returnvar.dep_exprs.length == 1 then
+			mo_dep_exprs = new MOSSAVar(returnvar.position, returnvar.dep_exprs.first.ast2mo)
+		else
+			var deps = new List[MOExpr]
+			for a_expr in returnvar.dep_exprs do deps.add(a_expr.ast2mo)
+			mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
 		end
-		print("ast apropdef {mpropdef.as(not null)} varreturn:{returnvar.dep_exprs}")
+		
+		print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs}")
 	end
 end
 
@@ -544,7 +554,7 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		var recv = case_ast2mo(n_expr)
+		var recv = n_expr.ast2mo
 		
 		var lp = vm.current_propdef.mpropdef.as(MMethodDef)
 		mocallsite = new MOCallSite(recv, lp)
@@ -555,6 +565,14 @@ redef class ASendExpr
 		# mocallsite.given_args.add_all(raw_arguments)
 
 		return sup
+	end
+
+	redef fun ast2mo
+	do
+		# Simulate that a parameter is return by the receiver
+		callsite.mpropdef.return_expr = new MOParam(2)
+		
+		return mocallsite
 	end
 end
 
