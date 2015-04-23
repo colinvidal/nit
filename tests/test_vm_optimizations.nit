@@ -27,6 +27,15 @@ do
 	end
 end
 
+fun retA(p: A, branch: Bool): A
+do
+	if branch then
+		return p
+	else
+		return new A
+	end
+end
+
 fun foo do 2.faz
 fun bar(i: Int) do i.faz
 fun barR(i: Int): Int do return i
@@ -69,3 +78,5 @@ var a = new A
 #useA(true)
 var b = new B
 b.foo
+
+retA(a,true)
