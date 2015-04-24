@@ -35,10 +35,20 @@ class MOExprSitePattern
 	var gp: MProperty
 
 	# Local properties candidates
-	var lps = new HashSet[MMethodDef]
+	var lps: List[MMethodDef] is noinit
 
 	# Exprsites using this pattern
-	var exprsites = new HashSet[MOExprSite]
+	var exprsites = new List[MOExprSite]
+
+	init
+	do
+		lps = gp.loaded_lps
+	end
+end
+
+redef class MProperty
+	# Local properties who belongs this global property currently loaded
+	var loaded_lps = new List[MMethodDef]
 end
 
 # Root hierarchy of expressions

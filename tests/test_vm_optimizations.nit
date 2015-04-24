@@ -57,6 +57,9 @@ self.bar(3)
 var aa = new A
 aa.foo
 
+var aaa = new A
+aaa.foo
+
 useA(false)
 
 var test = self

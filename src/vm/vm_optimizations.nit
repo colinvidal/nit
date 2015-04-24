@@ -45,6 +45,9 @@ redef class VirtualMachine
 			exprsites_patterns.add(pattern)
 		end
 
+		# mettre dans la gp la liste des lp actuellement connu au moment de l'ajout d'une branche
+
+		# TODO: on rate des lp ici.. a récupérer par le modèle ?
 		pattern.lps.add(cs.mpropdef)
 		cs.mpropdef.callers.add(pattern)
 		pattern.exprsites.add(exprsite)
@@ -70,12 +73,6 @@ redef class VirtualMachine
 
 		pattern.newexprs.add(newsite)
 		newsite.pattern = pattern
-	end
- 
-	# Handle class loading for update optimizing model
-	fun handle_class_loading(cls: MClass)
-	do
-		for p in new_patterns do p.handle_class_loading(cls)
 	end
 
 	# For tests only, to remove !
@@ -161,16 +158,22 @@ redef class VirtualMachine
 
 	redef fun create_class(mclass)
 	do
-		# mclassdef.mpropdef (intro & redef)
 		super
-		handle_class_loading(mclass)
 
+		# add introduces and redifines local properties
+		# mclassdef.mpropdefs contains intro & redef methods
 		for classdef in mclass.mclassdefs do
 			for i in [1..classdef.mpropdefs.length - 1] do
 				var mdef = classdef.mpropdefs[i]
-				if not mdef.is_intro then handle_new_branch(mdef)
+				if mdef isa MMethodDef then
+					if not mdef.is_intro then handle_new_branch(mdef)
+					mdef.mproperty.loaded_lps.add(mdef)
+				end
 			end
 		end
+
+		# change preexistence state of new sites compiled before loading
+		for p in new_patterns do p.handle_class_loading(mclass)
 	end
 end
 
@@ -578,6 +581,8 @@ redef class ASendExpr
 			mocallsite.given_args.add(arg.ast2mo)
 		end
 
+		# TODO liste des expressions de retour dans le current_propdef
+
 		return sup
 	end
 
@@ -585,7 +590,9 @@ redef class ASendExpr
 	do
 		# Simulate that a parameter is return by the receiver
 		callsite.mpropdef.return_expr = new MOParam(2)
-		
+	
+
+
 		return mocallsite
 	end
 end
@@ -1114,3 +1121,5 @@ redef class MONewPattern
 		end
 	end
 end
+
+
