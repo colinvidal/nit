@@ -465,6 +465,9 @@ redef class Variable
 					movar = new MOSSAVar(node.variable.position + 1, mo)
 				else
 					print("TODO ast phivar {self}")
+					var phi = new List[MOExpr]
+					for a_expr in node.variable.dep_exprs do phi.add(a_expr.ast2mo)
+					movar = new MOPhiVar(node.variable.position + 1, phi)
 				end
 			end
 			assert movar != null
@@ -589,8 +592,6 @@ redef class ASendExpr
 		# Simulate that a parameter is return by the receiver
 		callsite.mpropdef.return_expr = new MOParam(2)
 	
-
-
 		return mocallsite
 	end
 end
@@ -616,7 +617,8 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_preexist
 	do
-		var flag = return_expr.is_pre_nper
+		var flag = false
+		if return_expr != null then flag = return_expr.is_pre_nper
 	
 		for expr in exprs_preexist_mut do expr.init_preexist_cache
 		exprs_preexist_mut.clear
@@ -628,7 +630,8 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_npreexist
 	do
-		var flag = not return_expr.is_npre_nper
+		var flag = false
+		if return_expr != null then flag = return_expr.is_npre_nper
 
 		for expr in exprs_npreexist_mut do expr.init_preexist_cache
 		exprs_npreexist_mut.clear
@@ -1071,14 +1074,18 @@ redef class MOExprSitePattern
 		lp.callers.add(self)
 		cuc += 1
 
+		print("pattern.handle_new_branch cuc:{cuc} lp:{lp} | gp:{gp} rst:{rst}")
+
 		if cuc == 1 then
 			for expr in exprsites do
-				if expr.is_pre_nper then
-#					var old = expr.preexist_site_value
-					print("\texpr NEEDS [TODO] switch to non preexist {expr}")
-#					if expr.lp.return_expr == expr then
-#						expr.lp.propage_preexist
-#					end
+				# We must test the "site" site of the exprsite, so we must use the receiver
+				print("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
+				if expr.expr_recv.is_pre_nper then
+					# TODO: si on avait a = new A quand uniquement A était chargé, alors la préexistence est pérenne
+					# sauf qu'avec un chargement de C et redef de méthode, il faut pouvoir la réinitialiser ici même
+					# si elle est pérenne
+					expr.expr_recv.init_preexist_cache
+					expr.lp.propage_preexist
 				end
 			end
 		end
@@ -1092,10 +1099,13 @@ redef class MONewPattern
 	do
 		if cls == loadcls then
 			for newexpr in newexprs do
-				var old = newexpr.preexist_expr_value.preexists_bits.to_s
-				newexpr.set_preexistence_flag(pmask_PVAL_PER)
-				var cur = newexpr.preexist_expr_value.preexists_bits.to_s
-				print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
+				if newexpr.is_npre then
+					var old = newexpr.preexist_expr_value.preexists_bits.to_s
+					newexpr.set_preexistence_flag(pmask_PTYPE_PER)
+					var cur = newexpr.preexist_expr_value.preexists_bits.to_s
+					print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
+					newexpr.lp.propage_npreexist
+				end
 			end
 		end
 	end
