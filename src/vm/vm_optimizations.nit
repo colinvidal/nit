@@ -460,10 +460,10 @@ redef class Variable
 				if node.variable.parameter then
 					movar = new MOParam(node.variable.position + 1)
 				else if node.variable.dep_exprs.length == 1 then
-					print("ast ssavar {self}")
-					movar = new MOSSAVar(-1, new MOParam(1))
+					var mo = node.variable.dep_exprs.first.ast2mo
+					movar = new MOSSAVar(node.variable.position + 1, mo)
 				else
-					print("ast phivar {self}")
+					print("TODO ast phivar {self}")
 				end
 			end
 			assert movar != null
@@ -473,15 +473,23 @@ redef class Variable
 end
 
 redef class ANewExpr
+	# Represent the view of the new expression in the optimizing reprenstation
+	var monew: nullable MONew
+
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
 
-		var newexpr = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
-		vm.current_propdef.mpropdef.as(MMethodDef).moexprs.add(newexpr)
-		vm.set_new_pattern(newexpr, recvtype.mclass)
+		monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
+		vm.current_propdef.mpropdef.as(MMethodDef).moexprs.add(monew.as(not null))
+		vm.set_new_pattern(monew.as(not null), recvtype.mclass)
 
 		return sup
+	end
+
+	redef fun ast2mo
+	do
+		return monew.as(not null)
 	end
 end
 
@@ -506,6 +514,7 @@ redef class ANode
 		if is_lit then
 			mo_expr = new MOLit
 		else
+			# Unimplemented case of node
 			mo_expr = new MOSSAVar(-1, new MOParam(3))
 		end
 
