@@ -901,59 +901,33 @@ end
 redef class MOLit
 	redef var preexist_expr_value = pmask_PVAL_PER
 
-	redef fun init_preexist
-	do
-		preexist_expr_value = pmask_PVAL_PER
-	end
+	redef fun init_preexist do abort
 
-	redef fun preexist_expr
-	do
-		return preexist_expr_value
-	end
+	redef fun preexist_expr do return preexist_expr_value
 end
 
 redef class MOParam
 	redef var preexist_expr_value = pmask_PVAL_PER
 
-	init
-	do
-		set_dependency_flag(offset)
-	end
+	init do set_dependency_flag(offset)
 
-	redef fun preexist_expr
-	do
-		return preexist_expr_value
-	end
+	redef fun init_preexist do abort
+
+	redef fun preexist_expr do return preexist_expr_value
 end
 
 redef class MONew
 	redef var preexist_expr_value = pmask_NPRE_NPER
 
-	redef fun init_preexist
-	do
-		preexist_expr_value = pmask_NPRE_NPER
-	end
+	redef fun init_preexist do if pattern.is_loaded then set_ptype_per
 
-	redef fun preexist_expr
-	do
-		if pattern.is_loaded then set_ptype_per
-		return preexist_expr_value
-	end
+	redef fun preexist_expr do return preexist_expr_value
 end
 
 redef class MOSSAVar
-	init
-	do
-		preexist_expr_value = dependency.preexist_expr
-	end
-
-	redef fun init_preexist
-	do
-		preexist_expr_value = dependency.preexist_expr
-	end
-
 	redef fun preexist_expr
 	do
+		if is_pre_unknown then preexist_expr_value = dependency.preexist_expr
 		return preexist_expr_value
 	end
 end
