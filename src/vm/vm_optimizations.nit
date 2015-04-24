@@ -45,11 +45,11 @@ redef class VirtualMachine
 			exprsites_patterns.add(pattern)
 		end
 
-		# mettre dans la gp la liste des lp actuellement connu au moment de l'ajout d'une branche
-
-		# TODO: on rate des lp ici.. a récupérer par le modèle ?
-		pattern.lps.add(cs.mpropdef)
-		cs.mpropdef.callers.add(pattern)
+		# Tell to all known loaded lp associaded to the gp of this pattern that this pattern can call them
+		for lp in pattern.lps do
+			if not lp.callers.has(pattern) then lp.callers.add(pattern)
+		end
+		
 		pattern.exprsites.add(exprsite)
 		exprsite.pattern = pattern
 	end
@@ -166,8 +166,13 @@ redef class VirtualMachine
 			for i in [1..classdef.mpropdefs.length - 1] do
 				var mdef = classdef.mpropdefs[i]
 				if mdef isa MMethodDef then
-					if not mdef.is_intro then handle_new_branch(mdef)
-					mdef.mproperty.loaded_lps.add(mdef)
+					if mdef.is_intro then
+						# Add the method as loaded in the associaded global property
+						mdef.mproperty.loaded_lps.add(mdef)
+					else
+						# Tell the patterns using this method there is a new branch
+						handle_new_branch(mdef)
+					end
 				end
 			end
 		end

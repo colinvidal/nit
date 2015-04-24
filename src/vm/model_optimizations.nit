@@ -32,7 +32,7 @@ class MOExprSitePattern
 	var rst: MType
 
 	# Global property called
-	var gp: MProperty
+	var gp: MMethod
 
 	# Local properties candidates
 	var lps: List[MMethodDef] is noinit
@@ -46,7 +46,7 @@ class MOExprSitePattern
 	end
 end
 
-redef class MProperty
+redef class MMethod
 	# Local properties who belongs this global property currently loaded
 	var loaded_lps = new List[MMethodDef]
 end
