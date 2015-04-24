@@ -623,7 +623,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_preexist
 	do
-		var flag = return_expr.is_preexists and not return_expr.is_perennial
+		var flag = return_expr.is_pre_nper
 	
 		for expr in exprs_preexist_mut do expr.init_preexist_cache
 		exprs_preexist_mut.clear
@@ -635,7 +635,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_npreexist
 	do
-		var flag = not return_expr.is_preexists and not return_expr.is_perennial
+		var flag = not return_expr.is_npre_nper
 
 		for expr in exprs_npreexist_mut do expr.init_preexist_cache
 		exprs_npreexist_mut.clear
@@ -649,7 +649,7 @@ redef class MMethodDef
 		if not compiled then
 			return_expr.set_preexistence_flag(pmask_NPRE_NPER)
 			return return_expr.preexist_expr_value
-		else if not return_expr.is_preexistence_unknown then
+		else if not return_expr.is_pre_unknown then
 			return return_expr.preexist_expr_value
 		else
 			return_expr.set_preexistence_flag(pmask_RECURSIV)
@@ -667,7 +667,7 @@ redef class MMethodDef
 		var preexist: Int
 
 		if return_expr != null then
-			if return_expr.get_preexistence_flag(pmask_RECURSIV) then
+			if return_expr.is_rec then
 				return_expr.set_preexistence_flag(pmask_PVAL_NPER)
 			end
 
@@ -758,20 +758,6 @@ do
 	return -1
 end
 
-# Preexistence (val or type) perennial
-# WARNING: USE ONLY WITH get_preexistence_flag
-fun pmask_PRE_PER: Int
-do
-	return 5
-end
-
-# Preexistence (val or type) non perennial
-# WARNING: USE ONLY WITH get_preexistence_flag
-fun pmask_PER_NPER: Int
-do
-	return 1
-end
-
 redef class MOExpr
 	# The cached preexistence of the expression (the return of the expression)
 	var preexist_expr_value: Int = pmask_UNKNOWN
@@ -806,40 +792,58 @@ redef class MOExpr
 		return preexist_expr_value
 	end
 
-	# Get if the preexistence state of a expression matches with given flag
-	fun get_preexistence_flag(flag: Int): Bool
-	do
-		var ret: Bool
-
-#		if flag == pmask_RECURSIV then
-#			ret = preexist_expr_value == pmask_RECURSIV
-#		else
-#			ret = preexist_expr_value.bin_and(flag) == flag
-#		end
-
-		ret = preexist_expr_value.bin_and(15) == flag
-
-#		print("get_preexistence_flag flag={flag} pre={preexist_expr_value} ret={ret}")
-
-		return ret
-	end
-
 	# Return true if the preexistence of the expression isn't known
-	fun is_preexistence_unknown: Bool
+	fun is_pre_unknown: Bool
 	do
 		return preexist_expr_value == pmask_UNKNOWN
 	end
 
+	# Return true if the expression is recursive
+	fun is_rec: Bool
+	do
+		return preexist_expr_value == 0
+	end
+
 	# Return true if the expression preexists (recursive case is interpreted as preexistent)
-	fun is_preexists: Bool
+	fun is_pre: Bool
 	do
 		return preexist_expr_value.bin_and(1) == 1 or preexist_expr_value == 0
 	end
 
+	# True true if the expression non preexists
+	fun is_npre: Bool
+	do
+		return not is_pre
+	end
+
 	# Return true if the preexistence state of the expression is perennial
-	fun is_perennial: Bool
+	fun is_per: Bool
 	do
 		return preexist_expr_value.bin_and(4) == 4
+	end
+
+	# Return true if the preexistence state if not perennial
+	fun is_nper: Bool
+	do
+		return not is_per
+	end
+
+	# Return true if the prexistence state is preexist and no perennial
+	fun is_pre_nper: Bool
+	do
+		return is_pre and is_nper
+	end
+
+	# Return true if the preexistence state is no preexist and no perennial
+	fun is_npre_nper: Bool
+	do
+		return is_npre and is_nper
+	end
+
+	# Return true if the preexistence state is no preexist and perennial
+	fun is_npre_per: Bool
+	do
+		return is_npre and is_per
 	end
 
 	# Initialize preexist_cache to UNKNOWN
@@ -851,9 +855,9 @@ redef class MOExpr
 	# Merge dependecies and preexistence state
 	fun merge_preexistence(expr: MOExpr): Int
 	do
-		if expr.get_preexistence_flag(pmask_NPRE_PER) then
+		if expr.is_npre_per then
 			preexist_expr_value = pmask_NPRE_PER
-		else if expr.get_preexistence_flag(pmask_RECURSIV) then
+		else if expr.is_rec then
 			preexist_expr_value = pmask_RECURSIV
 		else
 			var pre = preexist_expr_value.bin_and(15)
@@ -917,11 +921,11 @@ end
 redef class MOPhiVar
 	redef fun preexist_expr
 	do
-		if is_preexistence_unknown then
+		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
 				merge_preexistence(dep)
-				if get_preexistence_flag(pmask_NPRE_PER) then
+				if is_npre_per then
 					break
 				end
 			end
@@ -935,13 +939,13 @@ end
 redef class MOReadSite
 	redef fun preexist_expr
 	do
-		if is_preexistence_unknown then
+		if is_pre_unknown then
 			expr_recv.preexist_expr
-			if immutable and expr_recv.is_preexists then
+			if immutable and expr_recv.is_pre then
 				set_preexistence_flag(pmask_PVAL_PER)
 			else
-				if expr_recv.is_preexists then
-					if expr_recv.is_perennial then
+				if expr_recv.is_pre then
+					if expr_recv.is_per then
 						set_preexistence_flag(pmask_PVAL_PER)
 					else
 						set_preexistence_flag(pmask_PVAL_NPER)
@@ -950,7 +954,7 @@ redef class MOReadSite
 					# The receiver is always at position 0 of the environment
 					set_dependency_flag(0)
 				else
-					if expr_recv.is_perennial then
+					if expr_recv.is_per then
 						set_preexistence_flag(pmask_NPRE_PER)
 					else
 						set_preexistence_flag(pmask_NPRE_NPER)
@@ -1008,7 +1012,7 @@ redef class MOCallSite
 			for candidate in pattern.lps do
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
-				if get_preexistence_flag(pmask_NPRE_PER) then
+				if is_npre_per then
 					break
 				else
 					check_args
@@ -1026,7 +1030,7 @@ redef class MOPropSite
 	fun preexist_site: Int
 	do
 		expr_recv.preexist_expr
-		if expr_recv.get_preexistence_flag(pmask_RECURSIV) then expr_recv.set_preexistence_flag(pmask_PVAL_NPER)
+		if expr_recv.is_rec then expr_recv.set_preexistence_flag(pmask_PVAL_NPER)
 		return expr_recv.preexist_expr_value
 	end
 end
@@ -1074,7 +1078,7 @@ redef class MOExprSitePattern
 
 		if cuc == 1 then
 			for expr in exprsites do
-				if expr.is_preexists and not expr.is_perennial then
+				if expr.is_pre_nper then
 #					var old = expr.preexist_site_value
 					print("\texpr NEEDS [TODO] switch to non preexist {expr}")
 #					if expr.lp.return_expr == expr then
