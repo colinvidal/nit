@@ -529,7 +529,8 @@ end
 
 redef class AMethPropdef
 	# list of return expression of the optimizing model
-	var mo_dep_exprs: MOVar
+	# Null if this fuction is a procedure
+	var mo_dep_exprs: nullable MOVar = null
 
 	redef fun generate_basicBlocks(vm)
 	do
@@ -537,13 +538,15 @@ redef class AMethPropdef
 
 		if returnvar.dep_exprs.length == 1 then
 			mo_dep_exprs = new MOSSAVar(returnvar.position, returnvar.dep_exprs.first.ast2mo)
-		else
+		else if returnvar.dep_exprs.length > 1 then
 			var deps = new List[MOExpr]
 			for a_expr in returnvar.dep_exprs do deps.add(a_expr.ast2mo)
 			mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
 		end
-		
-		print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs}")
+	
+		if mo_dep_exprs != null then
+			print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}")
+		end
 	end
 end
 
@@ -562,7 +565,9 @@ redef class ASendExpr
 		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
 
 		# Expressions arguments given to the method called
-		# mocallsite.given_args.add_all(raw_arguments)
+		for arg in raw_arguments do
+			mocallsite.given_args.add(arg.ast2mo)
+		end
 
 		return sup
 	end
@@ -618,7 +623,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_preexist
 	do
-		var flag = return_expr.is_preexists # TODO
+		var flag = return_expr.is_preexists and not return_expr.is_perennial
 	
 		for expr in exprs_preexist_mut do expr.init_preexist_cache
 		exprs_preexist_mut.clear
@@ -630,7 +635,7 @@ redef class MMethodDef
 	# If the return_expr is in it, recurse on callers
 	fun propage_npreexist
 	do
-		var flag = not return_expr.is_preexists
+		var flag = not return_expr.is_preexists and not return_expr.is_perennial
 
 		for expr in exprs_npreexist_mut do expr.init_preexist_cache
 		exprs_npreexist_mut.clear
@@ -786,7 +791,7 @@ redef class MOExpr
 	fun is_dependency_flag(index: Int): Bool
 	do
 		# It must concern a dependency bit
-		assert index > 15
+		index += 5
 
 		return 1.lshift(index).bin_and(preexist_expr_value) != 0
 	end
