@@ -804,16 +804,40 @@ redef class MOExpr
 		return preexist_expr_value
 	end
 
+	# Affect status mask
+	private fun set_status_mask(mask: Int)
+	do
+		preexist_expr_value = preexist_expr_value.rshift(4).lshift(4).bin_or(mask)
+	end
+
 	# Set type preexist perennial
 	fun set_ptype_per
 	do
-		preexist_expr_value = preexist_expr_value.rshift(4).lshift(4).bin_or(pmask_PTYPE_PER)
+		set_status_mask(pmask_PTYPE_PER)
+	end
+
+	# Set value preexist perennial
+	fun set_pval_per
+	do
+		set_status_mask(pmask_PVAL_PER)
 	end
 
 	# Set non preexist non perennial
 	fun set_npre_nper
 	do
-		preexist_expr_value = preexist_expr_value.rshift(4).lshift(4).bin_or(pmask_NPRE_NPER)
+		set_status_mask(pmask_NPRE_NPER)
+	end
+
+	# Set non preexist perennial
+	fun set_npre_per
+	do
+		set_status_mask(pmask_NPRE_PER)
+	end
+
+	# Set val preexist non perennial
+	fun set_pval_nper
+	do
+		set_status_mask(pmask_PVAL_NPER)
 	end
 
 	# Return true if the preexistence of the expression isn't known
@@ -956,22 +980,22 @@ redef class MOReadSite
 		if is_pre_unknown then
 			expr_recv.preexist_expr
 			if immutable and expr_recv.is_pre then
-				set_preexistence_flag(pmask_PVAL_PER)
+				set_pval_per
 			else
 				if expr_recv.is_pre then
 					if expr_recv.is_per then
-						set_preexistence_flag(pmask_PVAL_PER)
+						set_pval_per
 					else
-						set_preexistence_flag(pmask_PVAL_NPER)
+						set_pval_nper
 					end
 
 					# The receiver is always at position 0 of the environment
 					set_dependency_flag(0)
 				else
 					if expr_recv.is_per then
-						set_preexistence_flag(pmask_NPRE_PER)
+						set_npre_per
 					else
-						set_preexistence_flag(pmask_NPRE_NPER)
+						set_npre_nper
 					end
 				end
 			end
