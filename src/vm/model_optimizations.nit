@@ -34,16 +34,11 @@ class MOExprSitePattern
 	# Global property called
 	var gp: MMethod
 
-	# Local properties candidates
-	var lps: List[MMethodDef] is noinit
+	# Local properties candidates (a subset of gp.loaded_lps)
+	var lps = new List[MMethodDef]
 
 	# Exprsites using this pattern
 	var exprsites = new List[MOExprSite]
-
-	init
-	do
-		lps = gp.loaded_lps
-	end
 end
 
 redef class MMethod

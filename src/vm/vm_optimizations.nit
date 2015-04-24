@@ -85,7 +85,7 @@ redef class VirtualMachine
 	end
 
 	# Handle new local property for update optimizing model
-	fun handle_new_branch(lp: MPropDef)
+	fun handle_new_branch(lp: MMethodDef)
 	do
 		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
 
@@ -166,10 +166,9 @@ redef class VirtualMachine
 			for i in [1..classdef.mpropdefs.length - 1] do
 				var mdef = classdef.mpropdefs[i]
 				if mdef isa MMethodDef then
-					if mdef.is_intro then
-						# Add the method as loaded in the associaded global property
-						mdef.mproperty.loaded_lps.add(mdef)
-					else
+					# Add the method implementation in the loaded metods of the associated global property
+					mdef.mproperty.loaded_lps.add(mdef)
+					if not mdef.is_intro then
 						# Tell the patterns using this method there is a new branch
 						handle_new_branch(mdef)
 					end
@@ -804,6 +803,7 @@ redef class MOExpr
 	end
 
 	# Set a preexistence flag
+	# TODO: remove it and add API fonctions set_pval_per, set_pval_nper, etc.
 	fun set_preexistence_flag(flag: Int): Int
 	do
 		# It must not write on dependencies bits
@@ -1092,9 +1092,9 @@ redef class MOExprSitePattern
 	# Add a new branch on the pattern
 	# Set non preesitent all non perenial preexistent expressions known by this pattern 
 	# If the expression if the return of a lp, propage the callers
-	fun handle_new_branch(lp: MPropDef)
+	fun handle_new_branch(lp: MMethodDef)
 	do
-		lps.add(lp.as(MMethodDef))
+		lps.add(lp)
 		cuc += 1
 
 		if cuc == 1 then
