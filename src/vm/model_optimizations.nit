@@ -39,11 +39,54 @@ class MOExprSitePattern
 
 	# Exprsites using this pattern
 	var exprsites = new List[MOExprSite]
+
+	# Add a new exprsite on the pattern
+	fun add_exprsite(vm: VirtualMachine, exprsite: MOExprSite)
+	do
+		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
+		# Tell to each added lps that this pattern can be a caller
+		for lp in gp.loaded_lps do
+			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
+				if not lps.has(lp) then
+					lps.add(lp)
+					lp.callers.add(self)
+				end
+			end
+		end
+		
+		exprsites.add(exprsite)
+		exprsite.pattern = self
+
+		print("set_exprsite_pattern gp:{gp} rst:{rst} lps:{lps}")
+	end
 end
 
 redef class MMethod
 	# Local properties who belongs this global property currently loaded
 	var loaded_lps = new List[MMethodDef]
+end
+
+redef class MMethodDef
+	# Tell if the method has been compiled at least one time
+	var compiled = false is writable
+
+	# List of callers of this local property
+	var callers = new List[MOExprSitePattern]
+
+	# Return expression of the method (null if procedure)
+	var return_expr: nullable MOExpr is writable
+
+	# List of expressions in this local property (without MOExprSite)
+	# eg. attr.baz()
+	var moexprs = new List[MOExpr]
+
+	# List of site expressions in this local property
+	# eg. a.foo().bar(), variable, instantiation site 
+	var moexprsites = new List[MOExprSite]
+
+	# List of object site in this local property (without MOExprSite)
+	# eg. subtype test, write attribute
+	var mosites = new List[MOSite]
 end
 
 # Root hierarchy of expressions

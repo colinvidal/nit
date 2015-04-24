@@ -45,13 +45,7 @@ redef class VirtualMachine
 			exprsites_patterns.add(pattern)
 		end
 
-		# Tell to all known loaded lp associaded to the gp of this pattern that this pattern can call them
-		for lp in pattern.lps do
-			if not lp.callers.has(pattern) then lp.callers.add(pattern)
-		end
-		
-		pattern.exprsites.add(exprsite)
-		exprsite.pattern = pattern
+		pattern.add_exprsite(self, exprsite)
 	end
 
 	# Create (if not exists) and set a pattern for newsites
@@ -612,27 +606,6 @@ redef class Int
 end
 
 redef class MMethodDef
-	# Tell if the method has been compiled at least one time
-	var compiled = false
-
-	# List of callers of this local property
-	var callers = new HashSet[MOExprSitePattern]
-
-	# Return expression of the method (null if procedure)
-	var return_expr: nullable MOExpr
-
-	# List of expressions in this local property (without MOExprSite)
-	# eg. attr.baz()
-	var moexprs = new List[MOExpr]
-
-	# List of site expressions in this local property
-	# eg. a.foo().bar(), variable, instantiation site 
-	var moexprsites = new List[MOExprSite]
-
-	# List of object site in this local property (without MOExprSite)
-	# eg. subtype test, write attribute
-	var mosites = new List[MOSite]
-
 	# List of mutable preexists expressions
 	var exprs_preexist_mut = new List[MOExpr]
 
@@ -1095,6 +1068,7 @@ redef class MOExprSitePattern
 	fun handle_new_branch(lp: MMethodDef)
 	do
 		lps.add(lp)
+		lp.callers.add(self)
 		cuc += 1
 
 		if cuc == 1 then
