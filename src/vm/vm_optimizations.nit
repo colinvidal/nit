@@ -22,6 +22,12 @@ import ssa
 import model_optimizations
 
 redef class VirtualMachine
+	# Number of method recompilation
+	var stats_needed_recompil = 0
+
+	# Preexist type for each object site (eg. subtype test, method call, read and write attribute)
+	var stats_object_site = new List[ObjectSiteStat]
+
 	# List of patterns of MOExprSite
 	var exprsites_patterns = new List[MOExprSitePattern]
 
@@ -1155,4 +1161,16 @@ redef class MONewPattern
 	end
 end
 
+class ObjectSiteStat
+	# type of preexist
+	var ptype: Int
 
+	# type of site call
+	var stype: Int
+
+	# pretty print
+	fun show
+	do
+		# array litteral
+	end
+end
