@@ -171,7 +171,7 @@ redef class VirtualMachine
 		end
 
 		# change preexistence state of new sites compiled before loading
-		for p in new_patterns do p.handle_class_loading(mclass)
+		for p in new_patterns do if p.cls == mclass then p.set_preexist_newsite
 	end
 end
 
@@ -684,9 +684,8 @@ redef class MMethodDef
 		end
 	
 		for expr in moexprs do
-			expr.preexist_expr
+			preexist = expr.preexist_expr
 			fill_nper(expr)
-			preexist = expr.preexist_expr_value
 			print("\tpreexist of expr {expr} {preexist} {preexist.preexists_bits}")
 			if expr isa MONew then print("\t\t" + "class {expr.pattern.cls} is loaded? {expr.pattern.is_loaded}")
 
@@ -704,8 +703,8 @@ redef class MMethodDef
 			print("MOSite cases - NYI")
 		end
 
-		print("mutables pre: {exprs_preexist_mut}")
-		print("mutables nper: {exprs_npreexist_mut}")
+		print("\tmutables pre: {exprs_preexist_mut}")
+		print("\tmutables nper: {exprs_npreexist_mut}")
 	end
 end
 
@@ -1119,40 +1118,33 @@ redef class MOExprSitePattern
 
 		if cuc == 1 then
 			for expr in exprsites do
-				# We must test the "site" site of the exprsite, so we must use the receiver
+				# We must test the "site" side of the exprsite, so we must use the receiver
 				print("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
-				if expr.expr_recv.is_pre_nper then
-					# TODO: si on avait a = new A quand uniquement A était chargé, alors la préexistence est pérenne
-					# sauf qu'avec un chargement de C et redef de méthode, il faut pouvoir la réinitialiser ici même
-					# si elle est pérenne
-					expr.expr_recv.init_preexist
-					expr.lp.propage_preexist
-				end
+
+				expr.expr_recv.init_preexist
+				expr.lp.propage_preexist
 			end
 		end
 	end
 end
 
 redef class MONewPattern
-	# Handle class loading for update the optimizing model
+	# Set npreexist new site preexistent
 	# The non preexistence of newsite became preesitent if class is loaded
-	fun handle_class_loading(loadcls: MClass)
+	fun set_preexist_newsite
 	do
-		if cls == loadcls then
-			for newexpr in newexprs do
-				if newexpr.is_npre then
-					var old = newexpr.preexist_expr_value.preexists_bits.to_s
-					newexpr.set_preexistence_flag(pmask_PTYPE_PER)
-					var cur = newexpr.preexist_expr_value.preexists_bits.to_s
-					print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
-					newexpr.lp.propage_npreexist
+		print("\n[CLASS {cls} LOADED]")
+		for newexpr in newexprs do
+			var old = newexpr.preexist_expr_value.preexists_bits.to_s
+			newexpr.set_preexistence_flag(pmask_PTYPE_PER)
+			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
 
-					print("_________________________________________")
-					newexpr.lp.compiled = false
-					newexpr.lp.preexist_all
-					print("_________________________________________")
-				end
-			end
+			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
+
+			newexpr.lp.propage_npreexist
+			newexpr.lp.compiled = false
+			newexpr.lp.preexist_all
+			print("\n\n")
 		end
 	end
 end

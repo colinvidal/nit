@@ -56,8 +56,6 @@ class MOExprSitePattern
 		
 		exprsites.add(exprsite)
 		exprsite.pattern = self
-
-		print("set_exprsite_pattern gp:{gp} rst:{rst} lps:{lps}")
 	end
 end
 
