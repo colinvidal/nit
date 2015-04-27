@@ -715,6 +715,8 @@ redef class MMethodDef
 			else # A read site (see optimizing_model)
 				sys.pstats.incr_readattr_site
 			end
+
+			if exprsite.compute_concretes then sys.pstats.incr_concretes_receivers_site
 		end
 
 		for site in mosites do
@@ -1215,6 +1217,11 @@ class PreexistenceStat
 	#
 	fun incr_writeattr_site do writeattr_site += 1
 
+	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
+	var concretes_receivers_site = 0
+	#
+	fun incr_concretes_receivers_site do concretes_receivers_site += 1
+
 	# Display stats informations
 	fun infos: String
 	do
@@ -1231,6 +1238,8 @@ class PreexistenceStat
 		ret += "\tsubtypetest_site: {subtypetest_site}\n"
 		ret += "\treadattr_site: {readattr_site}\n"
 		ret += "\twriteattr_site: {writeattr_site}\n"
+		ret += "\n"
+		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
 		ret += "--------------------------------------------------------\n"
 
 		return ret

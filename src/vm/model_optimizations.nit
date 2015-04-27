@@ -97,6 +97,19 @@ abstract class MOVar
 
 	# The offset of the variable in it environment, or the position of parameter
 	var offset: Int
+
+	# Compute concrete receivers (see MOCallSite / MOSite)
+	fun compute_concretes(concretes: List[MClass]): Bool is abstract
+
+	#
+	fun valid_and_add_dep(dep: MOExpr, concretes: List[MClass]): Bool
+	do
+		if dep isa MONew then
+			concretes.add(dep.pattern.cls)
+			return true
+		end
+		return false
+	end
 end
 
 # MO of variables with only one dependency
@@ -105,6 +118,8 @@ class MOSSAVar
 
 	# the expression that variable depends
 	var dependency: MOExpr
+
+	redef fun compute_concretes(concretes) do return valid_and_add_dep(dependency, concretes)
 end
 
 # MO of variable with multiples dependencies
@@ -113,11 +128,21 @@ class MOPhiVar
 
 	# List of expressions that variable depends
 	var dependencies: List[MOExpr]
+
+	redef fun compute_concretes(concretes)
+	do
+		for dep in dependencies do
+			if not valid_and_add_dep(dep, concretes) then return false
+		end
+		return true
+	end
 end
 
 # MO of each parameters given to a call site
 class MOParam
 	super MOVar
+
+	redef fun compute_concretes(concretes) do return false
 end
 
 # MO of instantiation sites
@@ -154,6 +179,23 @@ abstract class MOPropSite
 
 	# The expression of the receiver
 	var expr_recv: MOExpr
+
+	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
+	var concretes_receivers = new List[MClass]
+
+	# Compute the concretes receivers. If return null, drop the list (all receivers can't be statically and with intra-procedural analysis determined)
+	fun compute_concretes: Bool
+	do
+		if expr_recv isa MOVar then
+			if expr_recv.as(MOVar).compute_concretes(concretes_receivers) then
+				return true
+			else
+				concretes_receivers.clear
+			end
+		end
+
+		return false
+	end
 end
 
 # MO of object expression
