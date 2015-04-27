@@ -643,12 +643,12 @@ redef class MMethodDef
 	fun preexist_return: Int
 	do
 		if not compiled then
-			return_expr.set_preexistence_flag(pmask_NPRE_NPER)
+			return_expr.set_npre_nper
 			return return_expr.preexist_expr_value
 		else if not return_expr.is_pre_unknown then
 			return return_expr.preexist_expr_value
 		else
-			return_expr.set_preexistence_flag(pmask_RECURSIV)
+			return_expr.set_recursive
 			return return_expr.preexist_expr_value
 		end
 	end
@@ -675,9 +675,7 @@ redef class MMethodDef
 		var preexist: Int
 
 		if return_expr != null then
-			if return_expr.is_rec then
-				return_expr.set_preexistence_flag(pmask_PVAL_NPER)
-			end
+			if return_expr.is_rec then return_expr.set_pval_nper
 			fill_nper(return_expr.as(not null))
 			preexist = return_expr.preexist_expr_value
 			print("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
@@ -814,17 +812,6 @@ redef class MOExpr
 		index += 5
 
 		return 1.lshift(index).bin_and(preexist_expr_value) != 0
-	end
-
-	# Set a preexistence flag
-	# TODO: remove it and add API fonctions set_pval_per, set_pval_nper, etc.
-	fun set_preexistence_flag(flag: Int): Int
-	do
-		# It must not write on dependencies bits
-		assert flag < 16
-
-		preexist_expr_value = preexist_expr_value.bin_or(flag)
-		return preexist_expr_value
 	end
 
 	# Affect status mask
@@ -1056,7 +1043,7 @@ redef class MOCallSite
 			if dep_matches(arg, index) then
 				merge_preexistence(arg)
 			else
-				set_preexistence_flag(pmask_NPRE_NPER)
+				set_npre_nper
 				return preexist_expr_value
 			end
 			index += 1
@@ -1096,7 +1083,7 @@ redef class MOPropSite
 	fun preexist_site: Int
 	do
 		expr_recv.preexist_expr
-		if expr_recv.is_rec then expr_recv.set_preexistence_flag(pmask_PVAL_NPER)
+		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value
 	end
 end
@@ -1169,7 +1156,7 @@ redef class MONewPattern
 		print("\n[CLASS {cls} LOADED]")
 		for newexpr in newexprs do
 #			var old = newexpr.preexist_expr_value.preexists_bits.to_s
-			newexpr.set_preexistence_flag(pmask_PTYPE_PER)
+			newexpr.set_ptype_per
 #			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
 
 #			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
