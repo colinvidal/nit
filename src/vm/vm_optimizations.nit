@@ -658,9 +658,9 @@ redef class MMethodDef
 	do
 		if expr.is_nper then
 			if expr.is_pre then
-				exprs_preexist_mut.add(expr)
+				if not exprs_preexist_mut.has(expr) then exprs_preexist_mut.add(expr)
 			else
-				exprs_npreexist_mut.add(expr)
+				if not exprs_npreexist_mut.has(expr) then exprs_npreexist_mut.add(expr)
 			end
 		end
 	end
@@ -1123,6 +1123,10 @@ redef class MOExprSitePattern
 
 				expr.expr_recv.init_preexist
 				expr.lp.propage_preexist
+			
+				# Just for debug, remove it !
+				expr.lp.compiled = false
+				expr.lp.preexist_all
 			end
 		end
 	end
@@ -1142,6 +1146,8 @@ redef class MONewPattern
 			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
 
 			newexpr.lp.propage_npreexist
+
+			# Just for debug, remove it !
 			newexpr.lp.compiled = false
 			newexpr.lp.preexist_all
 			print("\n\n")
