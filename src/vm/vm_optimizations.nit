@@ -854,13 +854,19 @@ redef class MOExpr
 	# Set non preexist perennial
 	fun set_npre_per
 	do
-		set_status_mask(pmask_NPRE_PER)
+		preexist_expr_value = pmask_NPRE_PER
 	end
 
 	# Set val preexist non perennial
 	fun set_pval_nper
 	do
 		set_status_mask(pmask_PVAL_NPER)
+	end
+
+	# Set recursive flag
+	fun set_recursive
+	do
+		preexist_expr_value = pmask_RECURSIV
 	end
 
 	# Return true if the preexistence of the expression isn't known
@@ -927,16 +933,15 @@ redef class MOExpr
 	fun merge_preexistence(expr: MOExpr): Int
 	do
 		if expr.is_npre_per then
-			preexist_expr_value = pmask_NPRE_PER
+			set_npre_per
 		else if expr.is_rec then
-			preexist_expr_value = pmask_RECURSIV
+			set_recursive
 		else
-			# TODO: rshift/lshift
 			var pre = preexist_expr_value.bin_and(15)
-			var deps = preexist_expr_value.bin_and(240)
+			var deps = preexist_expr_value.rshift(4).lshift(4)
 
 			pre = pre.bin_and(expr.preexist_expr_value.bin_and(15))
-			deps = deps.bin_or(expr.preexist_expr_value.bin_and(240))
+			deps = deps.bin_or(expr.preexist_expr_value.rshift(4).lshift(4))
 
 			preexist_expr_value = pre.bin_or(deps)
 		end
