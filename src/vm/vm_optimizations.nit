@@ -467,6 +467,7 @@ redef class Variable
 					print("TODO ast phivar {self}")
 					var phi = new List[MOExpr]
 					for a_expr in node.variable.dep_exprs do phi.add(a_expr.ast2mo)
+					print("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
 					movar = new MOPhiVar(node.variable.position + 1, phi)
 				end
 			end
@@ -977,6 +978,7 @@ redef class MOPhiVar
 		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
+				print("MOPhiVar compute dep {dep} {dep.preexist_expr}")
 				merge_preexistence(dep)
 				if is_npre_per then
 					break
