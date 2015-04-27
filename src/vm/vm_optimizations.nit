@@ -22,12 +22,6 @@ import ssa
 import model_optimizations
 
 redef class VirtualMachine
-	# Number of method recompilation
-	var stats_needed_recompil = 0
-
-	# Preexist type for each object site (eg. subtype test, method call, read and write attribute)
-	var stats_object_site = new List[ObjectSiteStat]
-
 	# List of patterns of MOExprSite
 	var exprsites_patterns = new List[MOExprSitePattern]
 
@@ -693,7 +687,14 @@ redef class MMethodDef
 			preexist = expr.preexist_expr
 			fill_nper(expr)
 			print("\tpreexist of expr {expr} {preexist} {preexist.preexists_bits}")
-			if expr isa MONew then print("\t\t" + "class {expr.pattern.cls} is loaded? {expr.pattern.is_loaded}")
+			if expr isa MONew then 
+				print("\t\t" + "class {expr.pattern.cls} is loaded? {expr.pattern.is_loaded}")
+				if expr.pattern.is_loaded then
+					sys.pstats.incr_loaded_new
+				else
+					sys.pstats.incr_unloaded_new
+				end
+			end
 
 			# TODO: choose implementation here
 		end
@@ -703,10 +704,27 @@ redef class MMethodDef
 			print("\tpreexist of exprsite {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 			fill_nper(exprsite.expr_recv)
 			# TODO:choose implementation here
+
+			if exprsite.expr_recv.is_pre then
+				sys.pstats.incr_preexist
+			else
+				sys.pstats.incr_npreexist
+			end
+
+			if exprsite isa MOCallSite then
+				sys.pstats.incr_call_site
+			else # A read site (see optimizing_model)
+				sys.pstats.incr_readattr_site
+			end
 		end
 
 		for site in mosites do
 			print("MOSite cases - NYI")
+			if site isa MOSubtypeSite then
+				sys.pstats.incr_subtypetest_site
+			else # A write site (see optimizing model)
+				sys.pstats.incr_writeattr_site
+			end
 		end
 
 		print("\tmutables pre: {exprs_preexist_mut}")
@@ -1120,19 +1138,19 @@ redef class MOExprSitePattern
 		lp.callers.add(self)
 		cuc += 1
 
-		print("pattern.handle_new_branch cuc:{cuc} lp:{lp} | gp:{gp} rst:{rst}")
+		print("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
 
 		if cuc == 1 then
 			for expr in exprsites do
 				# We must test the "site" side of the exprsite, so we must use the receiver
-				print("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
+#				print("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
 
 				expr.expr_recv.init_preexist
 				expr.lp.propage_preexist
 			
 				# Just for debug, remove it !
-				expr.lp.compiled = false
-				expr.lp.preexist_all
+#				expr.lp.compiled = false
+#				expr.lp.preexist_all
 			end
 		end
 	end
@@ -1145,32 +1163,95 @@ redef class MONewPattern
 	do
 		print("\n[CLASS {cls} LOADED]")
 		for newexpr in newexprs do
-			var old = newexpr.preexist_expr_value.preexists_bits.to_s
+#			var old = newexpr.preexist_expr_value.preexists_bits.to_s
 			newexpr.set_preexistence_flag(pmask_PTYPE_PER)
-			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
+#			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
 
-			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
+#			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
 
 			newexpr.lp.propage_npreexist
 
 			# Just for debug, remove it !
-			newexpr.lp.compiled = false
-			newexpr.lp.preexist_all
-			print("\n\n")
+#			newexpr.lp.compiled = false
+#			newexpr.lp.preexist_all
+#			print("\n\n")
 		end
 	end
 end
 
-class ObjectSiteStat
-	# type of preexist
-	var ptype: Int
+# Specifics stats for preexistence
+class PreexistenceStat
+	# Count of new on unloaded class
+	var unloaded_new = 0
+	#
+	fun incr_unloaded_new do unloaded_new += 1
+	
+	# Count of new on loaded class
+	var loaded_new = 0
+	#
+	fun incr_loaded_new do loaded_new += 1
 
-	# type of site call
-	var stype: Int
+	# Count of preexist sites
+	var preexist = 0
+	#
+	fun incr_preexist do preexist += 1
+	
+	# Count of non preexist sites
+	var npreexist = 0
+	#
+	fun incr_npreexist do npreexist += 1
 
-	# pretty print
-	fun show
+	# Count of method invocation sites
+	var call_site = 0
+	#
+	fun incr_call_site do call_site += 1
+
+	# Count of subtype test sites
+	var subtypetest_site = 0
+	#
+	fun incr_subtypetest_site do subtypetest_site += 1
+
+	# Count of attr read sites
+	var readattr_site = 0
+	#
+	fun incr_readattr_site do readattr_site += 1
+
+	# Count of attr write sites
+	var writeattr_site = 0
+	#
+	fun incr_writeattr_site do writeattr_site += 1
+
+	# Display stats informations
+	fun infos: String
 	do
-		# array litteral
+		var ret = "" 
+
+		ret += "\n------------------ PREEXISTENCE STATS ------------------\n"
+		ret += "\tloaded_new: {loaded_new}\n"
+		ret += "\tunloaded_new: {unloaded_new}\n"
+		ret += "\n"
+		ret += "\tpreexist: {preexist}\n"
+		ret += "\tnpreexist: {npreexist}\n"
+		ret += "\n"
+		ret += "\tcall_site: {call_site}\n"
+		ret += "\tsubtypetest_site: {subtypetest_site}\n"
+		ret += "\treadattr_site: {readattr_site}\n"
+		ret += "\twriteattr_site: {writeattr_site}\n"
+		ret += "--------------------------------------------------------\n"
+
+		return ret
+	end
+end
+
+redef class Sys
+	# Access to preexistence stats from everywhere
+	var pstats = new PreexistenceStat
+end
+
+redef class ModelBuilder
+	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	do
+		super(mainmodule, arguments)
+		self.toolcontext.info(sys.pstats.infos, 1)
 	end
 end
