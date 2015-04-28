@@ -1130,12 +1130,7 @@ redef class MOExprSitePattern
 	# If the expression if the return of a lp, propage the callers
 	fun handle_new_branch(lp: MMethodDef)
 	do
-		lps.add(lp)
-		lp.callers.add(self)
-
-		# Adding a new branch can change implementation decision
-		compute_impl
-
+		add_lp(lp)
 		cuc += 1
 
 		print("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")

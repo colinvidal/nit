@@ -50,10 +50,7 @@ class MOExprSitePattern
 		# Tell to each added lps that this pattern can be a caller
 		for lp in gp.loaded_lps do
 			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
-				if not lps.has(lp) then
-					lps.add(lp)
-					lp.callers.add(self)
-				end
+				add_lp(lp)
 			end
 		end
 		
@@ -65,6 +62,7 @@ class MOExprSitePattern
 	fun compute_impl
 	do
 		if lps.length == 1 then
+			assert lps.first.is_intro
 			impl = new StaticImpl(true, lps.first)
 		else
 			var pic = gp.intro_mclassdef
@@ -72,19 +70,24 @@ class MOExprSitePattern
 			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
 			if pic.class_name == "Object" then
 				impl = new SSTImpl(false, gp.absolute_offset)
-			else if 1 == 2 then # tester si position unique
+			else if pic.mclass.is_position_unique then 
 				impl = new SSTImpl(true, gp.absolute_offset)
-				# tester pour déterminer dans quel groupe de méthode est la méthode
-				# pour chaque sous classe de la pic, le groupe est-il en postion unique ?
 			else
 				impl = new PHImpl(false, gp.offset) 
 			end
 		end
+
+		print("PATTERN IMPL {gp} {rst} => {impl} {impl.is_mutable}")
 	end
 
-	init
+	# Add a new callee
+	fun add_lp(lp: MMethodDef)
 	do
-		compute_impl
+		if not lps.has(lp) then
+			lps.add(lp)
+			lp.callers.add(self)
+			compute_impl
+		end
 	end
 end
 
@@ -300,4 +303,16 @@ class StaticImpl
 
 	# The called method implementation
 	var meth: MMethodDef
+end
+
+redef class MClass
+	# Tell if in all loaded subclasses, this class has a method group on unique position
+	fun is_position_unique: Bool
+	do
+		for cls, pos in positions_methods do
+			if cls.loaded and pos == -1 then return false
+		end
+
+		return true
+	end
 end
