@@ -241,35 +241,36 @@ class MOWriteSite
 	var arg: MOExpr
 end
 
-# Root of implementation objets
+# Root of type implementation (sst, ph, static)
 abstract class Implementation
-	# Is the using implementation is optimized ?
-	var is_optimized: Bool
+	# Is is a mutable implementation ?
+	var is_mutable: Bool
 end
 
-# Common properties to implementation using object mecanism
+# Commons properties on object mecanism implementations (sst, ph)
 abstract class ObjectImpl
 	super Implementation
 
 	# The id of the called global property
 	var prop_id: Int
 
-	# The address of the receiver object
-	var obj_addr: Pointer
+	# The address of the method table
+	var addr: Pointer
 end
 
 # SST implementation
 class SSTImpl super ObjectImpl end
 
-# Perfect Hashing implementation
-class PHImpl super ObjectImpl end
+# Perfect hashing implementation
+class PHImpl
+	super ObjectImpl
+
+	redef var is_mutable = false
+end
 
 # Static implementation (used only for method call)
 class StaticImpl
 	super Implementation
-
-	# Nit can't do static call, so a static implementation is an optimization
-	redef var is_optimized = true
 
 	# Address of the called method implementation
 	var addr: Pointer
