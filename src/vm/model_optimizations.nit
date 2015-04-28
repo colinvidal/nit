@@ -62,13 +62,17 @@ class MOExprSitePattern
 	fun compute_impl
 	do
 		if lps.length == 1 then
-			assert lps.first.is_intro
-			impl = new StaticImpl(true, lps.first)
+			# The method is an intro or a redef
+			if lps.first.mproperty.intro_mclassdef.name == "Object" then
+				impl = new SSTImpl(false, gp.absolute_offset)
+			else
+				impl = new StaticImpl(true, lps.first)
+			end
 		else
 			var pic = gp.intro_mclassdef
 			
 			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
-			if pic.class_name == "Object" then
+			if pic.name == "Object" then
 				impl = new SSTImpl(false, gp.absolute_offset)
 			else if pic.mclass.is_position_unique then 
 				impl = new SSTImpl(true, gp.absolute_offset)
@@ -77,7 +81,7 @@ class MOExprSitePattern
 			end
 		end
 
-		print("PATTERN IMPL {gp} {rst} => {impl} {impl.is_mutable}")
+		print("PATTERN IMPL {rst} {gp} => {impl} {impl.is_mutable}")
 	end
 
 	# Add a new callee
@@ -88,6 +92,11 @@ class MOExprSitePattern
 			lp.callers.add(self)
 			compute_impl
 		end
+	end
+
+	init
+	do
+		print("NEW PATTERN {rst} {gp}")
 	end
 end
 

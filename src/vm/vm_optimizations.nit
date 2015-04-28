@@ -45,6 +45,7 @@ redef class VirtualMachine
 			exprsites_patterns.add(pattern)
 		end
 
+		print("add {exprsite} to pattern")
 		pattern.add_exprsite(self, exprsite)
 	end
 
@@ -158,6 +159,7 @@ redef class VirtualMachine
 		# mclassdef.mpropdefs contains intro & redef methods
 		for classdef in mclass.mclassdefs do
 			for i in [1..classdef.mpropdefs.length - 1] do
+				print("LOAD CLASS {mclass} and property {classdef.mpropdefs[i]}")
 				var mdef = classdef.mpropdefs[i]
 				if mdef isa MMethodDef then
 					# Add the method implementation in the loaded metods of the associated global property
@@ -700,7 +702,7 @@ redef class MMethodDef
 
 		for exprsite in moexprsites do
 			preexist = exprsite.preexist_site
-			print("\tpreexist of exprsite {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
+			print("\tpreexist of exprsite {exprsite.pattern} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 			fill_nper(exprsite.expr_recv)
 			# TODO:choose implementation here
 
