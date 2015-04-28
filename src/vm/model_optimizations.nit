@@ -64,24 +64,16 @@ class MOExprSitePattern
 	do
 		var pic = gp.intro_mclassdef
 
-		if lps.length == 1 then
-			# The method is an intro or a redef
-			if pic.name == "Object" then
-				impl = new SSTImpl(false, gp.absolute_offset)
-			else
-				impl = new StaticImpl(true, lps.first)
-			end
-		else
-			
+		if pic.name == "Object" then
 			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
-			if pic.name == "Object" then
-				print("--")
-				impl = new SSTImpl(false, gp.absolute_offset)
-			else if pic.mclass.is_position_unique then 
-				impl = new SSTImpl(true, gp.absolute_offset)
-			else
-				impl = new PHImpl(false, gp.offset) 
-			end
+			impl = new SSTImpl(false, gp.absolute_offset)
+		else if lps.length == 1 then
+			# The method is an intro or a redef
+			impl = new StaticImpl(true, lps.first)
+		else if pic.mclass.is_position_unique then 
+			impl = new SSTImpl(true, gp.absolute_offset)
+		else
+			impl = new PHImpl(false, gp.offset) 
 		end
 
 		print("PATTERN {rst}.{gp} IMPL {impl} {impl.is_mutable}")

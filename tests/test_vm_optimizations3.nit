@@ -2,7 +2,7 @@
 class A
 	#
 	fun foo do end
-	redef fun output_class_name do end
+#	redef fun output_class_name do end
 end
 
 #
