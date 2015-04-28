@@ -401,7 +401,7 @@ redef class MClass
 	var mmethods = new Array[MMethod]
 
 	# Allocates a VTable for this class and gives it an id
-	private fun make_vt(v: VirtualMachine)
+	fun make_vt(v: VirtualMachine)
 	do
 		if loaded then return
 

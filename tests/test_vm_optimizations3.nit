@@ -1,12 +1,8 @@
-#redef class Object
-#	fun foo do end
-#end
-#
 #
 class A
 	#
-#	redef fun foo do end
 	fun foo do end
+	redef fun output_class_name do end
 end
 
 #

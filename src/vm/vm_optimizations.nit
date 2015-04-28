@@ -45,7 +45,6 @@ redef class VirtualMachine
 			exprsites_patterns.add(pattern)
 		end
 
-		print("add {exprsite} to pattern")
 		pattern.add_exprsite(self, exprsite)
 	end
 
@@ -149,31 +148,6 @@ redef class VirtualMachine
 		end
 
 		return self.call(propdef, args)
-	end
-
-	redef fun create_class(mclass)
-	do
-		super
-
-		# add introduces and redifines local properties
-		# mclassdef.mpropdefs contains intro & redef methods
-		for classdef in mclass.mclassdefs do
-			for i in [1..classdef.mpropdefs.length - 1] do
-				print("LOAD CLASS {mclass} and property {classdef.mpropdefs[i]}")
-				var mdef = classdef.mpropdefs[i]
-				if mdef isa MMethodDef then
-					# Add the method implementation in the loaded metods of the associated global property
-					mdef.mproperty.loaded_lps.add(mdef)
-					if not mdef.is_intro then
-						# Tell the patterns using this method there is a new branch
-						handle_new_branch(mdef)
-					end
-				end
-			end
-		end
-
-		# change preexistence state of new sites compiled before loading
-		for p in new_patterns do if p.cls == mclass then p.set_preexist_newsite
 	end
 end
 
@@ -1259,4 +1233,31 @@ redef class ModelBuilder
 		super(mainmodule, arguments)
 		self.toolcontext.info(sys.pstats.infos, 1)
 	end
+end
+
+redef class MClass
+	redef fun make_vt(vm)
+	do
+		super
+
+		# add introduces and redifines local properties
+		# mclassdef.mpropdefs contains intro & redef methods
+		for classdef in mclassdefs do
+			for i in [1..classdef.mpropdefs.length - 1] do
+				var mdef = classdef.mpropdefs[i]
+				if mdef isa MMethodDef then
+					# Add the method implementation in the loaded metods of the associated global property
+					mdef.mproperty.loaded_lps.add(mdef)
+					if not mdef.is_intro then
+						# Tell the patterns using this method there is a new branch
+						vm.handle_new_branch(mdef)
+					end
+				end
+			end
+		end
+
+		# change preexistence state of new sites compiled before loading
+		for p in vm.new_patterns do if p.cls == self then p.set_preexist_newsite
+	end
+
 end

@@ -48,6 +48,7 @@ class MOExprSitePattern
 	do
 		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
 		# Tell to each added lps that this pattern can be a caller
+		print("PATTERN {rst}.{gp} EXPRSITE add {exprsite.lp} {gp.intro_mclassdef} {gp.loaded_lps}")
 		for lp in gp.loaded_lps do
 			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
 				add_lp(lp)
@@ -61,18 +62,20 @@ class MOExprSitePattern
 	# Determine an implementation with pic/rst only
 	fun compute_impl
 	do
+		var pic = gp.intro_mclassdef
+
 		if lps.length == 1 then
 			# The method is an intro or a redef
-			if lps.first.mproperty.intro_mclassdef.name == "Object" then
+			if pic.name == "Object" then
 				impl = new SSTImpl(false, gp.absolute_offset)
 			else
 				impl = new StaticImpl(true, lps.first)
 			end
 		else
-			var pic = gp.intro_mclassdef
 			
 			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
 			if pic.name == "Object" then
+				print("--")
 				impl = new SSTImpl(false, gp.absolute_offset)
 			else if pic.mclass.is_position_unique then 
 				impl = new SSTImpl(true, gp.absolute_offset)
@@ -81,22 +84,18 @@ class MOExprSitePattern
 			end
 		end
 
-		print("PATTERN IMPL {rst} {gp} => {impl} {impl.is_mutable}")
+		print("PATTERN {rst}.{gp} IMPL {impl} {impl.is_mutable}")
 	end
 
 	# Add a new callee
 	fun add_lp(lp: MMethodDef)
 	do
 		if not lps.has(lp) then
+			print("PATTERN {rst}.{gp} ADD {lp}")
 			lps.add(lp)
 			lp.callers.add(self)
 			compute_impl
 		end
-	end
-
-	init
-	do
-		print("NEW PATTERN {rst} {gp}")
 	end
 end
 
@@ -225,7 +224,8 @@ abstract class MOPropSite
 	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
 	var concretes_receivers = new List[MClass]
 
-	# Compute the concretes receivers. If return null, drop the list (all receivers can't be statically and with intra-procedural analysis determined)
+	# Compute the concretes receivers.
+	# If return null, drop the list (all receivers can't be statically and with intra-procedural analysis determined)
 	fun compute_concretes: Bool
 	do
 		if expr_recv isa MOVar then
