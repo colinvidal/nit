@@ -105,7 +105,8 @@ abstract class MOVar
 	fun valid_and_add_dep(dep: MOExpr, concretes: List[MClass]): Bool
 	do
 		if dep isa MONew then
-			concretes.add(dep.pattern.cls)
+			var cls = dep.pattern.cls
+			if not concretes.has(cls) then concretes.add(cls)
 			return true
 		end
 		return false
