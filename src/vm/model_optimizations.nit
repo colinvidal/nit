@@ -37,6 +37,9 @@ class MOExprSitePattern
 	# Local properties candidates (a subset of gp.loaded_lps)
 	var lps = new List[MMethodDef]
 
+	# Implementation of the callsite determined by rst/pic
+	var impl: Implementation is noinit
+
 	# Exprsites using this pattern
 	var exprsites = new List[MOExprSite]
 
@@ -56,6 +59,32 @@ class MOExprSitePattern
 		
 		exprsites.add(exprsite)
 		exprsite.pattern = self
+	end
+
+	# Determine an implementation with pic/rst only
+	fun compute_impl
+	do
+		if lps.length == 1 then
+			impl = new StaticImpl(true, lps.first)
+		else
+			var pic = gp.intro_mclassdef
+			
+			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
+			if pic.class_name == "Object" then
+				impl = new SSTImpl(false, gp.absolute_offset)
+			else if 1 == 2 then # tester si position unique
+				impl = new SSTImpl(true, gp.absolute_offset)
+				# tester pour déterminer dans quel groupe de méthode est la méthode
+				# pour chaque sous classe de la pic, le groupe est-il en postion unique ?
+			else
+				impl = new PHImpl(false, gp.offset) 
+			end
+		end
+	end
+
+	init
+	do
+		compute_impl
 	end
 end
 
@@ -251,11 +280,8 @@ end
 abstract class ObjectImpl
 	super Implementation
 
-	# The id of the called global property
-	var prop_id: Int
-
-	# The address of the method table
-	var addr: Pointer
+	# The (global if SST, relative if PH) offset of the property
+	var offset: Int
 end
 
 # SST implementation
@@ -272,6 +298,6 @@ end
 class StaticImpl
 	super Implementation
 
-	# Address of the called method implementation
-	var addr: Pointer
+	# The called method implementation
+	var meth: MMethodDef
 end

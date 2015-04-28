@@ -1132,6 +1132,10 @@ redef class MOExprSitePattern
 	do
 		lps.add(lp)
 		lp.callers.add(self)
+
+		# Adding a new branch can change implementation decision
+		compute_impl
+
 		cuc += 1
 
 		print("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
@@ -1149,6 +1153,7 @@ redef class MOExprSitePattern
 #				expr.lp.preexist_all
 			end
 		end
+
 	end
 end
 
