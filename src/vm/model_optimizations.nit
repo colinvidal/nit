@@ -240,3 +240,37 @@ class MOWriteSite
 	# Value to assign to the attribute
 	var arg: MOExpr
 end
+
+# Root of implementation objets
+abstract class Implementation
+	# Is the using implementation is optimized ?
+	var is_optimized: Bool
+end
+
+# Common properties to implementation using object mecanism
+abstract class ObjectImpl
+	super Implementation
+
+	# The id of the called global property
+	var prop_id: Int
+
+	# The address of the receiver object
+	var obj_addr: Pointer
+end
+
+# SST implementation
+class SSTImpl super ObjectImpl end
+
+# Perfect Hashing implementation
+class PHImpl super ObjectImpl end
+
+# Static implementation (used only for method call)
+class StaticImpl
+	super Implementation
+
+	# Nit can't do static call, so a static implementation is an optimization
+	redef var is_optimized = true
+
+	# Address of the called method implementation
+	var addr: Pointer
+end
