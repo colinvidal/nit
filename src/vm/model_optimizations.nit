@@ -305,7 +305,11 @@ abstract class MOExprSite
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
 
-			print("\t\tvtable null ? {cls.vtable == null}")
+			# techniquement, il faudrait faire du ph (classe non chargée), mais comme il existe
+			# qu'un unique receveur (prouvé statiquement, donc ça ne bougera pas), on devrait
+			# pouvoir faire un appel statique
+
+			print("\t\tvtable null ? {cls.vtable == null} loaded ? {cls.loaded}")
 #			print("\t\tvtable: {cls.vtable.internal_vtable}")
 #			print("\t\tmask: {cls.vtable.mask}")
 #			print("\t\tid: {gp.intro_mclassdef.mclass.vtable.id}")
