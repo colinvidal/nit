@@ -86,6 +86,8 @@ class MOExprSitePattern
 			lp.callers.add(self)
 			impl = null
 		end
+
+		for expr in exprsites do expr.init_impl
 	end
 
 	# Get implementation, compute it if not exists
@@ -285,6 +287,9 @@ abstract class MOExprSite
 		end
 	end
 
+	# Initialise the implementation decision
+	fun init_impl do impl = null
+
 	# Compute the implementation with rst/pic
 	private fun compute_impl(vm: VirtualMachine)
 	do
@@ -299,8 +304,16 @@ abstract class MOExprSite
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
-			impl = new StaticImpl(true, vm.method_dispatch_ph(cls.vtable.internal_vtable, cls.vtable.mask,
-								gp.intro_mclassdef.mclass.vtable.id, gp.offset))
+
+			print("\t\tvtable null ? {cls.vtable == null}")
+#			print("\t\tvtable: {cls.vtable.internal_vtable}")
+#			print("\t\tmask: {cls.vtable.mask}")
+#			print("\t\tid: {gp.intro_mclassdef.mclass.vtable.id}")
+#			print("\t\toffset: {gp.offset}")
+
+#			impl = new StaticImpl(true, vm.method_dispatch_ph(cls.vtable.internal_vtable, cls.vtable.mask,
+#								gp.intro_mclassdef.mclass.vtable.id, gp.offset))
+			impl = new StaticImpl(true, lp) # totalement faux, juste pour le test...
 		else if unique_meth_pos_concrete then
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
@@ -390,6 +403,7 @@ redef class MClass
 	do
 		var pic = meth.intro_mclassdef.mclass
 
+		if not pic.loaded then return false
 		if pic.positions_methods[self] == -1 then return false
 		for cls, pos in positions_methods do if pos == -1 then return false
 	
