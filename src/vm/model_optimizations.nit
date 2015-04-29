@@ -215,6 +215,7 @@ end
 
 # Root hierarchy of objets sites
 abstract class MOSite
+
 end
 
 # MO of a subtype test site
@@ -233,21 +234,27 @@ abstract class MOPropSite
 	var expr_recv: MOExpr
 
 	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
-	var concretes_receivers = new List[MClass]
+	private var concretes_receivers: nullable List[MClass] is noinit
 
 	# Compute the concretes receivers.
 	# If return null, drop the list (all receivers can't be statically and with intra-procedural analysis determined)
-	fun compute_concretes: Bool
+	private fun compute_concretes
 	do
 		if expr_recv isa MOVar then
-			if expr_recv.as(MOVar).compute_concretes(concretes_receivers) then
-				return true
-			else
+			if not expr_recv.as(MOVar).compute_concretes(concretes_receivers.as(not null)) then
 				concretes_receivers.clear
 			end
 		end
+	end
 
-		return false
+	# Get concretes receivers (or return empty list)
+	fun get_concretes: List[MClass]
+	do
+		if concretes_receivers == null then
+			concretes_receivers = new List[MClass]
+			compute_concretes
+		end
+		return concretes_receivers.as(not null)
 	end
 end
 
@@ -261,6 +268,20 @@ abstract class MOExprSite
 
 	# The pattern using by this expression site
 	var pattern: MOExprSitePattern is writable, noinit
+	
+	# Implementation of the site (null if can't determine concretes receivers)
+	var impl: nullable Implementation is noinit
+
+	# Get the implementation of the site
+	fun get_impl: Implementation
+	do
+		if get_concretes.length == 0 then
+			return pattern.get_impl
+		else
+			# TODO: compute with pic/rst
+			return new PHImpl(false, pattern.gp.offset)
+		end
+	end
 end
 
 # MO of attribute access
