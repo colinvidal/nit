@@ -1050,7 +1050,6 @@ redef class MONewPattern
 	# The non preexistence of newsite became preesitent if class is loaded
 	fun set_preexist_newsite
 	do
-		print("\n[CLASS {cls} LOADED]")
 		for newexpr in newexprs do
 #			var old = newexpr.preexist_expr_value.preexists_bits.to_s
 			newexpr.set_ptype_per
