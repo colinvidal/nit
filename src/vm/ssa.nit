@@ -65,6 +65,9 @@ class BasicBlock
 	# Parts of AST that contain a write to a variable
 	var write_sites = new Array[AVarFormExpr]
 
+	# Parts of AST that contain a variable access (read or write)
+	var variables_sites = new Array[AExpr]
+
 	# The iterated dominance frontier of this block
 	# i.e. the set of blocks this block dominate directly or indirectly
 	var dominance_frontier: Array[BasicBlock] = new Array[BasicBlock] is lazy
@@ -220,10 +223,9 @@ redef class AExpr
 	# Generate recursively basic block for this expression
 	# *`vm` Running instance of the virtual machine
 	# *`block` A basic block not completely filled
-	# Return the newest block
+	# Return the last created block
 	fun generate_basicBlocks(vm: VirtualMachine, block: BasicBlock): BasicBlock
 	do
-		#print "NOT YET IMPLEMENTED = " + self.class_name
 		return block
 	end
 end
@@ -265,10 +267,6 @@ redef class AMethPropdef
 			compute_phi
 			rename_variables
 			ssa_destruction(vm)
-			if mpropdef.name == "main" then
-				var debug = new BlockDebug(new FileWriter.open("basic_blocks.dot"))
-				debug.dump(basic_block.as(not null))
-			end
 		end
 	end
 
@@ -457,12 +455,45 @@ redef class AMethPropdef
 
 				var block = dep.second.last.parent
 
-				#TODO: fixe this
-				if block isa ABlockExpr then block.add(nvar)
+				if block isa ABlockExpr then
+					block.add(nvar)
+				end
 
+				propagate_dependences(phi, phi.block)
 				vm.current_propdef.variables.add(dep.first)
 			end
 		end
+	end
+
+	# Propagate the dependences of the phi-functions into following variables
+	# `phi` The PhiFunction
+	# `block` Current block where we propagate dependences
+	fun propagate_dependences(phi: PhiFunction, block: BasicBlock)
+	do
+		# Treat each block once
+		if block.treated then return
+
+		# For each variable access site in the block
+		for site in block.variables_sites do
+			if site isa AVarExpr then
+				# Propagate the dependences of the phi-function in variables after the phi
+				for dep in phi.dependences do
+					for expr in dep.first.dep_exprs do
+						if not site.variable.dep_exprs.has(expr) then
+							site.variable.dep_exprs.add(expr)
+						end
+					end
+				end
+			else
+				# The site is a variable write, we stop the propagation
+				return
+			end
+		end
+
+		block.treated = true
+
+		# If we do not meet a write, continue the propagation
+		for b in block.successors do propagate_dependences(phi, b)
 	end
 end
 
@@ -516,6 +547,9 @@ end
 # Used to factorize work on loop
 # Superclass of loops expressions
 class ALoopHelper
+	super AExpr
+
+	redef fun add(expr: AExpr) is abstract
 end
 
 redef class AVarFormExpr
@@ -539,6 +573,7 @@ redef class AVarExpr
 		self.variable.as(not null).original_variable = self.variable.as(not null)
 		# Save this read site in the block
 		old_block.read_sites.add(self)
+		old_block.variables_sites.add(self)
 
 		return old_block
 	end
@@ -574,8 +609,8 @@ redef class AVarAssignExpr
 
 		# Save this write site in the block
 		old_block.write_sites.add(self)
+		old_block.variables_sites.add(self)
 
-		#TODO: test with transform module
 		vm.current_propdef.variables.add(self.variable.as(not null))
 
 		return self.n_value.generate_basicBlocks(vm, old_block)
@@ -591,6 +626,8 @@ redef class AVarReassignExpr
 
 		# Save this write site in the block
 		old_block.write_sites.add(self)
+		old_block.variables_sites.add(self)
+
 		vm.current_propdef.variables.add(self.variable.as(not null))
 		return self.n_value.generate_basicBlocks(vm, old_block)
 	end
@@ -602,14 +639,10 @@ redef class ABreakExpr
 		# Finish the old block
 		old_block.last = self
 
-		# Link the old_block to the first instruction of the loop
-		#old_block.link_special(loop_block.successors.first)
-
 		return old_block
 	end
 end
 
-#TODO: implement it
 redef class AContinueExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -633,6 +666,7 @@ redef class AReturnExpr
 	end
 end
 
+#TODO: A assert has two blocks (true and false condition)
 # redef class AAssertExpr
 # 	redef fun stmt(v)
 # 	do
@@ -756,23 +790,16 @@ redef class AParExpr
 end
 
 redef class AOnceExpr
-# 	redef fun expr(v)
-# 	do
-# 		if v.onces.has_key(self) then
-# 			return v.onces[self]
-# 		else
-# 			var res = v.expr(self.n_expr)
-# 			if res == null then return null
-# 			v.onces[self] = res
-# 			return res
-# 		end
-# 	end
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		return self.n_expr.generate_basicBlocks(vm, old_block)
+	end
 end
 
 redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
-		# A call does not finish the current block
+		# A call does not finish the current block,
 		# because we create intra-procedural basic blocks here
 
 		# Recursively goes into arguments to find variables if any
@@ -978,6 +1005,11 @@ redef class ADoExpr
 		old_block.link(block)
 		return self.n_block.generate_basicBlocks(vm, block)
 	end
+
+	redef fun add(expr: AExpr)
+	do
+		n_block.add expr
+	end
 end
 
 redef class AWhileExpr
@@ -1007,6 +1039,11 @@ redef class AWhileExpr
 		old_block.link_special(new_block)
 
 		return new_block
+	end
+
+	redef fun add(expr: AExpr)
+	do
+		n_block.add expr
 	end
 end
 
@@ -1054,5 +1091,10 @@ redef class AForExpr
 		new_block.need_update = true
 
 		return new_block
+	end
+
+	redef fun add(expr: AExpr)
+	do
+		n_block.add expr
 	end
 end
