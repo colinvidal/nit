@@ -619,7 +619,10 @@ redef class MMethodDef
 				sys.pstats.incr_readattr_site
 			end
 
-			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
+			if exprsite.get_concretes.length > 0 then
+				sys.pstats.incr_concretes_receivers_site
+				print("\t\tis concrete")
+			end
 			
 			print("\t\t{exprsite.pattern.get_impl} {exprsite.pattern.get_impl.is_mutable}")
 		end
