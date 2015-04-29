@@ -65,7 +65,7 @@ class MOExprSitePattern
 		# sinon si |lps| == 1 -> static mutable
 		# sinon si position methode invariante du rst dans le pic et pour tous les sous-types chargés du rst -> sst mutable
 		# sinon -> ph immutable
-		
+	
 		if gp.intro_mclassdef.mclass.is_instance_of_object then
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if lps.length == 1 then
@@ -295,7 +295,7 @@ abstract class MOExprSite
 		# sinon si position methode invariante dans le pic tous les recv et tous les sous-types du receveur -> sst mutable
 		# sinon -> ph immutable
 
-		var gp = lp.mproperty
+		var gp = pattern.gp
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object then
 			impl = new SSTImpl(false, gp.absolute_offset)
