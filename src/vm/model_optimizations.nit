@@ -59,14 +59,14 @@ class MOExprSitePattern
 	end
 
 	# Determine an implementation with pic/rst only
-	private fun compute_impl
+	private fun compute_impl(vm: VirtualMachine)
 	do
 		# si gp intro par object -> sst immutable
 		# sinon si |lps| == 1 -> static mutable
 		# sinon si position methode invariante du rst dans le pic et pour tous les sous-types chargés du rst -> sst mutable
 		# sinon -> ph immutable
 	
-		if gp.intro_mclassdef.mclass.is_instance_of_object then
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
@@ -89,9 +89,9 @@ class MOExprSitePattern
 	end
 
 	# Get implementation, compute it if not exists
-	fun get_impl: Implementation
+	fun get_impl(vm: VirtualMachine): Implementation
 	do
-		if impl == null then compute_impl
+		if impl == null then compute_impl(vm)
 		return impl.as(not null)
 	end
 
@@ -278,7 +278,7 @@ abstract class MOExprSite
 	fun get_impl(vm: VirtualMachine): Implementation
 	do
 		if get_concretes.length == 0 then
-			return pattern.get_impl
+			return pattern.get_impl(vm)
 		else
 			if impl == null then compute_impl(vm)
 			return impl.as(not null)
@@ -295,7 +295,7 @@ abstract class MOExprSite
 
 		var gp = pattern.gp
 
-		if gp.intro_mclassdef.mclass.is_instance_of_object then
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
@@ -418,10 +418,10 @@ redef class MClass
 	end
 
 	# `self` is an instance of object
-	fun is_instance_of_object: Bool
+	fun is_instance_of_object(vm:VirtualMachine): Bool
 	do
-#		return self.in_hierarchy(v.mainmodule).greaters.length == 1
-		return name == "Object"
+		return self.in_hierarchy(vm.mainmodule).greaters.length == 1
+#		return name == "Object"
 	end
 end
 

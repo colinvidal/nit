@@ -577,7 +577,7 @@ redef class MMethodDef
 		if compiled then return
 		compiled = true
 
-		print("preexist_all of {self}")
+		print("\npreexist_all of {self}")
 		var preexist: Int
 
 		if return_expr != null then
@@ -603,7 +603,7 @@ redef class MMethodDef
 
 		for exprsite in moexprsites do
 			preexist = exprsite.preexist_site
-			print("\tpreexist of exprsite {exprsite.pattern} {exprsite.pattern.rst}.{exprsite.pattern.gp} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
+			print("\tpreexist of {exprsite.pattern.rst}.{exprsite.pattern.gp} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 			fill_nper(exprsite.expr_recv)
 
 			if exprsite.expr_recv.is_pre then
