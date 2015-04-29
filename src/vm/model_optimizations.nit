@@ -278,10 +278,8 @@ abstract class MOExprSite
 	fun get_impl(vm: VirtualMachine): Implementation
 	do
 		if get_concretes.length == 0 then
-			print("\t\tpattern impl")
 			return pattern.get_impl
 		else
-			print("\t\tsite impl")
 			if impl == null then compute_impl(vm)
 			return impl.as(not null)
 		end

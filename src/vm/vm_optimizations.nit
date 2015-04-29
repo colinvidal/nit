@@ -603,9 +603,8 @@ redef class MMethodDef
 
 		for exprsite in moexprsites do
 			preexist = exprsite.preexist_site
-			print("\tpreexist of exprsite {exprsite.pattern} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
+			print("\tpreexist of exprsite {exprsite.pattern} {exprsite.pattern.rst}.{exprsite.pattern.gp} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 			fill_nper(exprsite.expr_recv)
-			# TODO:choose implementation here
 
 			if exprsite.expr_recv.is_pre then
 				sys.pstats.incr_preexist
@@ -619,11 +618,9 @@ redef class MMethodDef
 				sys.pstats.incr_readattr_site
 			end
 
-			if exprsite.get_concretes.length > 0 then
-				sys.pstats.incr_concretes_receivers_site
-				print("\t\tis concrete")
-			end
+			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
 			
+			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
 			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
 		end
 
