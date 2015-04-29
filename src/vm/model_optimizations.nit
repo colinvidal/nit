@@ -61,18 +61,20 @@ class MOExprSitePattern
 	# Determine an implementation with pic/rst only
 	private fun compute_impl
 	do
-		var pic = gp.intro_mclassdef
-
-		if pic.name == "Object" then
-			# TODO: light way (other that is_subtype(new Object)) to test if the class is Object ?
+		# si gp intro par object -> sst immutable
+		# sinon si |lps| == 1 -> static mutable
+		# sinon si position methode invariante du rst dans le pic et pour tous les sous-types chargés du rst -> sst mutable
+		# sinon -> ph immutable
+		
+		if gp.intro_mclassdef.mclass.is_instance_of_object then
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-		else if pic.mclass.is_position_unique then 
+		else if rst.as(MClassType).mclass.has_unique_method_pos(gp) then 
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
-			impl = new PHImpl(false, gp.offset) 
+			impl = new PHImpl(gp.offset) 
 		end
 	end
 
@@ -270,17 +272,51 @@ abstract class MOExprSite
 	var pattern: MOExprSitePattern is writable, noinit
 	
 	# Implementation of the site (null if can't determine concretes receivers)
-	var impl: nullable Implementation is noinit
+	private var impl: nullable Implementation is noinit
 
 	# Get the implementation of the site
-	fun get_impl: Implementation
+	fun get_impl(vm: VirtualMachine): Implementation
 	do
 		if get_concretes.length == 0 then
+			print("\t\tpattern impl")
 			return pattern.get_impl
 		else
-			# TODO: compute with pic/rst
-			return new PHImpl(false, pattern.gp.offset)
+			print("\t\tsite impl")
+			if impl == null then compute_impl(vm)
+			return impl.as(not null)
 		end
+	end
+
+	# Compute the implementation with rst/pic
+	private fun compute_impl(vm: VirtualMachine)
+	do
+		# si gp intro par object -> sst immutable
+		# sinon si |concretes| == 1 -> static mutable
+		# sinon si position methode invariante dans le pic tous les recv et tous les sous-types du receveur -> sst mutable
+		# sinon -> ph immutable
+
+		var gp = lp.mproperty
+
+		if gp.intro_mclassdef.mclass.is_instance_of_object then
+			impl = new SSTImpl(false, gp.absolute_offset)
+		else if get_concretes.length == 1 then
+			var cls = get_concretes.first
+			impl = new StaticImpl(true, vm.method_dispatch_ph(cls.vtable.internal_vtable, cls.vtable.mask,
+								gp.intro_mclassdef.mclass.vtable.id, gp.offset))
+		else if unique_meth_pos_concrete then
+			impl = new SSTImpl(true, gp.absolute_offset)
+		else
+			impl = new PHImpl(gp.offset) 
+		end
+	end
+
+	# Each concrete receiver has unique method position
+	private fun unique_meth_pos_concrete: Bool
+	do
+		for recv in get_concretes do
+			if not recv.has_unique_method_pos(lp.mproperty) then return false
+		end
+		return true
 	end
 end
 
@@ -335,7 +371,11 @@ class SSTImpl super ObjectImpl end
 class PHImpl
 	super ObjectImpl
 
-	redef var is_mutable = false
+	# PH implementation is always immutable
+	init(offset: Int)
+	do
+		super(false, offset)
+	end
 end
 
 # Static implementation (used only for method call)
@@ -348,15 +388,16 @@ end
 
 redef class MClass
 	# Tell if in all loaded subclasses, this class has a method group on unique position
-	fun is_position_unique: Bool
+	fun has_unique_method_pos(meth: MMethod): Bool
 	do
-		for cls, pos in positions_methods do
-			if cls.loaded and pos == -1 then return false
-		end
+		var pic = meth.intro_mclassdef.mclass
 
-		return true
-	end	
+		if pic.positions_methods[self] == -1 then return false
+		for cls, pos in positions_methods do if pos == -1 then return false
 	
+		return true
+	end
+
 	redef fun make_vt(vm)
 	do
 		super
@@ -376,6 +417,13 @@ redef class MClass
 				end
 			end
 		end
+	end
+
+	# `self` is an instance of object
+	fun is_instance_of_object: Bool
+	do
+#		return self.in_hierarchy(v.mainmodule).greaters.length == 1
+		return name == "Object"
 	end
 end
 

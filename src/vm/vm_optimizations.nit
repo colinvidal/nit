@@ -26,7 +26,7 @@ redef class VirtualMachine
 	do
 		var ret = super
 		if mpropdef isa MMethodDef then
-			mpropdef.preexist_all
+			mpropdef.preexist_all(self)
 #			mpropdef.compiled = true
 		end
 		return ret
@@ -572,7 +572,7 @@ redef class MMethodDef
 	end
 
 	# Compute the preexistence of all invocation sites and return site of the method
-	fun preexist_all
+	fun preexist_all(vm: VirtualMachine)
 	do
 		if compiled then return
 		compiled = true
@@ -624,7 +624,7 @@ redef class MMethodDef
 				print("\t\tis concrete")
 			end
 			
-			print("\t\t{exprsite.pattern.get_impl} {exprsite.pattern.get_impl.is_mutable}")
+			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
 		end
 
 		for site in mosites do
