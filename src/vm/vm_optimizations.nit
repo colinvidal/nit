@@ -22,76 +22,6 @@ import ssa
 import model_optimizations
 
 redef class VirtualMachine
-	# List of patterns of MOExprSite
-	var exprsites_patterns = new List[MOExprSitePattern]
-
-	# List of patterns of MONew
-	var new_patterns = new List[MONewPattern]
-
-	# Create (if not exists) and set a pattern for exprsites
-	fun set_exprsite_pattern(exprsite: MOExprSite, cs: CallSite)
-	do
-		var pattern: nullable MOExprSitePattern = null
-
-		for p in exprsites_patterns do
-			if p.gp == cs.mproperty and p.rst == cs.recv then
-				pattern = p
-				break
-			end
-		end
-
-		if pattern == null then 
-			pattern = new MOExprSitePattern(cs.recv, cs.mproperty)
-			exprsites_patterns.add(pattern)
-		end
-
-		pattern.add_exprsite(self, exprsite)
-	end
-
-	# Create (if not exists) and set a pattern for newsites
-	fun set_new_pattern(newsite: MONew, cls: MClass)
-	do
-		var pattern: nullable MONewPattern = null
-
-		for p in new_patterns do
-			if p.cls == cls then
-				pattern = p
-				break
-			end
-		end
-
-		if pattern == null then
-			pattern = new MONewPattern(cls)
-			new_patterns.add(pattern)
-		end
-
-		pattern.newexprs.add(newsite)
-		newsite.pattern = pattern
-	end
-
-	# For tests only, to remove !
-	fun debug_if_not_internal(module_str: String): Bool
-	do
-		if module_str == "kernel" then return false
-		if module_str == "string" then return false
-		if module_str == "numeric" then return false
-		return true
-	end
-
-	# Handle new local property for update optimizing model
-	fun handle_new_branch(lp: MMethodDef)
-	do
-		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
-
-		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-		var compatibles_patterns = new List[MOExprSitePattern]
-		for p in exprsites_patterns do
-			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
-		end
-
-		for p in compatibles_patterns do p.handle_new_branch(lp)
-	end
-
 	redef fun new_frame(node, mpropdef, args)
 	do
 		var ret = super
@@ -440,7 +370,6 @@ redef class Variable
 					var mo = node.variable.dep_exprs.first.ast2mo
 					movar = new MOSSAVar(node.variable.position + 1, mo)
 				else
-					print("TODO ast phivar {self}")
 					var phi = new List[MOExpr]
 					for a_expr in node.variable.dep_exprs do phi.add(a_expr.ast2mo)
 					print("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
@@ -670,8 +599,6 @@ redef class MMethodDef
 					sys.pstats.incr_unloaded_new
 				end
 			end
-
-			# TODO: choose implementation here
 		end
 
 		for exprsite in moexprsites do
@@ -693,6 +620,8 @@ redef class MMethodDef
 			end
 
 			if exprsite.compute_concretes then sys.pstats.incr_concretes_receivers_site
+			
+			print("\t\t{exprsite.pattern.get_impl} {exprsite.pattern.get_impl.is_mutable}")
 		end
 
 		for site in mosites do
@@ -1090,23 +1019,11 @@ redef class MOExprSitePattern
 		for lp in lps do lp.propage_npreexist
 	end
 
-
-	# True if a lp is compatible with self pattern (eg. if the lp has
-	# the gp of self and if rst of lp is a subtype of rst of the pattern)
-	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
-	do
-		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
-			if gp == lp.mproperty then return true
-		end
-		return false
-	end
-
-	# Add a new branch on the pattern
 	# Set non preesitent all non perenial preexistent expressions known by this pattern 
 	# If the expression if the return of a lp, propage the callers
-	fun handle_new_branch(lp: MMethodDef)
+	redef fun handle_new_branch(lp)
 	do
-		add_lp(lp)
+		super
 		cuc += 1
 
 		print("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
@@ -1235,29 +1152,11 @@ redef class ModelBuilder
 	end
 end
 
+# Change preexistence state of new sites compiled before loading
 redef class MClass
 	redef fun make_vt(vm)
 	do
 		super
-
-		# add introduces and redifines local properties
-		# mclassdef.mpropdefs contains intro & redef methods
-		for classdef in mclassdefs do
-			for i in [1..classdef.mpropdefs.length - 1] do
-				var mdef = classdef.mpropdefs[i]
-				if mdef isa MMethodDef then
-					# Add the method implementation in the loaded metods of the associated global property
-					mdef.mproperty.loaded_lps.add(mdef)
-					if not mdef.is_intro then
-						# Tell the patterns using this method there is a new branch
-						vm.handle_new_branch(mdef)
-					end
-				end
-			end
-		end
-
-		# change preexistence state of new sites compiled before loading
 		for p in vm.new_patterns do if p.cls == self then p.set_preexist_newsite
 	end
-
 end
