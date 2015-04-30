@@ -14,6 +14,12 @@ class C
 	redef fun foo do end
 end
 
+class H
+	super C
+
+	redef fun foo do end
+end
+
 class D
 	super B
 end
@@ -51,6 +57,14 @@ do
 
 	var f = new G
 	f.foo
+
+	var ch: C
+	if 1 == 2 then
+		ch = new C
+	else
+		ch = new H
+	end
+	ch.foo
 end
 
 fun testparam(a: A)
@@ -65,6 +79,7 @@ if 1 == 2 then
 else
 	ac = new C
 end
+ac = new A
 ac.foo
 
 var af = new F
@@ -76,6 +91,9 @@ b.foo
 var f = new F
 f = new G
 f.foo
+
+var h = new H
+h.foo
 
 after_load
 
