@@ -74,7 +74,7 @@ class MOExprSitePattern
 		else if rst.as(MClassType).mclass.has_unique_method_pos(gp) then 
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
-			impl = new PHImpl(gp.offset) 
+			impl = new PHImpl(false, gp.offset) 
 		end
 	end
 
@@ -308,12 +308,14 @@ abstract class MOExprSite
 				impl = new StaticImpl(true, vm.method_dispatch_ph(cls.vtable.internal_vtable, cls.vtable.mask,
 				gp.intro_mclassdef.mclass.vtable.id, gp.offset))
 			else
-				impl = new PHImpl(gp.offset)
+				impl = new PHImpl(false, gp.offset)
 			end
 		else if unique_meth_pos_concrete then
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
-			impl = new PHImpl(gp.offset) 
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(true, gp.offset) 
 		end
 	end
 
@@ -377,12 +379,6 @@ class SSTImpl super ObjectImpl end
 # Perfect hashing implementation
 class PHImpl
 	super ObjectImpl
-
-	# PH implementation is always immutable
-	init(offset: Int)
-	do
-		super(false, offset)
-	end
 end
 
 # Static implementation (used only for method call)
