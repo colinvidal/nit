@@ -42,11 +42,12 @@ end
 fun after_load
 do
 	var ac: A
-	if 1 == 2 then
-		ac = new A
-	else
-		ac = new C
-	end
+#	if 1 == 2 then
+#		ac = new A
+#	else
+#		ac = new C
+#	end
+	ac = new A
 	ac.foo
 
 	var af = new F
