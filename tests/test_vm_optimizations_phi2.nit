@@ -15,18 +15,22 @@ do
 			x = 20
 		end
 
-		print x.to_s + baz.to_s
+#		print x.to_s + baz.to_s
+		x.output
+		baz.output
 		x = 5
 	else
 		baz = new A
 	end
 
-	print baz
+#	print baz
+	baz.output
 	baz = new B
 	x+= 10
 
 	baz = new A
-	print baz
+#	print baz
+	baz.output
 end
 
 foo
