@@ -288,6 +288,7 @@ redef class AMethPropdef
 
 			var read_blocks = new Array[BasicBlock]
 			read_blocks.add_all(v.read_blocks)
+			read_blocks.add_all(v.assignment_blocks)
 
 			# While we have not treated each part accessing `v`
 			while not read_blocks.is_empty do
@@ -314,7 +315,7 @@ redef class AMethPropdef
 						# Add a phi-function at the beginning of df for variable v
 						df.phi_functions.add(phi)
 
-						if not v.read_blocks.has(df) then read_blocks.add(df)
+						if not v.read_blocks.has(df) or not v.assignment_blocks.has(df) then read_blocks.add(df)
 					end
 				end
 			end
@@ -479,7 +480,9 @@ redef class AMethPropdef
 				# Propagate the dependences of the phi-function in variables after the phi
 				for dep in phi.dependences do
 					for expr in dep.first.dep_exprs do
-						if not site.variable.dep_exprs.has(expr) then
+						if site.variable.dep_exprs.has(expr) then break
+
+						if dep.first.original_variable == site.variable.original_variable then
 							site.variable.dep_exprs.add(expr)
 						end
 					end
