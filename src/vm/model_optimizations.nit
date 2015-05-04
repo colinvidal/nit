@@ -391,10 +391,17 @@ redef class MClass
 		var pic = meth.intro_mclassdef.mclass
 
 		if not pic.loaded then return false
-		
 
 		print("has_unique_method_pos pic:{pic} self:{self} positions_methods:{pic.positions_methods[self]}")
 
+		var buf = ""
+
+		for cls,pos in pic.positions_methods do buf += " {cls}:{pos} "
+		print("{pic}.positions_methods : {buf}")
+		
+		for cls,pos in positions_methods do buf += " {cls}:{pos} "
+		print("{self}.positions_methods : {buf}")
+	
 		if pic.positions_methods[self] == -1 then return false
 		for cls, pos in positions_methods do if pos == -1 then return false
 	
