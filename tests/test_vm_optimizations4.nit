@@ -41,23 +41,23 @@ end
 
 fun after_load
 do
-	var ac: A
-#	if 1 == 2 then
-#		ac = new A
-#	else
-#		ac = new C
-#	end
-	ac = new A
-	ac.foo
-
-	var af = new F
-	af.foo
-
-	var b = new B
-	b.foo
-
-	var f = new G
-	f.foo
+#	var ac: A
+##	if 1 == 2 then
+##		ac = new A
+##	else
+##		ac = new C
+##	end
+#	ac = new A
+#	ac.foo
+#
+#	var af = new F
+#	af.foo
+#
+#	var b = new B
+#	b.foo
+#
+#	var f = new G
+#	f.foo
 
 	var ch: C
 	if 1 == 2 then
@@ -74,28 +74,28 @@ do
 	a.foo
 end
 
-var ac: A
-if 1 == 2 then
-	ac = new A
-else
-	ac = new C
-end
-ac = new A
-ac.foo
-
-var af = new F
-af.foo
-
-var b = new B
-b.foo
-
-var f = new F
-f = new G
-f.foo
-
-var h = new H
-h.foo
-
+#var ac: A
+#if 1 == 2 then
+#	ac = new A
+#else
+#	ac = new C
+#end
+#ac = new A
+#ac.foo
+#
+#var af = new F
+#af.foo
+#
+#var b = new B
+#b.foo
+#
+#var f = new F
+#f = new G
+#f.foo
+#
+#var h = new H
+#h.foo
+#
 after_load
 
-testparam(ac)
+#testparam(ac)

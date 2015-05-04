@@ -360,6 +360,7 @@ redef class Variable
 	fun get_movar(node: AExpr): MOVar
 	do
 		if movar == null then
+#			print("get_movar: {self} dep_exprs: {dep_exprs}")
 			if node isa ASelfExpr then
 				movar = new MOParam(0)
 			else if node isa AVarExpr then
@@ -451,9 +452,14 @@ redef class AMethPropdef
 	# Null if this fuction is a procedure
 	var mo_dep_exprs: nullable MOVar = null
 
+	# List of callsite inside the methode to compile from ast to momodel
+	var callsites_to_compile = new List[ASendExpr]
+
 	redef fun generate_basicBlocks(vm)
 	do
 		super(vm)
+
+		for sendexpr in callsites_to_compile do sendexpr.compile_ast(vm, self.mpropdef.as(not null))
 
 		if returnvar.dep_exprs.length == 1 then
 			mo_dep_exprs = new MOSSAVar(returnvar.position, returnvar.dep_exprs.first.ast2mo)
@@ -466,8 +472,16 @@ redef class AMethPropdef
 		if mo_dep_exprs != null then
 			print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}")
 		end
+
+#		print("variables of {mpropdef.name}")
+#		for v in variables do
+#			print("\t{v}<{v.hash}> => {v.dep_exprs}")
+#		end
 	end
 end
+
+
+# bouger le corp de generate_basicBlocks de ASendExpr dans une méthode ASendExpr.compile, l'appeler en fin de generate_basicBlocks de AMethPropdef
 
 redef class ASendExpr
 	# Site invocation associated with this node
@@ -476,19 +490,23 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		var recv = n_expr.ast2mo
-		
-		var lp = vm.current_propdef.mpropdef.as(MMethodDef)
-		mocallsite = new MOCallSite(recv, lp)
-		lp.moexprsites.add(mocallsite)
-		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
 
-		# Expressions arguments given to the method called
-		for arg in raw_arguments do
-			mocallsite.given_args.add(arg.ast2mo)
-		end
-
-		# TODO liste des expressions de retour dans le current_propdef
+		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
+#		print("ASendExpr {callsite.mproperty} n_expr:{n_expr}")
+#
+#		if n_expr isa AVarExpr then print("\t {n_expr.as(AVarExpr).variable.to_s} {n_expr.as(AVarExpr).variable.dep_exprs}")
+#
+#		var recv = n_expr.ast2mo
+#		
+#		var lp = vm.current_propdef.mpropdef.as(MMethodDef)
+#		mocallsite = new MOCallSite(recv, lp)
+#		lp.moexprsites.add(mocallsite)
+#		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
+#
+#		# Expressions arguments given to the method called
+#		for arg in raw_arguments do
+#			mocallsite.given_args.add(arg.ast2mo)
+#		end
 
 		return sup
 	end
@@ -499,6 +517,21 @@ redef class ASendExpr
 		callsite.mpropdef.return_expr = new MOParam(2)
 	
 		return mocallsite
+	end
+
+	# Compile this ast node in MOCallSite after SSA
+	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	do
+		var recv = n_expr.ast2mo
+
+		mocallsite = new MOCallSite(recv, lp)
+		lp.moexprsites.add(mocallsite)
+		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
+
+		# Expressions arguments given to the method called
+		for arg in raw_arguments do
+			mocallsite.given_args.add(arg.ast2mo)
+		end
 	end
 end
 
@@ -618,10 +651,10 @@ redef class MMethodDef
 				sys.pstats.incr_readattr_site
 			end
 
-			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
+#			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
 			
-			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
-			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
+#			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
+#			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
 		end
 
 		for site in mosites do
