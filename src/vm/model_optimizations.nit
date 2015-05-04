@@ -61,11 +61,6 @@ class MOExprSitePattern
 	# Determine an implementation with pic/rst only
 	private fun compute_impl(vm: VirtualMachine)
 	do
-		# si gp intro par object -> sst immutable
-		# sinon si |lps| == 1 -> static mutable
-		# sinon si position methode invariante du rst dans le pic et pour tous les sous-types chargés du rst -> sst mutable
-		# sinon -> ph immutable
-	
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, gp.absolute_offset)
 		else if lps.length == 1 then
@@ -293,11 +288,6 @@ abstract class MOExprSite
 	# Compute the implementation with rst/pic
 	private fun compute_impl(vm: VirtualMachine)
 	do
-		# si gp intro par object -> sst immutable
-		# sinon si |concretes| == 1 -> static mutable
-		# sinon si position methode invariante dans le pic tous les recv et tous les sous-types du receveur -> sst mutable
-		# sinon -> ph immutable
-
 		var gp = pattern.gp
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
@@ -305,17 +295,21 @@ abstract class MOExprSite
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
 			if cls.loaded then
-				impl = new StaticImpl(true, vm.method_dispatch_ph(cls.vtable.internal_vtable, cls.vtable.mask,
-				gp.intro_mclassdef.mclass.vtable.id, gp.offset))
+				impl = new StaticImpl(true,
+					vm.method_dispatch_ph(cls.vtable.internal_vtable,
+					cls.vtable.mask,
+					gp.intro_mclassdef.mclass.vtable.id, 
+					gp.offset))
 			else
-				impl = new PHImpl(false, gp.offset)
+				# The PHImpl here is mutable because it can be switch to a 
+				# lightweight implementation when the class will be loaded
+				impl = new PHImpl(true, gp.offset)
 			end
 		else if unique_meth_pos_concrete then
-			impl = new SSTImpl(true, gp.absolute_offset)
+			# SST immutable because it can't be more than these concretes receiver statically
+			impl = new SSTImpl(false, gp.absolute_offset)
 		else
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(true, gp.offset) 
+			impl = new PHImpl(false, gp.offset) 
 		end
 	end
 
@@ -323,6 +317,7 @@ abstract class MOExprSite
 	private fun unique_meth_pos_concrete: Bool
 	do
 		for recv in get_concretes do
+			if not recv.loaded then return false
 			if not recv.has_unique_method_pos(lp.mproperty) then return false
 		end
 		return true
