@@ -490,24 +490,7 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-
 		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
-#		print("ASendExpr {callsite.mproperty} n_expr:{n_expr}")
-#
-#		if n_expr isa AVarExpr then print("\t {n_expr.as(AVarExpr).variable.to_s} {n_expr.as(AVarExpr).variable.dep_exprs}")
-#
-#		var recv = n_expr.ast2mo
-#		
-#		var lp = vm.current_propdef.mpropdef.as(MMethodDef)
-#		mocallsite = new MOCallSite(recv, lp)
-#		lp.moexprsites.add(mocallsite)
-#		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
-#
-#		# Expressions arguments given to the method called
-#		for arg in raw_arguments do
-#			mocallsite.given_args.add(arg.ast2mo)
-#		end
-
 		return sup
 	end
 
@@ -635,6 +618,9 @@ redef class MMethodDef
 		end
 
 		for exprsite in moexprsites do
+			print("\tpreexist of expr {exprsite} {exprsite.pattern.rst}.{exprsite.pattern.gp}")
+			sys.stdin.read_line
+			
 			preexist = exprsite.preexist_site
 			print("\tpreexist of {exprsite.pattern.rst}.{exprsite.pattern.gp} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
 			fill_nper(exprsite.expr_recv)

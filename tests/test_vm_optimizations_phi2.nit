@@ -1,6 +1,8 @@
 class A end
 class B super A end
 
+fun testret: String do return "aa"
+
 fun foo
 do
 	var baz: A
