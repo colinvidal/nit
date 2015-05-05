@@ -414,6 +414,7 @@ redef class ANode
 		if self isa AStringFormExpr then return true
 		if self isa ATrueExpr then return true
 		if self isa AFalseExpr then return true
+		if self isa ASuperstringExpr then return true
 		return false
 	end
 
@@ -426,7 +427,8 @@ redef class ANode
 			mo_expr = new MOLit
 		else
 			# Unimplemented case of node
-			mo_expr = new MOSSAVar(-1, new MOParam(3))
+			print("Kind of node: {self} NYI")
+			abort
 		end
 
 		return mo_expr
@@ -459,8 +461,6 @@ redef class AMethPropdef
 	do
 		super(vm)
 
-		for sendexpr in callsites_to_compile do sendexpr.compile_ast(vm, self.mpropdef.as(not null))
-
 		if returnvar.dep_exprs.length == 1 then
 			mo_dep_exprs = new MOSSAVar(returnvar.position, returnvar.dep_exprs.first.ast2mo)
 		else if returnvar.dep_exprs.length > 1 then
@@ -473,15 +473,11 @@ redef class AMethPropdef
 			print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}")
 		end
 
-#		print("variables of {mpropdef.name}")
-#		for v in variables do
-#			print("\t{v}<{v.hash}> => {v.dep_exprs}")
-#		end
+		mpropdef.as(not null).return_expr = mo_dep_exprs
+
+		for sendexpr in callsites_to_compile do sendexpr.compile_ast(vm, mpropdef.as(not null))
 	end
 end
-
-
-# bouger le corp de generate_basicBlocks de ASendExpr dans une méthode ASendExpr.compile, l'appeler en fin de generate_basicBlocks de AMethPropdef
 
 redef class ASendExpr
 	# Site invocation associated with this node
@@ -496,9 +492,12 @@ redef class ASendExpr
 
 	redef fun ast2mo
 	do
-		# Simulate that a parameter is return by the receiver
-		callsite.mpropdef.return_expr = new MOParam(2)
-	
+		# If this MOCallSite is used as receiver (this is the case if ASendExpr.ast2mo is called)
+		# then all local property candidates to it GP must have a return expression
+#		for lp in mocallsite.pattern.lps do 
+#			print("\t\t\t{mocallsite} {mocallsite.pattern.rst}.{mocallsite.pattern.gp} {lp}")
+#			assert lp.return_expr != null
+#		end
 		return mocallsite
 	end
 
@@ -606,8 +605,7 @@ redef class MMethodDef
 		for newexpr in monews do
 			preexist = newexpr.preexist_expr
 			fill_nper(newexpr)
-			print("\tpreexist of new {newexpr} {preexist} {preexist.preexists_bits}")
-			print("\t\t" + "class {newexpr.pattern.cls} is loaded? {newexpr.pattern.is_loaded}")
+			print("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {preexist} {preexist.preexists_bits}")
 			if newexpr.pattern.is_loaded then
 				sys.pstats.incr_loaded_new
 			else
@@ -616,8 +614,6 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
-			print("\tpreexist of expr {site} {site.pattern.rst}.{site.pattern.gp}")
-			
 			preexist = site.preexist_site
 			print("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}")
 			fill_nper(site.expr_recv)

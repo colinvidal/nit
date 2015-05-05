@@ -512,7 +512,6 @@ redef class VirtualMachine
 
 		super(mclass)
 
-		print("create_class {implicit_loaded}")
 		for cls in implicit_loaded do
 			cls.handle_new_branch(self)
 		end
