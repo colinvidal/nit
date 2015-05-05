@@ -23,7 +23,7 @@ do
 		baz = new A
 	end
 
-#	print baz
+	print baz
 	baz = new B
 	x+= 10
 

@@ -105,7 +105,8 @@ class MOExprSitePattern
 	# Add a new branch on the pattern
 	fun handle_new_branch(lp: MMethodDef)
 	do
-		add_lp(lp)
+		print("pattern handle_new_branch")
+#		add_lp(lp)
 	end
 end
 
@@ -385,22 +386,15 @@ class StaticImpl
 end
 
 redef class MClass
+	# Linearization of classes hierarchy
+	var ordering: nullable Array[MClass]
+
 	# Tell if in all loaded subclasses, this class has a method group on unique position
 	fun has_unique_method_pos(meth: MMethod): Bool
 	do
 		var pic = meth.intro_mclassdef.mclass
 
 		if not pic.loaded then return false
-
-#		print("has_unique_method_pos pic:{pic} self:{self} positions_methods:{pic.positions_methods[self]}")
-#
-#		var buf = ""
-#
-#		for cls,pos in pic.positions_methods do buf += " {cls}:{pos} "
-#		print("{pic}.positions_methods : {buf}")
-#		
-#		for cls,pos in positions_methods do buf += " {cls}:{pos} "
-#		print("{self}.positions_methods : {buf}")
 	
 		if pic.positions_methods[self] == -1 then return false
 		for cls, pos in positions_methods do if pos == -1 then return false
@@ -408,10 +402,9 @@ redef class MClass
 		return true
 	end
 
-	redef fun make_vt(vm)
+	# Detect new branches added by a loading class
+	fun handle_new_branch(vm: VirtualMachine)
 	do
-		super
-
 		# add introduces and redifines local properties
 		# mclassdef.mpropdefs contains intro & redef methods
 		for classdef in mclassdefs do
@@ -433,7 +426,13 @@ redef class MClass
 	fun is_instance_of_object(vm:VirtualMachine): Bool
 	do
 		return self.in_hierarchy(vm.mainmodule).greaters.length == 1
-#		return name == "Object"
+	end
+
+	# Get a copy of a linearization
+	redef fun superclasses_ordering(v)
+	do
+		if ordering == null then ordering = super(v)
+		return ordering.as(not null)
 	end
 end
 
@@ -508,4 +507,19 @@ redef class VirtualMachine
 		for p in compatibles_patterns do p.handle_new_branch(lp)
 	end
 
+	redef fun create_class(mclass)
+	do
+		# Get all superclasses loaded implicitly by mclass
+		var implicit_loaded = new List[MClass]
+		for cls in mclass.superclasses_ordering(self) do
+			if not cls.loaded then implicit_loaded.add(cls)
+		end
+
+		super(mclass)
+
+		print("create_class {implicit_loaded}")
+		for cls in implicit_loaded do
+			cls.handle_new_branch(self)
+		end
+	end
 end

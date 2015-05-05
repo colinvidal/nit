@@ -579,7 +579,7 @@ redef class MClass
 
 	# Order superclasses of self
 	# Return the order of superclasses in runtime structures of this class
-	private fun superclasses_ordering(v: VirtualMachine): Array[MClass]
+	fun superclasses_ordering(v: VirtualMachine): Array[MClass]
 	do
 		var superclasses = new Array[MClass]
 

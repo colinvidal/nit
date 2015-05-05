@@ -651,10 +651,10 @@ redef class MMethodDef
 				sys.pstats.incr_readattr_site
 			end
 
-#			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
+			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
 			
-#			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
-#			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
+			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
+			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
 		end
 
 		for site in mosites do
@@ -881,7 +881,7 @@ end
 redef class MOLit
 	redef var preexist_expr_value = pmask_PVAL_PER
 
-	redef fun init_preexist do abort
+	redef fun init_preexist do end 
 
 	redef fun preexist_expr do return preexist_expr_value
 end
@@ -891,7 +891,7 @@ redef class MOParam
 
 	init do set_dependency_flag(offset)
 
-	redef fun init_preexist do abort
+	redef fun init_preexist do end 
 
 	redef fun preexist_expr do return preexist_expr_value
 end
@@ -918,7 +918,7 @@ redef class MOPhiVar
 		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
-				print("MOPhiVar compute dep {dep} {dep.preexist_expr}")
+#				print("MOPhiVar compute dep {dep} {dep.preexist_expr}")
 				merge_preexistence(dep)
 				if is_npre_per then
 					break
@@ -1186,7 +1186,7 @@ end
 
 # Change preexistence state of new sites compiled before loading
 redef class MClass
-	redef fun make_vt(vm)
+	redef fun handle_new_branch(vm)
 	do
 		super
 		for p in vm.new_patterns do if p.cls == self then p.set_preexist_newsite
