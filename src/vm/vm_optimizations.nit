@@ -392,7 +392,7 @@ redef class ANewExpr
 		var sup = super(vm, old_block)
 
 		monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
-		vm.current_propdef.mpropdef.as(MMethodDef).moexprs.add(monew.as(not null))
+		vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
 		vm.set_new_pattern(monew.as(not null), recvtype.mclass)
 
 		return sup
@@ -508,7 +508,7 @@ redef class ASendExpr
 		var recv = n_expr.ast2mo
 
 		mocallsite = new MOCallSite(recv, lp)
-		lp.moexprsites.add(mocallsite)
+		lp.mosites.add(mocallsite)
 		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
 
 		# Expressions arguments given to the method called
@@ -603,53 +603,41 @@ redef class MMethodDef
 			print("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
 		end
 	
-		for expr in moexprs do
-			preexist = expr.preexist_expr
-			fill_nper(expr)
-			print("\tpreexist of expr {expr} {preexist} {preexist.preexists_bits}")
-			if expr isa MONew then 
-				print("\t\t" + "class {expr.pattern.cls} is loaded? {expr.pattern.is_loaded}")
-				if expr.pattern.is_loaded then
-					sys.pstats.incr_loaded_new
-				else
-					sys.pstats.incr_unloaded_new
-				end
+		for newexpr in monews do
+			preexist = newexpr.preexist_expr
+			fill_nper(newexpr)
+			print("\tpreexist of new {newexpr} {preexist} {preexist.preexists_bits}")
+			print("\t\t" + "class {newexpr.pattern.cls} is loaded? {newexpr.pattern.is_loaded}")
+			if newexpr.pattern.is_loaded then
+				sys.pstats.incr_loaded_new
+			else
+				sys.pstats.incr_unloaded_new
 			end
 		end
 
-		for exprsite in moexprsites do
-			print("\tpreexist of expr {exprsite} {exprsite.pattern.rst}.{exprsite.pattern.gp}")
-			sys.stdin.read_line
+		for site in mosites do
+			print("\tpreexist of expr {site} {site.pattern.rst}.{site.pattern.gp}")
 			
-			preexist = exprsite.preexist_site
-			print("\tpreexist of {exprsite.pattern.rst}.{exprsite.pattern.gp} {exprsite.expr_recv}.{exprsite} {preexist} {preexist.preexists_bits}")
-			fill_nper(exprsite.expr_recv)
+			preexist = site.preexist_site
+			print("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}")
+			fill_nper(site.expr_recv)
 
-			if exprsite.expr_recv.is_pre then
+			if site.expr_recv.is_pre then
 				sys.pstats.incr_preexist
 			else
 				sys.pstats.incr_npreexist
 			end
 
-			if exprsite isa MOCallSite then
+			if site isa MOCallSite then
 				sys.pstats.incr_call_site
 			else # A read site (see optimizing_model)
 				sys.pstats.incr_readattr_site
 			end
 
-			if exprsite.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
+			if site.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
 			
-			print("\t\tconcretes receivers? {(exprsite.get_concretes.length > 0)}")
-			print("\t\t{exprsite.get_impl(vm)} {exprsite.get_impl(vm).is_mutable}")
-		end
-
-		for site in mosites do
-			print("MOSite cases - NYI")
-			if site isa MOSubtypeSite then
-				sys.pstats.incr_subtypetest_site
-			else # A write site (see optimizing model)
-				sys.pstats.incr_writeattr_site
-			end
+			print("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
+			print("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
 
 		print("\tmutables pre: {exprs_preexist_mut}")
@@ -1006,7 +994,7 @@ redef class MOCallSite
 end
 
 
-redef class MOPropSite
+redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
@@ -1016,7 +1004,7 @@ redef class MOPropSite
 	end
 end
 
-redef class MOExprSitePattern
+redef class MOSitePattern
 	# Number of uncompiled calles (local properties)
 	var cuc = 0
 

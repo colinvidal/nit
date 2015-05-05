@@ -25,7 +25,7 @@ class MONewPattern
 end
 
 # Pattern of a callsite
-class MOExprSitePattern
+class MOSitePattern
 	super MOPattern
 
 	# Static type of the receiver
@@ -120,21 +120,15 @@ redef class MMethodDef
 	var compiled = false is writable
 
 	# List of callers of this local property
-	var callers = new List[MOExprSitePattern]
+	var callers = new List[MOSitePattern]
 
 	# Return expression of the method (null if procedure)
 	var return_expr: nullable MOExpr is writable
 
-	# List of expressions in this local property (without MOExprSite)
-	# eg. attr.baz()
-	var moexprs = new List[MOExpr]
+	# List of instantiations sites in this local property 
+	var monews = new List[MONew]
 
-	# List of site expressions in this local property
-	# eg. a.foo().bar(), variable, instantiation site 
-	var moexprsites = new List[MOExprSite]
-
-	# List of object site in this local property (without MOExprSite)
-	# eg. subtype test, write attribute
+	# List of object sites in this local property
 	var mosites = new List[MOSite]
 end
 
@@ -215,23 +209,17 @@ end
 
 # Root hierarchy of objets sites
 abstract class MOSite
-
-end
-
-# MO of a subtype test site
-class MOSubtypeSite
-	super MOSite
-
-	# Static type on which the test is applied
-	var target: MType
-end
-
-# MO of global properties sites
-abstract class MOPropSite
-	super MOSite
-
 	# The expression of the receiver
 	var expr_recv: MOExpr
+
+	# The local property containing this expression
+	var lp: MMethodDef
+
+	# The pattern using by this expression site
+	var pattern: MOSitePattern is writable, noinit
+
+	# Implementation of the site (null if can't determine concretes receivers)
+	private var impl: nullable Implementation is noinit
 
 	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
 	private var concretes_receivers: nullable List[MClass] is noinit
@@ -256,21 +244,7 @@ abstract class MOPropSite
 		end
 		return concretes_receivers.as(not null)
 	end
-end
 
-# MO of object expression
-abstract class MOExprSite
-	super MOPropSite
-	super MOExpr
-
-	# The local property containing this expression
-	var lp: MMethodDef
-
-	# The pattern using by this expression site
-	var pattern: MOExprSitePattern is writable, noinit
-	
-	# Implementation of the site (null if can't determine concretes receivers)
-	private var impl: nullable Implementation is noinit
 
 	# Get the implementation of the site
 	fun get_impl(vm: VirtualMachine): Implementation
@@ -297,10 +271,10 @@ abstract class MOExprSite
 			var cls = get_concretes.first
 			if cls.loaded then
 				impl = new StaticImpl(true,
-					vm.method_dispatch_ph(cls.vtable.internal_vtable,
-					cls.vtable.mask,
-					gp.intro_mclassdef.mclass.vtable.id, 
-					gp.offset))
+				vm.method_dispatch_ph(cls.vtable.internal_vtable,
+				cls.vtable.mask,
+				gp.intro_mclassdef.mclass.vtable.id, 
+				gp.offset))
 			else
 				# The PHImpl here is mutable because it can be switch to a 
 				# lightweight implementation when the class will be loaded
@@ -323,6 +297,27 @@ abstract class MOExprSite
 		end
 		return true
 	end
+
+end
+
+# MO of a subtype test site
+class MOSubtypeSite
+	super MOSite
+
+	# Static type on which the test is applied
+	var target: MType
+end
+
+# MO of global properties sites
+abstract class MOPropSite
+	super MOSite
+end
+
+# MO of object expression
+abstract class MOExprSite
+	super MOPropSite
+	super MOExpr
+
 end
 
 # MO of attribute access
@@ -438,7 +433,7 @@ end
 
 redef class VirtualMachine
 	# List of patterns of MOExprSite
-	var exprsites_patterns = new List[MOExprSitePattern]
+	var sites_patterns = new List[MOSitePattern]
 
 	# List of patterns of MONew
 	var new_patterns = new List[MONewPattern]
@@ -446,9 +441,9 @@ redef class VirtualMachine
 	# Create (if not exists) and set a pattern for exprsites
 	fun set_exprsite_pattern(exprsite: MOExprSite, cs: CallSite)
 	do
-		var pattern: nullable MOExprSitePattern = null
+		var pattern: nullable MOSitePattern = null
 
-		for p in exprsites_patterns do
+		for p in sites_patterns do
 			if p.gp == cs.mproperty and p.rst == cs.recv then
 				pattern = p
 				break
@@ -456,8 +451,8 @@ redef class VirtualMachine
 		end
 
 		if pattern == null then 
-			pattern = new MOExprSitePattern(cs.recv, cs.mproperty)
-			exprsites_patterns.add(pattern)
+			pattern = new MOSitePattern(cs.recv, cs.mproperty)
+			sites_patterns.add(pattern)
 		end
 
 		pattern.add_exprsite(self, exprsite)
@@ -499,8 +494,8 @@ redef class VirtualMachine
 		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
 
 		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-		var compatibles_patterns = new List[MOExprSitePattern]
-		for p in exprsites_patterns do
+		var compatibles_patterns = new List[MOSitePattern]
+		for p in sites_patterns do
 			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
 		end
 
