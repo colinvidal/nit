@@ -3,6 +3,14 @@ module model_optimizations
 
 import virtual_machine
 
+redef class Sys
+	#
+	fun dprint(buf: String)
+	do
+#		print(buf)
+	end
+end
+
 # Root hierarchy of patterns
 abstract class MOPattern
 end
@@ -76,7 +84,7 @@ class MOSitePattern
 	# Add a new callee
 	fun add_lp(lp: MMethodDef)
 	do
-#		print("add lp {lp} in pattern {self}")
+#		dprint("add lp {lp} in pattern {self}")
 		if not lps.has(lp) then
 			lps.add(lp)
 			lp.callers.add(self)
@@ -97,7 +105,7 @@ class MOSitePattern
 	# the gp of self and if rst of lp is a subtype of rst of the pattern)
 	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
 	do
-		print("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
+		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
 		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
 			if gp == lp.mproperty then return true
 		end
@@ -107,7 +115,7 @@ class MOSitePattern
 	# Add a new branch on the pattern
 	fun handle_new_branch(lp: MMethodDef)
 	do
-#		print("pattern handle_new_branch")
+#		dprint("pattern handle_new_branch")
 		add_lp(lp)
 	end
 end
@@ -458,7 +466,7 @@ redef class VirtualMachine
 		end
 
 		pattern.add_exprsite(self, exprsite)
-#		print("ASendExpr pattern.exprsites: {pattern.exprsites}"s
+#		dprint("ASendExpr pattern.exprsites: {pattern.exprsites}"s
 	end
 
 	# Create (if not exists) and set a pattern for newsites
@@ -494,7 +502,7 @@ redef class VirtualMachine
 	# Handle new local property for update optimizing model
 	fun handle_new_branch(lp: MMethodDef)
 	do
-#		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
+#		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then dprint("new branch {lp.mclassdef} redefines {lp.name}")
 
 		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
 		var compatibles_patterns = new List[MOSitePattern]

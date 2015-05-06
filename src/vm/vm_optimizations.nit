@@ -360,7 +360,7 @@ redef class Variable
 	fun get_movar(node: AExpr): nullable MOVar
 	do
 		if movar == null then
-#			print("get_movar: {self} dep_exprs: {dep_exprs}")
+#			dprint("get_movar: {self} dep_exprs: {dep_exprs}")
 			if node isa ASelfExpr then
 				movar = new MOParam(0)
 			else if node isa AVarExpr then
@@ -381,7 +381,7 @@ redef class Variable
 						movar = new MOSSAVar(node.variable.position + 1, phi.first)
 					else
 						movar = new MOPhiVar(node.variable.position + 1, phi)
-						print("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
+						dprint("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
 					end
 				end
 			end
@@ -488,7 +488,7 @@ redef class AMethPropdef
 #			else
 #				buf += " -> {mo_dep_exprs.as(MOPhiVar).dependencies}"
 #			end
-#			print(buf)
+#			dprint(buf)
 #		end
 
 		mpropdef.as(not null).return_expr = mo_dep_exprs
@@ -530,7 +530,7 @@ redef class ASendExpr
 			end
 		end
 
-#		print("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
+#		dprint("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
 	end
 end
 
@@ -580,7 +580,7 @@ redef class MMethodDef
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
-		print("preexist_return mpropdef:{self}")
+		dprint("preexist_return mpropdef:{self}")
 		if not compiled then
 			return_expr.set_npre_nper
 			return return_expr.preexist_expr_value
@@ -612,7 +612,7 @@ redef class MMethodDef
 
 		if return_expr == null and monews.length == 0 and mosites.length == 0 then return
 
-		print("\npreexist_all of {self}")
+		dprint("\npreexist_all of {self}")
 		var debug_preexist: Int
 
 		if return_expr != null then
@@ -620,13 +620,13 @@ redef class MMethodDef
 			if return_expr.is_rec then return_expr.set_pval_nper
 			fill_nper(return_expr.as(not null))
 			debug_preexist = return_expr.preexist_expr_value
-			print("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
+			dprint("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
 		end
 	
 		for newexpr in monews do
 			debug_preexist = newexpr.preexist_expr
 			fill_nper(newexpr)
-			print("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
+			dprint("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
 			if newexpr.pattern.is_loaded then
 				sys.pstats.incr_loaded_new
 			else
@@ -636,7 +636,7 @@ redef class MMethodDef
 
 		for site in mosites do
 			debug_preexist = site.preexist_site
-			print("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}")
+			dprint("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}")
 			fill_nper(site.expr_recv)
 
 			if site.expr_recv.is_pre then
@@ -653,12 +653,12 @@ redef class MMethodDef
 
 			if site.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
 			
-			print("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
-			print("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
+			dprint("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
+			dprint("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
 
-		if exprs_preexist_mut.length > 0 then print("\tmutables pre: {exprs_preexist_mut}")
-		if exprs_npreexist_mut.length > 0 then print("\tmutables nper: {exprs_npreexist_mut}")
+		if exprs_preexist_mut.length > 0 then dprint("\tmutables pre: {exprs_preexist_mut}")
+		if exprs_npreexist_mut.length > 0 then dprint("\tmutables nper: {exprs_npreexist_mut}")
 	end
 end
 
@@ -917,7 +917,7 @@ redef class MOPhiVar
 		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
-#				print("MOPhiVar compute dep {dep} {dep.preexist_expr}")
+#				dprint("MOPhiVar compute dep {dep} {dep.preexist_expr}")
 				merge_preexistence(dep)
 				if is_npre_per then
 					break
@@ -994,21 +994,21 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-#		print("--------preexist_expr {self}")
+#		dprint("--------preexist_expr {self}")
 		if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
-#			print("\tpattern.cuc > 0")
+#			dprint("\tpattern.cuc > 0")
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
-#			print("\tpattern.perennial_status:{pattern.perennial_status}")
+#			dprint("\tpattern.perennial_status:{pattern.perennial_status}")
 		else if pattern.lp_all_perennial then 
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
-#			print("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
+#			dprint("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
 		else if pattern.lps.length == 0 then
 			set_npre_nper
 		else
-#			print("--------candidates: {pattern.lps}")
+#			dprint("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
 			for candidate in pattern.lps do
 				if not candidate.compiled then
@@ -1027,7 +1027,7 @@ redef class MOCallSite
 			end
 		end
 
-		print("\n")
+		dprint("\n")
 		return preexist_expr_value
 	end
 end
@@ -1037,7 +1037,7 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
-#		print("--------preexist_site {self} recv:{expr_recv}")
+#		dprint("--------preexist_site {self} recv:{expr_recv}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value
@@ -1073,12 +1073,12 @@ redef class MOSitePattern
 		super
 		cuc += 1
 
-		print("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
+		sys.dprint("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
 
 		if cuc == 1 then
 			for expr in exprsites do
 				# We must test the "site" side of the exprsite, so we must use the receiver
-#				print("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
+#				dprint("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
 
 				expr.expr_recv.init_preexist
 				expr.lp.propage_preexist
@@ -1102,14 +1102,14 @@ redef class MONewPattern
 			newexpr.set_ptype_per
 #			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
 
-#			print("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
+#			dprint("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
 
 			newexpr.lp.propage_npreexist
 
 			# Just for debug, remove it !
 #			newexpr.lp.compiled = false
 #			newexpr.lp.preexist_all
-#			print("\n\n")
+#			dprint("\n\n")
 		end
 	end
 end
