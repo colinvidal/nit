@@ -426,9 +426,7 @@ redef class ANode
 		if is_lit then
 			mo_expr = new MOLit
 		else
-			# Unimplemented case of node
-			print("Kind of node: {self} NYI")
-			abort
+			mo_expr = new MONYI
 		end
 
 		return mo_expr
@@ -865,6 +863,14 @@ redef class MOLit
 	redef fun preexist_expr do return preexist_expr_value
 end
 
+redef class MONYI
+	redef var preexist_expr_value = pmask_NPRE_PER
+
+	redef fun init_preexist do end
+
+	redef fun preexist_expr do return preexist_expr_value
+end
+
 redef class MOParam
 	redef var preexist_expr_value = pmask_PVAL_PER
 
@@ -981,8 +987,6 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-		if pattern.lps.length == 0 then abort
-
 #		print("--------preexist_expr {self}")
 		if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
@@ -994,6 +998,8 @@ redef class MOCallSite
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
 #			print("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
+		else if pattern.lps.length == 0 then
+			set_npre_nper
 		else
 #			print("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
