@@ -470,7 +470,13 @@ redef class AMethPropdef
 		end
 	
 		if mo_dep_exprs != null then
-			print("ast apropdef {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}")
+			var buf = "Return expression in {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
+			if mo_dep_exprs isa MOSSAVar then
+				buf += " -> {mo_dep_exprs.as(MOSSAVar).dependency}"
+			else
+				buf += " -> {mo_dep_exprs.as(MOPhiVar).dependencies}"
+			end
+			print(buf)
 		end
 
 		mpropdef.as(not null).return_expr = mo_dep_exprs
@@ -593,19 +599,19 @@ redef class MMethodDef
 		compiled = true
 
 		print("\npreexist_all of {self}")
-		var preexist: Int
+		var debug_preexist: Int
 
 		if return_expr != null then
 			if return_expr.is_rec then return_expr.set_pval_nper
 			fill_nper(return_expr.as(not null))
-			preexist = return_expr.preexist_expr_value
-			print("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
+			debug_preexist = return_expr.preexist_expr_value
+			print("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
 		end
 	
 		for newexpr in monews do
-			preexist = newexpr.preexist_expr
+			debug_preexist = newexpr.preexist_expr
 			fill_nper(newexpr)
-			print("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {preexist} {preexist.preexists_bits}")
+			print("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
 			if newexpr.pattern.is_loaded then
 				sys.pstats.incr_loaded_new
 			else
@@ -614,8 +620,8 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
-			preexist = site.preexist_site
-			print("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}")
+			debug_preexist = site.preexist_site
+			print("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}")
 			fill_nper(site.expr_recv)
 
 			if site.expr_recv.is_pre then
@@ -728,6 +734,7 @@ redef class MOExpr
 	# Affect status mask
 	private fun set_status_mask(mask: Int)
 	do
+		if is_pre_unknown or is_rec then preexist_expr_value = 0
 		preexist_expr_value = preexist_expr_value.rshift(4).lshift(4).bin_or(mask)
 	end
 
@@ -867,11 +874,18 @@ redef class MOParam
 end
 
 redef class MONew
-	redef var preexist_expr_value = pmask_NPRE_NPER
+	redef fun init_preexist do
+		if pattern.is_loaded then
+			set_ptype_per
+		else
+			set_npre_nper
+		end
+	end
 
-	redef fun init_preexist do if pattern.is_loaded then set_ptype_per
-
-	redef fun preexist_expr do return preexist_expr_value
+	redef fun preexist_expr do 
+		if is_pre_unknown then init_preexist
+		return preexist_expr_value
+	end
 end
 
 redef class MOSSAVar
