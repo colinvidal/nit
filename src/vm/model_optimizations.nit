@@ -209,11 +209,6 @@ class MOLit
 	super MOExpr
 end
 
-# MO of unimplemented cases of the AST
-class MONYI
-	super MOExpr
-end
-
 # Root hierarchy of objets sites
 abstract class MOSite
 	# The expression of the receiver

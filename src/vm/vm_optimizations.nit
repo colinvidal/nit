@@ -357,7 +357,7 @@ redef class Variable
 	var movar: nullable MOVar
 
 	# Create (if doesn't exists) the movar corresponding to AST node, and return it
-	fun get_movar(node: AExpr): MOVar
+	fun get_movar(node: AExpr): nullable MOVar
 	do
 		if movar == null then
 #			print("get_movar: {self} dep_exprs: {dep_exprs}")
@@ -369,17 +369,24 @@ redef class Variable
 					movar = new MOParam(node.variable.position + 1)
 				else if node.variable.dep_exprs.length == 1 then
 					var mo = node.variable.dep_exprs.first.ast2mo
-					movar = new MOSSAVar(node.variable.position + 1, mo)
+					if mo != null then movar = new MOSSAVar(node.variable.position + 1, mo)
 				else
 					var phi = new List[MOExpr]
-					for a_expr in node.variable.dep_exprs do phi.add(a_expr.ast2mo)
-					print("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
-					movar = new MOPhiVar(node.variable.position + 1, phi)
+					for a_expr in node.variable.dep_exprs do 
+						var mo = a_expr.ast2mo
+						if mo != null then phi.add(mo)
+					end
+
+					if phi.length == 1 then
+						movar = new MOSSAVar(node.variable.position + 1, phi.first)
+					else
+						movar = new MOPhiVar(node.variable.position + 1, phi)
+						print("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
+					end
 				end
 			end
-			assert movar != null
 		end
-		return movar.as(not null)
+		return movar
 	end
 end
 
@@ -405,8 +412,8 @@ redef class ANewExpr
 end
 
 redef class ANode
-	# True if self is a literal node
-	fun is_lit: Bool
+	# True if self is a primitive value
+	fun is_primitive: Bool
 	do
 		if self isa AIntExpr then return true
 		if self isa ACharExpr then return true
@@ -419,17 +426,15 @@ redef class ANode
 	end
 
 	# Convert AST node into MOExpression
-	fun ast2mo: MOExpr
+	fun ast2mo: nullable MOExpr
 	do
-		var mo_expr: MOExpr
-		
-		if is_lit then
-			mo_expr = new MOLit
+		if is_primitive then
+			sys.pstats.incr_primitives
 		else
-			mo_expr = new MONYI
+			sys.pstats.incr_nyi
 		end
 
-		return mo_expr
+		return null
 	end
 end
 
@@ -460,13 +465,20 @@ redef class AMethPropdef
 		super(vm)
 
 		if returnvar.dep_exprs.length == 1 then
-			mo_dep_exprs = new MOSSAVar(returnvar.position, returnvar.dep_exprs.first.ast2mo)
+			var moexpr = returnvar.dep_exprs.first.ast2mo
+			if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
 		else if returnvar.dep_exprs.length > 1 then
 			var deps = new List[MOExpr]
-			for a_expr in returnvar.dep_exprs do deps.add(a_expr.ast2mo)
-			mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
-#		else 
-#			print("returnvar.dep_exprs null in {mpropdef.as(not null)}")
+			for a_expr in returnvar.dep_exprs do
+				var moexpr = a_expr.ast2mo
+				if moexpr != null then deps.add(moexpr)
+			end
+
+			if deps.length == 1 then
+				mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
+			else
+				mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
+			end
 		end
 
 #		if mo_dep_exprs != null then
@@ -506,13 +518,15 @@ redef class ASendExpr
 	do
 		var recv = n_expr.ast2mo
 
-		mocallsite = new MOCallSite(recv, lp)
-		lp.mosites.add(mocallsite)
-		vm.set_site_pattern(mocallsite, callsite.as(not null))
+		if recv != null then
+			mocallsite = new MOCallSite(recv, lp)
+			lp.mosites.add(mocallsite)
+			vm.set_site_pattern(mocallsite, callsite.as(not null))
 
-		# Expressions arguments given to the method called
-		for arg in raw_arguments do
-			mocallsite.given_args.add(arg.ast2mo)
+			# Expressions arguments given to the method called
+			for arg in raw_arguments do
+				mocallsite.given_args.add(arg.ast2mo.as(not null))
+			end
 		end
 
 #		print("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
@@ -863,14 +877,6 @@ redef class MOLit
 	redef fun preexist_expr do return preexist_expr_value
 end
 
-redef class MONYI
-	redef var preexist_expr_value = pmask_NPRE_PER
-
-	redef fun init_preexist do end
-
-	redef fun preexist_expr do return preexist_expr_value
-end
-
 redef class MOParam
 	redef var preexist_expr_value = pmask_PVAL_PER
 
@@ -1148,6 +1154,16 @@ class PreexistenceStat
 	var writeattr_site = 0
 	#
 	fun incr_writeattr_site do writeattr_site += 1
+	
+	# Count of primitives (and ignored) receivers
+	var primitives = 0
+	#
+	fun incr_primitives do primitives += 1
+
+	# Count of NYI receivers
+	var nyi = 0
+	#
+	fun incr_nyi do nyi += 1
 
 	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
 	var concretes_receivers_site = 0
