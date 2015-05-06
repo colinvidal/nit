@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-#		print(buf)
+		print(buf)
 	end
 end
 
@@ -105,7 +105,7 @@ class MOSitePattern
 	# the gp of self and if rst of lp is a subtype of rst of the pattern)
 	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
 	do
-		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
+#		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
 		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
 			if gp == lp.mproperty then return true
 		end

@@ -411,9 +411,20 @@ redef class ANewExpr
 	end
 end
 
+redef class MType
+	# True if self is a primitive type
+	fun is_primitive_type: Bool
+	do
+		if self.to_s == "Int" then return true
+		if self.to_s == "Numeric" then return true
+		if self.to_s == "String" then return true
+		return false
+	end
+end
+
 redef class ANode
-	# True if self is a primitive value
-	fun is_primitive: Bool
+	# True if self is a primitive node
+	fun is_primitive_node: Bool
 	do
 		if self isa AIntExpr then return true
 		if self isa ACharExpr then return true
@@ -428,7 +439,7 @@ redef class ANode
 	# Convert AST node into MOExpression
 	fun ast2mo: nullable MOExpr
 	do
-		if is_primitive then
+		if is_primitive_node then
 			sys.pstats.incr_primitives
 		else
 			sys.pstats.incr_nyi
@@ -499,7 +510,10 @@ end
 
 redef class ASendExpr
 	# Site invocation associated with this node
-	var mocallsite: MOCallSite
+	var mocallsite: nullable MOCallSite
+	
+	# Check if primitive
+	var primitive = false
 
 	redef fun generate_basicBlocks(vm, old_block)
 	do
@@ -510,27 +524,42 @@ redef class ASendExpr
 
 	redef fun ast2mo
 	do
+		if mocallsite  == null then assert primitive
 		return mocallsite
 	end
 
 	# Compile this ast node in MOCallSite after SSA
 	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
+		if n_expr isa ASendExpr then
+			if n_expr.as(ASendExpr).callsite.msignature.return_mtype.is_primitive_type then
+				primitive = true
+				sys.pstats.incr_primitives
+			end
+		else if n_expr isa AVarExpr then
+			if n_expr.as(AVarExpr).mtype.is_primitive_type then
+				primitive = true
+				sys.pstats.incr_primitives
+			end
+		end
+
 		var recv = n_expr.ast2mo
 
-		if recv != null then
+		if recv != null and not primitive then
 			mocallsite = new MOCallSite(recv, lp)
-			lp.mosites.add(mocallsite)
-			vm.set_site_pattern(mocallsite, callsite.as(not null))
+			lp.mosites.add(mocallsite.as(not null))
+			vm.set_site_pattern(mocallsite.as(not null), callsite.as(not null))
 
 			# Expressions arguments given to the method called
 			for arg in raw_arguments do
 				var moexpr = arg.ast2mo
 				if moexpr != null then mocallsite.given_args.add(moexpr)
 			end
+		else
+			primitive = true
 		end
 
-#		dprint("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
+		#		dprint("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
 	end
 end
 
@@ -1188,6 +1217,8 @@ class PreexistenceStat
 		ret += "\treadattr_site: {readattr_site}\n"
 		ret += "\twriteattr_site: {writeattr_site}\n"
 		ret += "\n"
+		ret += "\tprimitives: {primitives}\n"
+		ret += "\tnyi: {nyi}\n"
 		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
 		ret += "--------------------------------------------------------\n"
 

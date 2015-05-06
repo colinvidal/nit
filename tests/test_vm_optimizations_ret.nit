@@ -7,6 +7,10 @@ class B
 	redef fun m do end
 end
 
+redef class Int
+	fun foo:Int do return 4 end
+end
+
 fun foo: A do 
 	return new A
 end
@@ -20,3 +24,5 @@ foo.m
 
 var a = new A
 bar(a).m
+
+1.foo.foo.foo
