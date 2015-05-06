@@ -525,7 +525,8 @@ redef class ASendExpr
 
 			# Expressions arguments given to the method called
 			for arg in raw_arguments do
-				mocallsite.given_args.add(arg.ast2mo.as(not null))
+				var moexpr = arg.ast2mo
+				if moexpr != null then mocallsite.given_args.add(moexpr)
 			end
 		end
 
