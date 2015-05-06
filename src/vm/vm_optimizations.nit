@@ -467,19 +467,19 @@ redef class AMethPropdef
 			var deps = new List[MOExpr]
 			for a_expr in returnvar.dep_exprs do deps.add(a_expr.ast2mo)
 			mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
-		else 
-			print("returnvar.dep_exprs null in {mpropdef.as(not null)}")
+#		else 
+#			print("returnvar.dep_exprs null in {mpropdef.as(not null)}")
 		end
 
-		if mo_dep_exprs != null then
-			var buf = "\nReturn expression in {mpropdef.as(not null)} dep_exprs:{returnvar.dep_exprs} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
-			if mo_dep_exprs isa MOSSAVar then
-				buf += " -> {mo_dep_exprs.as(MOSSAVar).dependency}"
-			else
-				buf += " -> {mo_dep_exprs.as(MOPhiVar).dependencies}"
-			end
-			print(buf)
-		end
+#		if mo_dep_exprs != null then
+#			var buf = "\nReturn expression in {mpropdef.as(not null)} dep_exprs:{returnvar.dep_exprs} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
+#			if mo_dep_exprs isa MOSSAVar then
+#				buf += " -> {mo_dep_exprs.as(MOSSAVar).dependency}"
+#			else
+#				buf += " -> {mo_dep_exprs.as(MOPhiVar).dependencies}"
+#			end
+#			print(buf)
+#		end
 
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
@@ -500,12 +500,6 @@ redef class ASendExpr
 
 	redef fun ast2mo
 	do
-		# If this MOCallSite is used as receiver (this is the case if ASendExpr.ast2mo is called)
-		# then all local property candidates to it GP must have a return expression
-#		for lp in mocallsite.pattern.lps do 
-#			print("\t\t\t{mocallsite} {mocallsite.pattern.rst}.{mocallsite.pattern.gp} {lp}")
-#			assert lp.return_expr != null
-#		end
 		return mocallsite
 	end
 
@@ -523,7 +517,7 @@ redef class ASendExpr
 			mocallsite.given_args.add(arg.ast2mo)
 		end
 
-		print("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
+#		print("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
 	end
 end
 
@@ -987,7 +981,9 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-		print("--------preexist_expr {self}")
+		if pattern.lps.length == 0 then abort
+
+#		print("--------preexist_expr {self}")
 		if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
 #			print("\tpattern.cuc > 0")
@@ -998,11 +994,8 @@ redef class MOCallSite
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
 #			print("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
-		else if pattern.lps.length == 0 then 
-			# No candidate method already loaded
-			set_npre_nper
 		else
-			print("--------candidates: {pattern.lps}")
+#			print("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
 			for candidate in pattern.lps do
 				if not candidate.compiled then
@@ -1031,7 +1024,7 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
-		print("--------preexist_site {self} recv:{expr_recv}")
+#		print("--------preexist_site {self} recv:{expr_recv}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value

@@ -46,6 +46,9 @@ class MOSitePattern
 	# Add a new exprsite on the pattern
 	fun add_exprsite(vm: VirtualMachine, exprsite: MOExprSite)
 	do
+		exprsites.add(exprsite)
+		exprsite.pattern = self
+
 		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
 		# Tell to each added lps that this pattern can be a caller
 		for lp in gp.loaded_lps do
@@ -53,9 +56,6 @@ class MOSitePattern
 				add_lp(lp)
 			end
 		end
-		
-		exprsites.add(exprsite)
-		exprsite.pattern = self
 	end
 
 	# Determine an implementation with pic/rst only
@@ -76,7 +76,7 @@ class MOSitePattern
 	# Add a new callee
 	fun add_lp(lp: MMethodDef)
 	do
-		print("add lp {lp} in pattern {self}")
+#		print("add lp {lp} in pattern {self}")
 		if not lps.has(lp) then
 			lps.add(lp)
 			lp.callers.add(self)
@@ -106,7 +106,7 @@ class MOSitePattern
 	# Add a new branch on the pattern
 	fun handle_new_branch(lp: MMethodDef)
 	do
-		print("pattern handle_new_branch")
+#		print("pattern handle_new_branch")
 		add_lp(lp)
 	end
 end
@@ -404,7 +404,7 @@ redef class MClass
 		# add introduces and redifines local properties
 		# mclassdef.mpropdefs contains intro & redef methods
 		for classdef in mclassdefs do
-			for i in [1..classdef.mpropdefs.length - 1] do
+			for i in [0..classdef.mpropdefs.length - 1] do
 				var mdef = classdef.mpropdefs[i]
 				if mdef isa MMethodDef then
 					# Add the method implementation in the loaded metods of the associated global property
@@ -457,7 +457,7 @@ redef class VirtualMachine
 		end
 
 		pattern.add_exprsite(self, exprsite)
-		print("ASendExpr pattern.exprsites: {pattern.exprsites}")
+#		print("ASendExpr pattern.exprsites: {pattern.exprsites}"s
 	end
 
 	# Create (if not exists) and set a pattern for newsites
@@ -482,18 +482,18 @@ redef class VirtualMachine
 	end
 
 #	# For tests only, to remove !
-	fun debug_if_not_internal(module_str: String): Bool
-	do
-		if module_str == "kernel" then return false
-		if module_str == "string" then return false
-		if module_str == "numeric" then return false
-		return true
-	end
+#	fun debug_if_not_internal(module_str: String): Bool
+#	do
+#		if module_str == "kernel" then return false
+#		if module_str == "string" then return false
+#		if module_str == "numeric" then return false
+#		return true
+#	end
 
 	# Handle new local property for update optimizing model
 	fun handle_new_branch(lp: MMethodDef)
 	do
-		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
+#		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then print("new branch {lp.mclassdef} redefines {lp.name}")
 
 		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
 		var compatibles_patterns = new List[MOSitePattern]
