@@ -24,7 +24,7 @@ import model_optimizations
 redef class VirtualMachine
 	redef fun new_frame(node, mpropdef, args)
 	do
-		var ret = super
+		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then
 			mpropdef.preexist_all(self)
 #			mpropdef.compiled = true
@@ -467,10 +467,12 @@ redef class AMethPropdef
 			var deps = new List[MOExpr]
 			for a_expr in returnvar.dep_exprs do deps.add(a_expr.ast2mo)
 			mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
+		else 
+			print("returnvar.dep_exprs null in {mpropdef.as(not null)}")
 		end
-	
+
 		if mo_dep_exprs != null then
-			var buf = "Return expression in {mpropdef.as(not null)} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
+			var buf = "\nReturn expression in {mpropdef.as(not null)} dep_exprs:{returnvar.dep_exprs} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
 			if mo_dep_exprs isa MOSSAVar then
 				buf += " -> {mo_dep_exprs.as(MOSSAVar).dependency}"
 			else
@@ -514,12 +516,14 @@ redef class ASendExpr
 
 		mocallsite = new MOCallSite(recv, lp)
 		lp.mosites.add(mocallsite)
-		vm.set_exprsite_pattern(mocallsite, callsite.as(not null))
+		vm.set_site_pattern(mocallsite, callsite.as(not null))
 
 		# Expressions arguments given to the method called
 		for arg in raw_arguments do
 			mocallsite.given_args.add(arg.ast2mo)
 		end
+
+		print("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
 	end
 end
 
@@ -569,6 +573,7 @@ redef class MMethodDef
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
+		print("preexist_return mpropdef:{self}")
 		if not compiled then
 			return_expr.set_npre_nper
 			return return_expr.preexist_expr_value
@@ -598,10 +603,13 @@ redef class MMethodDef
 		if compiled then return
 		compiled = true
 
+		if return_expr == null and monews.length == 0 and mosites.length == 0 then return
+
 		print("\npreexist_all of {self}")
 		var debug_preexist: Int
 
 		if return_expr != null then
+			return_expr.preexist_expr
 			if return_expr.is_rec then return_expr.set_pval_nper
 			fill_nper(return_expr.as(not null))
 			debug_preexist = return_expr.preexist_expr_value
@@ -642,8 +650,8 @@ redef class MMethodDef
 			print("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
 
-		print("\tmutables pre: {exprs_preexist_mut}")
-		print("\tmutables nper: {exprs_npreexist_mut}")
+		if exprs_preexist_mut.length > 0 then print("\tmutables pre: {exprs_preexist_mut}")
+		if exprs_npreexist_mut.length > 0 then print("\tmutables nper: {exprs_npreexist_mut}")
 	end
 end
 
@@ -979,16 +987,30 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
+		print("--------preexist_expr {self}")
 		if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
+#			print("\tpattern.cuc > 0")
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
+#			print("\tpattern.perennial_status:{pattern.perennial_status}")
 		else if pattern.lp_all_perennial then 
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
+#			print("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
+		else if pattern.lps.length == 0 then 
+			# No candidate method already loaded
+			set_npre_nper
 		else
+			print("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
 			for candidate in pattern.lps do
+				if not candidate.compiled then
+					# The lp could be known by the model but not already compiled from ast to mo
+					# So, we must NOT check it's return_expr (it could be still null)
+					set_npre_nper
+					break
+				end
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
 				if is_npre_per then
@@ -999,6 +1021,7 @@ redef class MOCallSite
 			end
 		end
 
+		print("\n")
 		return preexist_expr_value
 	end
 end
@@ -1008,6 +1031,7 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
+		print("--------preexist_site {self} recv:{expr_recv}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value

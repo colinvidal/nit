@@ -76,6 +76,7 @@ class MOSitePattern
 	# Add a new callee
 	fun add_lp(lp: MMethodDef)
 	do
+		print("add lp {lp} in pattern {self}")
 		if not lps.has(lp) then
 			lps.add(lp)
 			lp.callers.add(self)
@@ -106,7 +107,7 @@ class MOSitePattern
 	fun handle_new_branch(lp: MMethodDef)
 	do
 		print("pattern handle_new_branch")
-#		add_lp(lp)
+		add_lp(lp)
 	end
 end
 
@@ -439,7 +440,7 @@ redef class VirtualMachine
 	var new_patterns = new List[MONewPattern]
 
 	# Create (if not exists) and set a pattern for exprsites
-	fun set_exprsite_pattern(exprsite: MOExprSite, cs: CallSite)
+	fun set_site_pattern(exprsite: MOExprSite, cs: CallSite)
 	do
 		var pattern: nullable MOSitePattern = null
 
@@ -456,6 +457,7 @@ redef class VirtualMachine
 		end
 
 		pattern.add_exprsite(self, exprsite)
+		print("ASendExpr pattern.exprsites: {pattern.exprsites}")
 	end
 
 	# Create (if not exists) and set a pattern for newsites
@@ -479,7 +481,7 @@ redef class VirtualMachine
 		newsite.pattern = pattern
 	end
 
-	# For tests only, to remove !
+#	# For tests only, to remove !
 	fun debug_if_not_internal(module_str: String): Bool
 	do
 		if module_str == "kernel" then return false
