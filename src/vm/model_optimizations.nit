@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-		print(buf)
+#		print(buf)
 	end
 end
 
@@ -393,6 +393,12 @@ class StaticImpl
 end
 
 redef class MClass
+	# List of patterns of MOExprSite
+	var sites_patterns = new List[MOSitePattern]
+
+	# List of patterns of MONew
+	var new_patterns = new List[MONewPattern]
+	
 	# Linearization of classes hierarchy
 	var ordering: nullable Array[MClass]
 
