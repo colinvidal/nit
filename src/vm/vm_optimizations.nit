@@ -412,7 +412,7 @@ redef class ANewExpr
 		if not recvtype.is_primitive_type then
 			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
 			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
-			vm.set_new_pattern(monew.as(not null), recvtype.mclass)
+			recvtype.mclass.set_new_pattern(monew.as(not null))
 		end
 		return sup
 	end
@@ -514,9 +514,6 @@ redef class ASendExpr
 	# Site invocation associated with this node
 	var mocallsite: nullable MOCallSite
 	
-	# Check if primitive
-	var primitive = false
-
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
@@ -527,53 +524,40 @@ redef class ASendExpr
 
 	redef fun ast2mo
 	do
-		# This assert will failed with call-next-method
-		# Maybe because we try to get mocallsite before analyse self ?
-		# So we don't even know if its a primitive return...
-#		if mocallsite  == null then assert primitive
 		return mocallsite
 	end
 
 	# Compile this ast node in MOCallSite after SSA
 	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
-#		if n_expr isa ASendExpr then
-#			if n_expr.as(ASendExpr).callsite.msignature.return_mtype.is_primitive_type then
-#				primitive = true
-#				sys.pstats.incr_primitives
-#			end
-#		else if n_expr isa AVarExpr then
-#			# Null variables are consided as primitive
-#			if n_expr.mtype == null or n_expr.mtype.is_primitive_type then
-#				primitive = true
-#				sys.pstats.incr_primitives
-#			end
-#		end
-
-		if n_expr.mtype == null then
+		var ignore = false
+		
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			# Ignore litterals cases of the analysis
+			ignore = true
 			sys.pstats.incr_lits
 		else if n_expr.mtype.is_primitive_type then
-			primitive = true
+			# Ignore primitives cases of the analysis
+			ignore = true
 			sys.pstats.incr_primitives
 		end
 
 		var recv = n_expr.ast2mo
 
-		if recv != null and not primitive then
+		if recv != null and not ignore then
 			mocallsite = new MOCallSite(recv, lp)
 			lp.mosites.add(mocallsite.as(not null))
-			vm.set_site_pattern(mocallsite.as(not null), callsite.as(not null))
+		
+			# Null cases are already eliminated, to get_mclass can't return null
+			var recv_class = callsite.as(not null).recv.get_mclass.as(not null)
+			recv_class.set_site_pattern(mocallsite.as(not null), callsite.as(not null))
 
 			# Expressions arguments given to the method called
 			for arg in raw_arguments do
 				var moexpr = arg.ast2mo
 				if moexpr != null then mocallsite.given_args.add(moexpr)
 			end
-		else
-			primitive = true
 		end
-
-		#		dprint("ASendExpr compile pattern {mocallsite} {callsite.recv} {callsite.mproperty} in {vm.current_propdef}")
 	end
 end
 
@@ -1266,9 +1250,9 @@ end
 
 # Change preexistence state of new sites compiled before loading
 redef class MClass
-	redef fun handle_new_branch(vm)
+	redef fun handle_new_branch
 	do
 		super
-		for p in vm.new_patterns do if p.cls == self then p.set_preexist_newsite
+		new_pattern.set_preexist_newsite
 	end
 end

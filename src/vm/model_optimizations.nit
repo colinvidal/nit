@@ -52,7 +52,7 @@ class MOSitePattern
 	var exprsites = new List[MOExprSite]
 
 	# Add a new exprsite on the pattern
-	fun add_exprsite(vm: VirtualMachine, exprsite: MOExprSite)
+	fun add_exprsite(exprsite: MOExprSite)
 	do
 		exprsites.add(exprsite)
 		exprsite.pattern = self
@@ -60,9 +60,9 @@ class MOSitePattern
 		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
 		# Tell to each added lps that this pattern can be a caller
 		for lp in gp.loaded_lps do
-			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
+#			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
 				add_lp(lp)
-			end
+#			end
 		end
 	end
 
@@ -74,9 +74,8 @@ class MOSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-		else if rst isa MNullableType and rst.as(MNullableType).mtype.as(MClassType).mclass.has_unique_method_pos(gp) then
-			impl = new SSTImpl(true, gp.absolute_offset)
-		else if rst isa MClassType and rst.as(MClassType).mclass.has_unique_method_pos(gp) then 
+		else if rst.get_mclass != null and rst.get_mclass.has_unique_method_pos(gp) then
+			# We check if get_mclass is not null in case of a nullable become null
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
@@ -91,9 +90,8 @@ class MOSitePattern
 			lps.add(lp)
 			lp.callers.add(self)
 			if impl != null and impl.is_mutable then impl = null
+			for expr in exprsites do expr.init_impl
 		end
-
-		for expr in exprsites do expr.init_impl
 	end
 
 	# Get implementation, compute it if not exists
@@ -105,14 +103,14 @@ class MOSitePattern
 
 	# True if a lp is compatible with self pattern (eg. if the lp has
 	# the gp of self and if rst of lp is a subtype of rst of the pattern)
-	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
-	do
-#		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
-		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
-			if gp == lp.mproperty then return true
-		end
-		return false
-	end
+#	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
+#	do
+##		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
+#		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
+#			if gp == lp.mproperty then return true
+#		end
+#		return false
+#	end
 
 	# Add a new branch on the pattern
 	fun handle_new_branch(lp: MMethodDef)
@@ -396,9 +394,9 @@ redef class MClass
 	# List of patterns of MOExprSite
 	var sites_patterns = new List[MOSitePattern]
 
-	# List of patterns of MONew
-	var new_patterns = new List[MONewPattern]
-	
+	# Pattern of MONew of self
+	var new_pattern = new MONewPattern(self)
+
 	# Linearization of classes hierarchy
 	var ordering: nullable Array[MClass]
 
@@ -416,19 +414,33 @@ redef class MClass
 	end
 
 	# Detect new branches added by a loading class
-	fun handle_new_branch(vm: VirtualMachine)
-	do
-		# add introduces and redifines local properties
+	# Add introduces and redifines local properties
+	fun handle_new_branch	
+	do	
+		var redefs = new List[MMethodDef]
+
 		# mclassdef.mpropdefs contains intro & redef methods
 		for classdef in mclassdefs do
 			for i in [0..classdef.mpropdefs.length - 1] do
 				var mdef = classdef.mpropdefs[i]
 				if mdef isa MMethodDef then
-					# Add the method implementation in the loaded metods of the associated global property
+					# Add the method implementation in loadeds implementations of the associated gp
 					mdef.mproperty.loaded_lps.add(mdef)
 					if not mdef.is_intro then
 						# Tell the patterns using this method there is a new branch
-						vm.handle_new_branch(mdef)
+#						vm.handle_new_branch(mdef)
+						redefs.add(mdef)
+					end
+				end
+			end
+		end
+
+		for lp in redefs do
+			for parent in ordering do
+				for p in parent.sites_patterns do
+					if p.gp == lp.mproperty then 
+						if not sites_patterns.has(p) then sites_patterns.add(p)
+						p.handle_new_branch(lp)
 					end
 				end
 			end
@@ -447,14 +459,6 @@ redef class MClass
 		if ordering == null then ordering = super(v)
 		return ordering.as(not null)
 	end
-end
-
-redef class VirtualMachine
-	# List of patterns of MOExprSite
-	var sites_patterns = new List[MOSitePattern]
-
-	# List of patterns of MONew
-	var new_patterns = new List[MONewPattern]
 
 	# Create (if not exists) and set a pattern for exprsites
 	fun set_site_pattern(exprsite: MOExprSite, cs: CallSite)
@@ -473,30 +477,25 @@ redef class VirtualMachine
 			sites_patterns.add(pattern)
 		end
 
-		pattern.add_exprsite(self, exprsite)
+		pattern.add_exprsite(exprsite)
 #		dprint("ASendExpr pattern.exprsites: {pattern.exprsites}"s
 	end
 
-	# Create (if not exists) and set a pattern for newsites
-	fun set_new_pattern(newsite: MONew, cls: MClass)
+	# Add newsite expression in the NewPattern assocociated to this class
+	fun set_new_pattern(newsite: MONew)
 	do
-		var pattern: nullable MONewPattern = null
-
-		for p in new_patterns do
-			if p.cls == cls then
-				pattern = p
-				break
-			end
-		end
-
-		if pattern == null then
-			pattern = new MONewPattern(cls)
-			new_patterns.add(pattern)
-		end
-
-		pattern.newexprs.add(newsite)
-		newsite.pattern = pattern
+		new_pattern.newexprs.add(newsite)
+		newsite.pattern = new_pattern
 	end
+end
+
+redef class VirtualMachine
+	# List of patterns of MOExprSite
+#	var sites_patterns = new List[MOSitePattern]
+
+	# List of patterns of MONew
+	var new_patterns = new List[MONewPattern]
+
 
 #	# For tests only, to remove !
 #	fun debug_if_not_internal(module_str: String): Bool
@@ -507,20 +506,20 @@ redef class VirtualMachine
 #		return true
 #	end
 
-	# Handle new local property for update optimizing model
-	fun handle_new_branch(lp: MMethodDef)
-	do
-#		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then dprint("new branch {lp.mclassdef} redefines {lp.name}")
-
-		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-		var compatibles_patterns = new List[MOSitePattern]
-		for p in sites_patterns do
-			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
-		end
-#		if compatibles_patterns.length == 0 then dprint("no compatible patterns for {lp}")
-
-		for p in compatibles_patterns do p.handle_new_branch(lp)
-	end
+#	# Handle new local property for update optimizing model
+#	fun handle_new_branch(lp: MMethodDef)
+#	do
+##		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then dprint("new branch {lp.mclassdef} redefines {lp.name}")
+#
+#		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
+#		var compatibles_patterns = new List[MOSitePattern]
+#		for p in sites_patterns do
+#			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
+#		end
+##		if compatibles_patterns.length == 0 then dprint("no compatible patterns for {lp}")
+#
+#		for p in compatibles_patterns do p.handle_new_branch(lp)
+#	end
 
 	redef fun create_class(mclass)
 	do
@@ -533,7 +532,8 @@ redef class VirtualMachine
 		super(mclass)
 
 		for cls in implicit_loaded do
-			cls.handle_new_branch(self)
+#			cls.handle_new_branch(self)
+			cls.handle_new_branch
 		end
 	end
 end
@@ -547,6 +547,21 @@ redef class MType
 		if self.to_s == "String" then return true
 		if self.to_s == "nullable String" then return true
 		return false
+	end
+
+	# Get the class of the type
+	fun get_mclass: nullable MClass
+	do
+		if self isa MClassType then
+			return self.mclass
+		else if self isa MNullableType then
+			return self.mtype.as(MClassType).mclass
+		else if self isa MNullType then
+			return null
+		else
+			# NYI
+			abort
+		end
 	end
 end
 
