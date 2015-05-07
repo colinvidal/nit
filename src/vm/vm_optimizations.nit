@@ -444,6 +444,7 @@ redef class ANode
 			sys.pstats.incr_primitives
 		else
 			sys.pstats.incr_nyi
+			dprint("WARN: NYI {self}")
 		end
 
 		return null
@@ -519,7 +520,8 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		if not self isa ABinopExpr then vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
+#		if not self isa ABinopExpr then vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
+		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
 		return sup
 	end
 
@@ -535,17 +537,24 @@ redef class ASendExpr
 	# Compile this ast node in MOCallSite after SSA
 	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
-		if n_expr isa ASendExpr then
-			if n_expr.as(ASendExpr).callsite.msignature.return_mtype.is_primitive_type then
-				primitive = true
-				sys.pstats.incr_primitives
-			end
-		else if n_expr isa AVarExpr then
-			# Null variables are consided as primitive
-			if n_expr.mtype == null or n_expr.mtype.is_primitive_type then
-				primitive = true
-				sys.pstats.incr_primitives
-			end
+#		if n_expr isa ASendExpr then
+#			if n_expr.as(ASendExpr).callsite.msignature.return_mtype.is_primitive_type then
+#				primitive = true
+#				sys.pstats.incr_primitives
+#			end
+#		else if n_expr isa AVarExpr then
+#			# Null variables are consided as primitive
+#			if n_expr.mtype == null or n_expr.mtype.is_primitive_type then
+#				primitive = true
+#				sys.pstats.incr_primitives
+#			end
+#		end
+
+		if n_expr.mtype == null then
+			sys.pstats.incr_lits
+		else if n_expr.mtype.is_primitive_type then
+			primitive = true
+			sys.pstats.incr_primitives
 		end
 
 		var recv = n_expr.ast2mo
@@ -1210,6 +1219,11 @@ class PreexistenceStat
 	#
 	fun incr_concretes_receivers_site do concretes_receivers_site += 1
 
+	# Count of site with litterals
+	var lits = 0
+	#
+	fun incr_lits do lits += 1
+
 	# Display stats informations
 	fun infos: String
 	do
@@ -1228,6 +1242,7 @@ class PreexistenceStat
 		ret += "\twriteattr_site: {writeattr_site}\n"
 		ret += "\n"
 		ret += "\tprimitives: {primitives}\n"
+		ret += "\tlits: {lits}\n"
 		ret += "\tnyi: {nyi}\n"
 		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
 		ret += "--------------------------------------------------------\n"
