@@ -7,7 +7,7 @@ end
 
 class B
 	super A
-#	redef fun foo: Int do return super + 10
+	redef fun foo: Int do return super + 10
 	redef fun bar=(i: Int)
 	do
 		'#'.output
@@ -30,11 +30,11 @@ b.foo.output
 var c = b.foo
 c.output
 
-#b.foo = 100
-#b.foo.output
-#'\n'.output
-#b.bar.output
-#b.bar = 200
+b.foo = 100
+b.foo.output
+'\n'.output
+b.bar.output
+b.bar = 200
 #b.bar.output
 #'\n'.output
 #b.baz.output

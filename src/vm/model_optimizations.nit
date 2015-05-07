@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-		print(buf)
+#		print(buf)
 	end
 end
 
@@ -74,7 +74,9 @@ class MOSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-		else if rst.as(MClassType).mclass.has_unique_method_pos(gp) then 
+		else if rst isa MNullableType and rst.as(MNullableType).mtype.as(MClassType).mclass.has_unique_method_pos(gp) then
+			impl = new SSTImpl(true, gp.absolute_offset)
+		else if rst isa MClassType and rst.as(MClassType).mclass.has_unique_method_pos(gp) then 
 			impl = new SSTImpl(true, gp.absolute_offset)
 		else
 			impl = new PHImpl(false, gp.offset) 

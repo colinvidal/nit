@@ -390,6 +390,15 @@ redef class Variable
 	end
 end
 
+#redef class ASuperExpr
+#	redef fun generate_basicBlocks(vm, old_block)
+#	do
+#		var sup = super(vm, old_block)
+#		dprint("call-next-method mtype:{mtype.as(not null)}")
+#		return sup
+#	end
+#end
+
 redef class ANewExpr
 	# Represent the view of the new expression in the optimizing reprenstation
 	var monew: nullable MONew
@@ -398,16 +407,19 @@ redef class ANewExpr
 	do
 		var sup = super(vm, old_block)
 
-		monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
-		vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
-		vm.set_new_pattern(monew.as(not null), recvtype.mclass)
-
+		# Int, String, and Number are abstract, so we can't instantiate them with new keyword.
+		# It there others primitives types where we can do a new on it ? If not, remove this test.
+		if not recvtype.is_primitive_type then
+			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
+			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
+			vm.set_new_pattern(monew.as(not null), recvtype.mclass)
+		end
 		return sup
 	end
 
 	redef fun ast2mo
 	do
-		return monew.as(not null)
+		return monew
 	end
 end
 
@@ -524,7 +536,10 @@ redef class ASendExpr
 
 	redef fun ast2mo
 	do
-		if mocallsite  == null then assert primitive
+		# This assert will failed with call-next-method
+		# Maybe because we try to get mocallsite before analyse self ?
+		# So we don't even know if its a primitive return...
+#		if mocallsite  == null then assert primitive
 		return mocallsite
 	end
 
@@ -653,6 +668,8 @@ redef class MMethodDef
 		end
 	
 		for newexpr in monews do
+			assert not newexpr.pattern.cls.mclass_type.is_primitive_type
+
 			debug_preexist = newexpr.preexist_expr
 			fill_nper(newexpr)
 			dprint("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
@@ -664,6 +681,8 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
+			assert not site.pattern.rst.is_primitive_type
+
 			debug_preexist = site.preexist_site
 			dprint("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}")
 			fill_nper(site.expr_recv)
