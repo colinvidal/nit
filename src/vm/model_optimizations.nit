@@ -511,6 +511,7 @@ redef class VirtualMachine
 		for p in sites_patterns do
 			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
 		end
+#		if compatibles_patterns.length == 0 then dprint("no compatible patterns for {lp}")
 
 		for p in compatibles_patterns do p.handle_new_branch(lp)
 	end
@@ -530,3 +531,16 @@ redef class VirtualMachine
 		end
 	end
 end
+
+redef class MType
+	# True if self is a primitive type
+	fun is_primitive_type: Bool
+	do
+		if self.to_s == "Int" then return true
+		if self.to_s == "nullable Int" then return true
+		if self.to_s == "String" then return true
+		if self.to_s == "nullable String" then return true
+		return false
+	end
+end
+

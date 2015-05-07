@@ -423,17 +423,6 @@ redef class ANewExpr
 	end
 end
 
-redef class MType
-	# True if self is a primitive type
-	fun is_primitive_type: Bool
-	do
-		if self.to_s == "Int" then return true
-		if self.to_s == "Numeric" then return true
-		if self.to_s == "String" then return true
-		return false
-	end
-end
-
 redef class ANode
 	# True if self is a primitive node
 	fun is_primitive_node: Bool
@@ -530,7 +519,7 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
+		if not self isa ABinopExpr then vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
 		return sup
 	end
 
@@ -552,7 +541,8 @@ redef class ASendExpr
 				sys.pstats.incr_primitives
 			end
 		else if n_expr isa AVarExpr then
-			if n_expr.as(AVarExpr).mtype.is_primitive_type then
+			# Null variables are consided as primitive
+			if n_expr.mtype == null or n_expr.mtype.is_primitive_type then
 				primitive = true
 				sys.pstats.incr_primitives
 			end
@@ -681,6 +671,7 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
+#			dprint("site: {site.pattern.rst}.{site.pattern.gp}")
 			assert not site.pattern.rst.is_primitive_type
 
 			debug_preexist = site.preexist_site
