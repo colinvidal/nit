@@ -581,7 +581,6 @@ redef class MType
 				anchor = anchor_type.as(MClassType)
 			end
 			
-#			return anchor_to(vm.as(not null).mainmodule, anchor).as(MClassType).mclass
 			return anchor_to(vm.as(not null).mainmodule, anchor).get_mclass(vm)
 		else
 			# NYI
