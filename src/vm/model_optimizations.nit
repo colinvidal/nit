@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-#		print(buf)
+		print(buf)
 	end
 end
 
@@ -74,12 +74,25 @@ class MOSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-		else if rst.get_mclass != null and rst.get_mclass.has_unique_method_pos(gp) then
-			# We check if get_mclass is not null in case of a nullable become null
-			impl = new SSTImpl(true, gp.absolute_offset)
+#		else if gp_pos_unique(vm) then
+#			impl = new SSTImpl(true, gp.absolute_offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
+	end
+
+	private fun gp_pos_unique(vm: VirtualMachine): Bool
+	do
+		for expr in exprsites do
+			if rst.get_mclass(vm) == null then
+				return false
+			else
+				var cls = rst.get_mclass(vm) 
+				if not cls.has_unique_method_pos(gp) then return false
+			end
+		end
+
+		return true
 	end
 
 	# Add a new callee
@@ -550,14 +563,25 @@ redef class MType
 	end
 
 	# Get the class of the type
-	fun get_mclass: nullable MClass
+	fun get_mclass(vm: nullable VirtualMachine): nullable MClass
 	do
-		if self isa MClassType then
+		if self isa MNullType then
+			return null
+		else if self isa MClassType then
 			return self.mclass
 		else if self isa MNullableType then
 			return self.mtype.as(MClassType).mclass
-		else if self isa MNullType then
-			return null
+		else if need_anchor then
+			var anchor: MClassType
+			var anchor_type = vm.frame.arguments.first.mtype
+			
+			if anchor_type isa MNullableType then
+				anchor = anchor_type.mtype.as(MClassType)
+			else
+				anchor = anchor_type.as(MClassType)
+			end
+			
+			return anchor_to(vm.as(not null).mainmodule, anchor).as(MClassType).mclass
 		else
 			# NYI
 			abort

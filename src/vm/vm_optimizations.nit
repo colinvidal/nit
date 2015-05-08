@@ -494,16 +494,6 @@ redef class AMethPropdef
 			end
 		end
 
-#		if mo_dep_exprs != null then
-#			var buf = "\nReturn expression in {mpropdef.as(not null)} dep_exprs:{returnvar.dep_exprs} mo_dep_exprs:{mo_dep_exprs.as(not null)}"
-#			if mo_dep_exprs isa MOSSAVar then
-#				buf += " -> {mo_dep_exprs.as(MOSSAVar).dependency}"
-#			else
-#				buf += " -> {mo_dep_exprs.as(MOPhiVar).dependencies}"
-#			end
-#			dprint(buf)
-#		end
-
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
 		for sendexpr in callsites_to_compile do sendexpr.compile_ast(vm, mpropdef.as(not null))
@@ -517,7 +507,6 @@ redef class ASendExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-#		if not self isa ABinopExpr then vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
 		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
 		return sup
 	end
@@ -545,17 +534,24 @@ redef class ASendExpr
 		var recv = n_expr.ast2mo
 
 		if recv != null and not ignore then
-			mocallsite = new MOCallSite(recv, lp)
-			lp.mosites.add(mocallsite.as(not null))
-		
-			# Null cases are already eliminated, to get_mclass can't return null
-			var recv_class = callsite.as(not null).recv.get_mclass.as(not null)
-			recv_class.set_site_pattern(mocallsite.as(not null), callsite.as(not null))
+			var cs = callsite.as(not null)
 
-			# Expressions arguments given to the method called
-			for arg in raw_arguments do
-				var moexpr = arg.ast2mo
-				if moexpr != null then mocallsite.given_args.add(moexpr)
+			# Null cases are already eliminated, to get_mclass can't return null
+			var recv_class = cs.recv.get_mclass(vm).as(not null)
+
+			# If recv_class was a formal type, and now resolved as in primitive, we ignore it
+			if not recv_class.mclass_type.is_primitive_type  then
+				mocallsite = new MOCallSite(recv, lp)
+				var mocs = mocallsite.as(not null)
+				
+				lp.mosites.add(mocs)
+				recv_class.set_site_pattern(mocs, cs)
+
+				# Expressions arguments given to the method called
+				for arg in raw_arguments do
+					var moexpr = arg.ast2mo
+					if moexpr != null then mocallsite.given_args.add(moexpr)
+				end
 			end
 		end
 	end
