@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-		print(buf)
+#		print(buf)
 	end
 end
 
@@ -474,19 +474,19 @@ redef class MClass
 	end
 
 	# Create (if not exists) and set a pattern for exprsites
-	fun set_site_pattern(exprsite: MOExprSite, cs: CallSite)
+	fun set_site_pattern(exprsite: MOExprSite, rst: MType, gp: MMethod)
 	do
 		var pattern: nullable MOSitePattern = null
 
 		for p in sites_patterns do
-			if p.gp == cs.mproperty and p.rst == cs.recv then
+			if p.gp == gp and p.rst == rst then
 				pattern = p
 				break
 			end
 		end
 
 		if pattern == null then 
-			pattern = new MOSitePattern(cs.recv, cs.mproperty)
+			pattern = new MOSitePattern(rst, gp)
 			sites_patterns.add(pattern)
 		end
 
@@ -581,7 +581,8 @@ redef class MType
 				anchor = anchor_type.as(MClassType)
 			end
 			
-			return anchor_to(vm.as(not null).mainmodule, anchor).as(MClassType).mclass
+#			return anchor_to(vm.as(not null).mainmodule, anchor).as(MClassType).mclass
+			return anchor_to(vm.as(not null).mainmodule, anchor).get_mclass(vm)
 		else
 			# NYI
 			abort

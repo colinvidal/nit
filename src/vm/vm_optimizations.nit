@@ -539,13 +539,15 @@ redef class ASendExpr
 			# Null cases are already eliminated, to get_mclass can't return null
 			var recv_class = cs.recv.get_mclass(vm).as(not null)
 
+
 			# If recv_class was a formal type, and now resolved as in primitive, we ignore it
 			if not recv_class.mclass_type.is_primitive_type  then
 				mocallsite = new MOCallSite(recv, lp)
 				var mocs = mocallsite.as(not null)
 				
+			# il faut résoudre le type statique dans le cs !!!
 				lp.mosites.add(mocs)
-				recv_class.set_site_pattern(mocs, cs)
+				recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
 
 				# Expressions arguments given to the method called
 				for arg in raw_arguments do
