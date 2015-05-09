@@ -496,7 +496,7 @@ redef class AMethPropdef
 
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
-		for sendexpr in callsites_to_compile do sendexpr.compile_ast(vm, mpropdef.as(not null))
+		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
 	end
 end
 
@@ -539,13 +539,11 @@ redef class ASendExpr
 			# Null cases are already eliminated, to get_mclass can't return null
 			var recv_class = cs.recv.get_mclass(vm).as(not null)
 
-
 			# If recv_class was a formal type, and now resolved as in primitive, we ignore it
 			if not recv_class.mclass_type.is_primitive_type  then
 				mocallsite = new MOCallSite(recv, lp)
 				var mocs = mocallsite.as(not null)
 				
-			# il faut résoudre le type statique dans le cs !!!
 				lp.mosites.add(mocs)
 				recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
 
@@ -605,7 +603,6 @@ redef class MMethodDef
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
-		dprint("preexist_return mpropdef:{self}")
 		if not compiled then
 			return_expr.set_npre_nper
 			return return_expr.preexist_expr_value
@@ -635,8 +632,6 @@ redef class MMethodDef
 		if compiled then return
 		compiled = true
 
-		if return_expr == null and monews.length == 0 and mosites.length == 0 then return
-
 		dprint("\npreexist_all of {self}")
 		var debug_preexist: Int
 
@@ -662,7 +657,7 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
-#			dprint("site: {site.pattern.rst}.{site.pattern.gp}")
+			dprint("site: {site.pattern.rst}.{site.pattern.gp}")
 			assert not site.pattern.rst.is_primitive_type
 
 			debug_preexist = site.preexist_site
@@ -1047,6 +1042,7 @@ redef class MOCallSite
 					set_npre_nper
 					break
 				end
+				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
 				if is_npre_per then
