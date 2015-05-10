@@ -26,6 +26,7 @@ redef class VirtualMachine
 	do
 		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then
+			if not mpropdef.ast_compiled then dprint("WARN: {mpropdef} analysed but not ast_compiled!")
 			mpropdef.preexist_all(self)
 #			mpropdef.compiled = true
 		end
@@ -497,6 +498,9 @@ redef class AMethPropdef
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
 		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
+
+		mpropdef.ast_compiled = true
+		dprint("AMethPropdef {mpropdef.as(not null)} compiled. Function?{mpropdef.as(not null).return_expr != null}")
 	end
 end
 
@@ -568,6 +572,9 @@ redef class Int
 end
 
 redef class MMethodDef
+	# Tell if generate_basicBlocks has been called on this method
+	var ast_compiled = false
+
 	# List of mutable preexists expressions
 	var exprs_preexist_mut = new List[MOExpr]
 
