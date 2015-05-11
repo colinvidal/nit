@@ -28,9 +28,6 @@ redef class VirtualMachine
 #		dprint("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then
-			if not mpropdef.ast_compiled and not mpropdef.mproperty.intro_mclassdef.mclass.mclass_type.is_primitive_type then 
-				dprint("WARN: {mpropdef} analysed but not ast_compiled!")
-			end
 			mpropdef.preexist_all(self)
 #			mpropdef.compiled = true
 		end
@@ -503,9 +500,6 @@ redef class AMethPropdef
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
 		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
-
-		mpropdef.ast_compiled = true
-		dprint("AMethPropdef {mpropdef.as(not null)} compiled. Function?{mpropdef.as(not null).return_expr != null}")
 	end
 end
 
@@ -577,9 +571,6 @@ redef class Int
 end
 
 redef class MMethodDef
-	# Tell if generate_basicBlocks has been called on this method
-	var ast_compiled = false
-
 	# List of mutable preexists expressions
 	var exprs_preexist_mut = new List[MOExpr]
 
@@ -639,9 +630,14 @@ redef class MMethodDef
 	end
 
 	# Compute the preexistence of all invocation sites and return site of the method
+	#
+	# WARNING!
+	# The VM can't interpret FFI code, so intern/extern methods are not analysed,
+	# and a expression using a receiver from intern/extern method is preexistent.
+	#
 	fun preexist_all(vm: VirtualMachine)
 	do
-		if compiled then return
+		if compiled or is_intern or is_extern then return
 		compiled = true
 
 		dprint("\npreexist_all of {self}")
