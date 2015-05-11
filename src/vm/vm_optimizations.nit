@@ -680,7 +680,7 @@ redef class MMethodDef
 
 			if site isa MOCallSite then
 				sys.pstats.incr_call_site
-			else # A read site (see optimizing_model)
+			else # A read site
 				sys.pstats.incr_readattr_site
 			end
 
