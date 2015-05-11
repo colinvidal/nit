@@ -25,7 +25,7 @@ redef class VirtualMachine
 	redef fun new_frame(node, mpropdef, args)
 	do
 		next_receivers.push(args.first.mtype)
-		dprint("NEW RECEIVER: {next_receivers}")
+#		dprint("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then
 			if not mpropdef.ast_compiled and not mpropdef.mproperty.intro_mclassdef.mclass.mclass_type.is_primitive_type then 
@@ -1111,7 +1111,7 @@ redef class MOSitePattern
 		super
 		cuc += 1
 
-		sys.dprint("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
+#		sys.dprint("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
 
 		if cuc == 1 then
 			for expr in exprsites do

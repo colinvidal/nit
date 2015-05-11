@@ -486,7 +486,7 @@ redef class MClass
 		end
 
 		if pattern == null then 
-			dprint("set_site_pattern {rst}.{gp}")
+#			dprint("set_site_pattern {rst}.{gp}")
 			pattern = new MOSitePattern(rst, gp)
 			sites_patterns.add(pattern)
 		end
