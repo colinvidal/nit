@@ -1,7 +1,7 @@
 # Intermediate representation of nit program running inside the VM
 module model_optimizations
 
-import virtual_machine
+import ssa
 
 redef class Sys
 	#
@@ -504,36 +504,11 @@ redef class MClass
 end
 
 redef class VirtualMachine
-	# List of patterns of MOExprSite
-#	var sites_patterns = new List[MOSitePattern]
+	# The top of list is the type of the receiver that will be used after new_frame
+	var next_receivers = new List[MType]
 
 	# List of patterns of MONew
 	var new_patterns = new List[MONewPattern]
-
-
-#	# For tests only, to remove !
-#	fun debug_if_not_internal(module_str: String): Bool
-#	do
-#		if module_str == "kernel" then return false
-#		if module_str == "string" then return false
-#		if module_str == "numeric" then return false
-#		return true
-#	end
-
-#	# Handle new local property for update optimizing model
-#	fun handle_new_branch(lp: MMethodDef)
-#	do
-##		if debug_if_not_internal(lp.mclassdef.mmodule.to_s) then dprint("new branch {lp.mclassdef} redefines {lp.name}")
-#
-#		# For each patterns in lp.gp with classdef of the lp <: pattern.rst
-#		var compatibles_patterns = new List[MOSitePattern]
-#		for p in sites_patterns do
-#			if p.compatibl_with(self, lp) then compatibles_patterns.add(p)
-#		end
-##		if compatibles_patterns.length == 0 then dprint("no compatible patterns for {lp}")
-#
-#		for p in compatibles_patterns do p.handle_new_branch(lp)
-#	end
 
 	redef fun create_class(mclass)
 	do
@@ -545,10 +520,7 @@ redef class VirtualMachine
 
 		super(mclass)
 
-		for cls in implicit_loaded do
-#			cls.handle_new_branch(self)
-			cls.handle_new_branch
-		end
+		for cls in implicit_loaded do cls.handle_new_branch
 	end
 end
 
@@ -566,17 +538,20 @@ redef class MType
 	end
 
 	# Get the class of the type
-	fun get_mclass(vm: nullable VirtualMachine): nullable MClass
+	fun get_mclass(vm: VirtualMachine): nullable MClass
 	do
 		if self isa MNullType then
 			return null
+		else if self isa MNotNullType then
+			return self.mtype.get_mclass(vm)
 		else if self isa MClassType then
 			return self.mclass
 		else if self isa MNullableType then
-			return self.mtype.as(MClassType).mclass
-		else if need_anchor then
+			return self.mtype.get_mclass(vm)
+		else if (self isa MVirtualType or self isa MParameterType) and need_anchor then
 			var anchor: MClassType
-			var anchor_type = vm.frame.arguments.first.mtype
+#			var anchor_type = vm.frame.arguments.first.mtype
+			var anchor_type = vm.next_receivers.last
 			
 			if anchor_type isa MNullableType then
 				anchor = anchor_type.mtype.as(MClassType)
@@ -584,8 +559,10 @@ redef class MType
 				anchor = anchor_type.as(MClassType)
 			end
 			
-			return anchor_to(vm.as(not null).mainmodule, anchor).get_mclass(vm)
+			dprint("get_mclass {self} need_anchor {anchor} {vm.current_propdef.mpropdef.name}")
+			return anchor_to(vm.mainmodule, anchor).get_mclass(vm)
 		else
+			dprint("{self} {self.class_name}")
 			# NYI
 			abort
 		end

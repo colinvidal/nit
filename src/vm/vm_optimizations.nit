@@ -24,12 +24,17 @@ import model_optimizations
 redef class VirtualMachine
 	redef fun new_frame(node, mpropdef, args)
 	do
+		next_receivers.push(args.first.mtype)
+		dprint("NEW RECEIVER: {next_receivers}")
 		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then
-			if not mpropdef.ast_compiled then dprint("WARN: {mpropdef} analysed but not ast_compiled!")
+			if not mpropdef.ast_compiled and not mpropdef.mproperty.intro_mclassdef.mclass.mclass_type.is_primitive_type then 
+				dprint("WARN: {mpropdef} analysed but not ast_compiled!")
+			end
 			mpropdef.preexist_all(self)
 #			mpropdef.compiled = true
 		end
+		next_receivers.pop
 		return ret
 	end
 
