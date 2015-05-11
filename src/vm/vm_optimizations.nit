@@ -1057,7 +1057,7 @@ redef class MOCallSite
 					break
 				end
 				
-#				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
+				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
 				if is_npre_per then
