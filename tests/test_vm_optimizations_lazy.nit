@@ -1,33 +1,16 @@
 class A
-	var foo: Object is lazy do
-		1.output
-		do
-			2.output
-			if true then break
-			3.output
-		end
-		return 4
-	end
-
-	var bar: Object = baz is lazy
-
-	fun baz: Object do
-		10.output
-		do
-			20.output
-			if true then break
-			30.output
-		end
-		return 40
-	end
+	var foo: X = new X is lazy
 end
 
-var a = new A
-a.foo.output
-a.bar.output
+class X
+	fun bar do end
+end
 
-'\n'.output
+fun baz do 
+	var a = new A
+	a.foo.bar
+end
 
-var na: nullable A = a
-na.foo.output
-na.bar.output
+(new A).foo.bar
+baz
+

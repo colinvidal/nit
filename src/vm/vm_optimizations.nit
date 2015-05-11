@@ -1055,6 +1055,11 @@ redef class MOCallSite
 					# So, we must NOT check it's return_expr (it could be still null)
 					set_npre_nper
 					break
+				else if candidate.return_expr == null then
+					# Lazy attribute not yet initialized
+					dprint("WARN NULL RETURN_EXPR {candidate} {candidate.mproperty}")
+					set_npre_nper
+					break
 				end
 				
 				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
