@@ -1044,13 +1044,20 @@ redef class MOCallSite
 #			dprint("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
 			for candidate in pattern.lps do
-				if not candidate.compiled then
+				if candidate.is_intern or candidate.is_extern then
+					# WARNING
+					# If the candidate method is intern/extern, then the return is preexist immutable
+					# since the VM cannot make FFI.
+					set_pval_per
+					break
+				else if not candidate.compiled then
 					# The lp could be known by the model but not already compiled from ast to mo
 					# So, we must NOT check it's return_expr (it could be still null)
 					set_npre_nper
 					break
 				end
-				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
+				
+#				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
 				if is_npre_per then
