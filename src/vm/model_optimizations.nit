@@ -14,14 +14,8 @@ redef class Sys
 	var disable_preexistence_extensions = true
 end
 
-# Root hierarchy of patterns
-abstract class MOPattern
-end
-
 # Pattern of instantiation sites
 class MONewPattern
-	super MOPattern
-
 	# Class associated to the pattern
 	var cls: MClass
 
@@ -35,40 +29,86 @@ class MONewPattern
 	end
 end
 
-# Pattern of a callsite
-class MOSitePattern
-	super MOPattern
+# Pattern of objects sites
+abstract class MOSitePattern
+	# Type of the sites that refer to this pattern
+	type S: MOSite
 
 	# Static type of the receiver
 	var rst: MType
 
-	# Global property called
-	var gp: MMethod
+	# List of expressions that refers to this pattern
+	var sites = new List[S]
 
-	# Local properties candidates (a subset of gp.loaded_lps)
-	var lps = new List[MMethodDef]
+	# Implementation of the pattern (used if site as not concerte receivers list)
+	var impl: nullable Implementation is noinit
 
-	# Implementation of the callsite determined by rst/pic
-	private var impl: nullable Implementation is noinit
+	# Add a site
+	fun add_site(site: S) is abstract
 
-	# Exprsites using this pattern
-	var exprsites = new List[MOExprSite]
-
-	# Add a new exprsite on the pattern
-	fun add_exprsite(exprsite: MOExprSite)
+	# Get implementation, compute it if not exists
+	fun get_impl(vm: VirtualMachine): Implementation
 	do
-		exprsites.add(exprsite)
-		exprsite.pattern = self
+		if impl == null then compute_impl(vm)
+		return impl.as(not null)
+	end
 
-		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
-		# Tell to each added lps that this pattern can be a caller
-		for lp in gp.loaded_lps do
-			add_lp(lp)
+	# Compute the implementation
+	private fun compute_impl(vm: VirtualMachine) is abstract
+end
+
+# Pattern of subtype test sites
+class MOSubtypeSitePattern
+	super MOSitePattern
+
+	redef type S: MOSubtypeSite
+
+	redef fun add_site(site) do sites.add(site)
+
+	# For now, subtype test are not optimized at all
+	redef fun compute_impl(vm) do impl = new PHImpl(false, rst.get_mclass(vm).color)
+end
+
+# Pattern of properties sites (method call / attribute access)
+abstract class MOPropSitePattern
+	super MOSitePattern
+
+	# Type of global properties
+	type GP: MProperty
+
+	# Type of local properties
+	type LP: MPropDef
+
+	redef type S: MOPropSite
+
+	# The global property
+	var gp: GP
+
+	# Candidates local properties owning by the GP
+	var lps = new List[LP]
+
+	redef fun add_site(site)
+	do
+		assert not sites.has(site)
+
+		sites.add(site)
+		site.pattern = self
+		for lp in gp.loaded_lps do add_lp(lp)
+	end
+
+	# Add a candidate LP
+	fun add_lp(lp: LP)
+	do
+		if not lps.has(lp) then
+			lps.add(lp)
+			lp.callers.add(self)
+			if impl != null and impl.is_mutable then impl = null
+			for site in sites do site.init_impl
 		end
 	end
 
-	# Determine an implementation with pic/rst only
-	private fun compute_impl(vm: VirtualMachine)
+	# Determine an implementation with pic/rst
+	redef fun compute_impl(vm)
 	do
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, gp.absolute_offset)
@@ -84,56 +124,165 @@ class MOSitePattern
 
 	private fun gp_pos_unique(vm: VirtualMachine): Bool
 	do
-		for expr in exprsites do
-			if rst.get_mclass(vm) == null then
-				return false
-			else
-				var cls = rst.get_mclass(vm) 
-				if not cls.has_unique_method_pos(gp) then return false
-			end
-		end
-
-		return true
+		# TODO
+		return false
 	end
+end
 
-	# Add a new callee
-	fun add_lp(lp: MMethodDef)
-	do
-#		dprint("add lp {lp} in pattern {self}")
-		if not lps.has(lp) then
-			lps.add(lp)
-			lp.callers.add(self)
-			if impl != null and impl.is_mutable then impl = null
-			for expr in exprsites do expr.init_impl
-		end
-	end
+# Pattern of expression sites (method call / read attribute)
+abstract class MOExprSitePattern
+	super MOPropSitePattern
 
-	# Get implementation, compute it if not exists
-	fun get_impl(vm: VirtualMachine): Implementation
-	do
-		if impl == null then compute_impl(vm)
-		return impl.as(not null)
-	end
+	redef type S: MOExprSite
+end
 
-	# Add a new branch on the pattern
-	fun handle_new_branch(lp: MMethodDef)
-	do
-#		dprint("pattern handle_new_branch")
-		add_lp(lp)
-	end
+# Pattern of method call
+class MOCallSitePattern
+	super MOExprSitePattern
+
+	redef type GP: MMethod
+
+	redef type LP: MMethodDef
+
+	redef type S: MOCallSite
+end
+
+# Common subpattern of all attributes (read/write)
+abstract class MOAttrPattern
+	super MOPropSitePattern
+
+	redef type GP: MAttribute
+
+	redef type LP: MAttributeDef
+end
+
+# Pattern of read attribute
+class MOReadSitePattern
+	super MOExprSitePattern
+	super MOAttrPattern
+
+	redef type S: MOReadSite
+end
+
+# Pattern of write attribute
+class MOWriteSitePattern
+	super MOAttrPattern
+
+	redef type S: MOWriteSite
+end
+
+################################################################
+## Pattern of objets sites
+#abstract class MOSitePattern
+#	# Static type of the receiver
+#	var rst: MType
+#
+#	# Global property called
+#	var gp: MMethod
+#
+#	# Local properties candidates (a subset of gp.loaded_lps)
+#	var lps = new List[MMethodDef]
+#
+#	# Implementation of the callsite determined by rst/pic
+#	private var impl: nullable Implementation is noinit
+#
+#	# Exprsites using this pattern
+#	var exprsites = new List[MOExprSite]
+#
+#	# Add a new exprsite on the pattern
+#	fun add_exprsite(exprsite: MOExprSite)
+#	do
+#		exprsites.add(exprsite)
+#		exprsite.pattern = self
+#
+#		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
+#		# Tell to each added lps that this pattern can be a caller
+#		for lp in gp.loaded_lps do
+#			add_lp(lp)
+#		end
+#	end
+#
+#	# Determine an implementation with pic/rst only
+#	private fun compute_impl(vm: VirtualMachine)
+#	do
+#		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+#			impl = new SSTImpl(false, gp.absolute_offset)
+#		else if lps.length == 1 then
+#			# The method is an intro or a redef
+#			impl = new StaticImpl(true, lps.first)
+#		else if gp_pos_unique(vm) then
+#			impl = new SSTImpl(true, gp.absolute_offset)
+#		else
+#			impl = new PHImpl(false, gp.offset) 
+#		end
+#	end
+#
+#	private fun gp_pos_unique(vm: VirtualMachine): Bool
+#	do
+#		for expr in exprsites do
+#			if rst.get_mclass(vm) == null then
+#				return false
+#			else
+#				var cls = rst.get_mclass(vm) 
+#				if not cls.has_unique_method_pos(gp) then return false
+#			end
+#		end
+#
+#		return true
+#	end
+#
+#	# Add a new callee
+#	fun add_lp(lp: MMethodDef)
+#	do
+##		dprint("add lp {lp} in pattern {self}")
+#		if not lps.has(lp) then
+#			lps.add(lp)
+#			lp.callers.add(self)
+#			if impl != null and impl.is_mutable then impl = null
+#			for expr in exprsites do expr.init_impl
+#		end
+#	end
+#
+#	# Get implementation, compute it if not exists
+#	fun get_impl(vm: VirtualMachine): Implementation
+#	do
+#		if impl == null then compute_impl(vm)
+#		return impl.as(not null)
+#	end
+#
+#	# Add a new branch on the pattern
+#	fun handle_new_branch(lp: MMethodDef)
+#	do
+##		dprint("pattern handle_new_branch")
+#		add_lp(lp)
+#	end
+#end
+
+redef class MProperty
+	# Type of owning local properties
+	type LP: MPropDef
+	
+	# Local properties who belongs this global property currently loaded
+	var loaded_lps = new List[LP]
+end
+
+redef class MPropDef
+	# Type of the patterns who can use this local property
+	type P: MOPropSitePattern
+
+	# List of patterns who use this local property
+	var callers = new List[P]
 end
 
 redef class MMethod
-	# Local properties who belongs this global property currently loaded
-	var loaded_lps = new List[MMethodDef]
+	redef type LP: MMethodDef
 end
 
 redef class MMethodDef
+	redef type P: MOCallSitePattern
+
 	# Tell if the method has been compiled at least one time
 	var compiled = false is writable
-
-	# List of callers of this local property
-	var callers = new List[MOSitePattern]
 
 	# Return expression of the method (null if procedure)
 	var return_expr: nullable MOExpr is writable
@@ -208,10 +357,10 @@ end
 class MONew
 	super MOExpr
 
-	# The local property containing this expression
+	# The local property containing this site 
 	var lp: MMethodDef
 
-	# The pattern of this expression
+	# The pattern of this site
 	var pattern: MONewPattern is writable, noinit
 end
 
@@ -222,14 +371,17 @@ end
 
 # Root hierarchy of objets sites
 abstract class MOSite
+	# The type of the site pattern associated to this site
+	type P: MOSitePattern
+
 	# The expression of the receiver
 	var expr_recv: MOExpr
 
 	# The local property containing this expression
-	var lp: MMethodDef
+	var lp: MPropDef
 
 	# The pattern using by this expression site
-	var pattern: MOSitePattern is writable, noinit
+	var pattern: P is writable, noinit
 
 	# Implementation of the site (null if can't determine concretes receivers)
 	private var impl: nullable Implementation is noinit
@@ -273,7 +425,40 @@ abstract class MOSite
 	fun init_impl do impl = null
 
 	# Compute the implementation with rst/pic
-	private fun compute_impl(vm: VirtualMachine)
+	private fun compute_impl(vm: VirtualMachine) is abstract
+
+	# Each concrete receiver has unique method position
+	private fun unique_meth_pos_concrete: Bool
+	do
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if not recv.has_unique_method_pos(lp.mproperty) then return false
+		end
+		return true
+	end
+
+end
+
+# MO of a subtype test site
+class MOSubtypeSite
+	super MOSite
+
+	redef type P: MOSubtypeSitePattern
+
+	# Static type on which the test is applied
+	var target: MType
+
+	# We don't optimize at all the subtype test for now
+	redef fun get_impl(vm) do return pattern.get_impl(vm)
+end
+
+# MO of global properties sites
+abstract class MOPropSite
+	super MOSite
+
+	redef type P: MOPropSitePattern
+	
+	redef fun compute_impl(vm)
 	do
 		var gp = pattern.gp
 
@@ -299,30 +484,6 @@ abstract class MOSite
 			impl = new PHImpl(false, gp.offset) 
 		end
 	end
-
-	# Each concrete receiver has unique method position
-	private fun unique_meth_pos_concrete: Bool
-	do
-		for recv in get_concretes do
-			if not recv.loaded then return false
-			if not recv.has_unique_method_pos(lp.mproperty) then return false
-		end
-		return true
-	end
-
-end
-
-# MO of a subtype test site
-class MOSubtypeSite
-	super MOSite
-
-	# Static type on which the test is applied
-	var target: MType
-end
-
-# MO of global properties sites
-abstract class MOPropSite
-	super MOSite
 end
 
 # MO of object expression
@@ -330,16 +491,21 @@ abstract class MOExprSite
 	super MOPropSite
 	super MOExpr
 
+	redef type P: MOExprSitePattern
 end
 
 # MO of attribute access
 abstract class MOAttrSite
 	super MOPropSite
+
+	redef type P: MOAttrPattern
 end
 
 # MO of method call
 class MOCallSite
 	super MOExprSite
+
+	redef type P: MOCallSitePattern
 
 	# Values of each arguments
 	var given_args = new List[MOExpr]
@@ -350,6 +516,8 @@ class MOReadSite
 	super MOExprSite
 	super MOAttrSite
 
+	redef type P: MOReadSitePattern
+
 	# Tell if the attribute is immutable
 	var immutable = false
 end
@@ -357,6 +525,8 @@ end
 # MO of write attribute
 class MOWriteSite
 	super MOAttrSite
+
+	redef type P: MOWriteSitePattern
 
 	# Value to assign to the attribute
 	var arg: MOExpr
@@ -388,8 +558,8 @@ end
 class StaticImpl
 	super Implementation
 
-	# The called method implementation
-	var meth: MMethodDef
+	# The called lp
+	var lp: MPropDef
 end
 
 redef class MClass
@@ -485,7 +655,7 @@ redef class MClass
 			sites_patterns.add(pattern)
 		end
 
-		pattern.add_exprsite(exprsite)
+		pattern.add_site(exprsite)
 #		dprint("ASendExpr pattern.exprsites: {pattern.exprsites}"s
 	end
 
