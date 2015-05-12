@@ -9,6 +9,9 @@ redef class Sys
 	do
 		print(buf)
 	end
+
+	# Disable inter-procedural analysis and 'new' cases
+	var disable_preexistence_extensions = true
 end
 
 # Root hierarchy of patterns

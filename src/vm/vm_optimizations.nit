@@ -659,24 +659,26 @@ redef class MMethodDef
 		dprint("\npreexist_all of {self}")
 		var debug_preexist: Int
 
-		if return_expr != null then
-			return_expr.preexist_expr
-			if return_expr.is_rec then return_expr.set_pval_nper
-			fill_nper(return_expr.as(not null))
-			debug_preexist = return_expr.preexist_expr_value
-			dprint("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
-		end
-	
-		for newexpr in monews do
-			assert not newexpr.pattern.cls.mclass_type.is_primitive_type
+		if not disable_preexistence_extensions then
+			if return_expr != null then
+				return_expr.preexist_expr
+				if return_expr.is_rec then return_expr.set_pval_nper
+				fill_nper(return_expr.as(not null))
+				debug_preexist = return_expr.preexist_expr_value
+				dprint("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
+			end
 
-			debug_preexist = newexpr.preexist_expr
-			fill_nper(newexpr)
-			dprint("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
-			if newexpr.pattern.is_loaded then
-				sys.pstats.incr_loaded_new
-			else
-				sys.pstats.incr_unloaded_new
+			for newexpr in monews do
+				assert not newexpr.pattern.cls.mclass_type.is_primitive_type
+
+				debug_preexist = newexpr.preexist_expr
+				fill_nper(newexpr)
+				dprint("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
+				if newexpr.pattern.is_loaded then
+					sys.pstats.incr_loaded_new
+				else
+					sys.pstats.incr_unloaded_new
+				end
 			end
 		end
 
@@ -938,7 +940,9 @@ end
 
 redef class MONew
 	redef fun init_preexist do
-		if pattern.is_loaded then
+		if disable_preexistence_extensions then
+			set_npre_per
+		else if pattern.is_loaded then
 			set_ptype_per
 		else
 			set_npre_nper
@@ -1042,7 +1046,9 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-		if pattern.cuc > 0 then
+		if disable_preexistence_extensions then
+			preexist_expr_value = pmask_NPRE_PER
+		else if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
