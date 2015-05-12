@@ -22,15 +22,25 @@ import ssa
 import model_optimizations
 
 redef class VirtualMachine
+	redef fun create_class(mclass)
+	do
+		# Get all superclasses loaded implicitly by mclass
+		var implicit_loaded = new List[MClass]
+		for cls in mclass.superclasses_ordering(self) do
+			if not cls.loaded then implicit_loaded.add(cls)
+		end
+
+		super(mclass)
+
+		for cls in implicit_loaded do cls.handle_new_class
+	end
+	
 	redef fun new_frame(node, mpropdef, args)
 	do
 		next_receivers.push(args.first.mtype)
 #		dprint("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
-		if mpropdef isa MMethodDef then
-			mpropdef.preexist_all(self)
-#			mpropdef.compiled = true
-		end
+		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
 		next_receivers.pop
 		return ret
 	end
@@ -363,7 +373,6 @@ redef class Variable
 	fun get_movar(node: AExpr): nullable MOVar
 	do
 		if movar == null then
-#			dprint("get_movar: {self} dep_exprs: {dep_exprs}")
 			if node isa ASelfExpr then
 				movar = new MOParam(0)
 			else if node isa AVarExpr then
@@ -393,15 +402,6 @@ redef class Variable
 	end
 end
 
-#redef class ASuperExpr
-#	redef fun generate_basicBlocks(vm, old_block)
-#	do
-#		var sup = super(vm, old_block)
-#		dprint("call-next-method mtype:{mtype.as(not null)}")
-#		return sup
-#	end
-#end
-
 redef class ANewExpr
 	# Represent the view of the new expression in the optimizing reprenstation
 	var monew: nullable MONew
@@ -410,20 +410,19 @@ redef class ANewExpr
 	do
 		var sup = super(vm, old_block)
 
-		# Int, String, and Number are abstract, so we can't instantiate them with new keyword.
-		# It there others primitives types where we can do a new on it ? If not, remove this test.
+		# Int, String, and Number are abstract, so we can't instantiate them with "new" keyword.
+		# Is there others primitives types we can do a "new" on it ? If not, remove this test.
 		if not recvtype.is_primitive_type then
 			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
 			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
 			recvtype.mclass.set_new_pattern(monew.as(not null))
+			pstats.incr_new_no_primitives
 		end
+
 		return sup
 	end
 
-	redef fun ast2mo
-	do
-		return monew
-	end
+	redef fun ast2mo do return monew
 end
 
 redef class ANode
@@ -560,6 +559,23 @@ redef class ASendExpr
 	end
 end
 
+redef class AParExpr
+	redef fun ast2mo do return n_expr.ast2mo
+end
+
+redef class ANotExpr
+	redef fun ast2mo do return n_expr.ast2mo
+end
+
+redef class ABinopExpr
+	# If a binary operation on primitives types return something (or test of equality), it's primitive
+	# TODO: what about obj1 + obj2 ?
+	redef fun ast2mo do
+		pstats.incr_primitives
+		return null
+	end
+end
+
 redef class Int
 	# Display 8 lower bits of preexitence value
 	fun preexists_bits: Array[Int]
@@ -665,7 +681,6 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
-			dprint("site: {site.pattern.rst}.{site.pattern.gp}")
 			assert not site.pattern.rst.is_primitive_type
 
 			debug_preexist = site.preexist_site
@@ -950,7 +965,6 @@ redef class MOPhiVar
 		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
-#				dprint("MOPhiVar compute dep {dep} {dep.preexist_expr}")
 				merge_preexistence(dep)
 				if is_npre_per then
 					break
@@ -1022,26 +1036,22 @@ redef class MOCallSite
 			end
 			index += 1
 		end
+
 		return preexist_expr_value
 	end
 
 	redef fun preexist_expr
 	do
-#		dprint("--------preexist_expr {self}")
 		if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
-#			dprint("\tpattern.cuc > 0")
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
-#			dprint("\tpattern.perennial_status:{pattern.perennial_status}")
 		else if pattern.lp_all_perennial then 
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
-#			dprint("\tpattern.lp_all_perennial:{pattern.lp_all_perennial}")
 		else if pattern.lps.length == 0 then
 			set_npre_nper
 		else
-#			dprint("--------candidates: {pattern.lps}")
 			preexist_expr_value = pmask_PVAL_PER
 			for candidate in pattern.lps do
 				if candidate.is_intern or candidate.is_extern then
@@ -1057,12 +1067,13 @@ redef class MOCallSite
 					break
 				else if candidate.return_expr == null then
 					# Lazy attribute not yet initialized
+					# WARNING
+					# Be sure that it can't be anything else that lazy attributes here
 					dprint("WARN NULL RETURN_EXPR {candidate} {candidate.mproperty}")
 					set_npre_nper
 					break
 				end
 				
-				dprint("callsite {self} candidate:{candidate} {pattern.rst}.{pattern.gp}")
 				candidate.preexist_return
 				merge_preexistence(candidate.return_expr.as(not null))
 				if is_npre_per then
@@ -1073,7 +1084,6 @@ redef class MOCallSite
 			end
 		end
 
-		dprint("\n")
 		return preexist_expr_value
 	end
 end
@@ -1083,7 +1093,6 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
-#		dprint("--------preexist_site {self} recv:{expr_recv}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value
@@ -1119,19 +1128,10 @@ redef class MOSitePattern
 		super
 		cuc += 1
 
-#		sys.dprint("[NEW BRANCH] cuc:{cuc} | lp:{lp} | gp:{gp} | rst:{rst}")
-
 		if cuc == 1 then
 			for expr in exprsites do
-				# We must test the "site" side of the exprsite, so we must use the receiver
-#				dprint("\t expr:{expr.expr_recv} {gp} {expr.expr_recv.preexist_expr_value}")
-
 				expr.expr_recv.init_preexist
 				expr.lp.propage_preexist
-			
-				# Just for debug, remove it !
-#				expr.lp.compiled = false
-#				expr.lp.preexist_all
 			end
 		end
 
@@ -1144,24 +1144,19 @@ redef class MONewPattern
 	fun set_preexist_newsite
 	do
 		for newexpr in newexprs do
-#			var old = newexpr.preexist_expr_value.preexists_bits.to_s
 			newexpr.set_ptype_per
-#			var cur = newexpr.preexist_expr_value.preexists_bits.to_s
-
-#			dprint("update prexistence {newexpr} in {newexpr.lp} from {old} to {cur}")
-
 			newexpr.lp.propage_npreexist
-
-			# Just for debug, remove it !
-#			newexpr.lp.compiled = false
-#			newexpr.lp.preexist_all
-#			dprint("\n\n")
 		end
 	end
 end
 
 # Specifics stats for preexistence
 class PreexistenceStat
+	# Count of the total loaded classes
+	var loaded_classes = 0
+	#
+	fun incr_loaded_classes do loaded_classes += 1
+
 	# Count of new on unloaded class
 	var unloaded_new = 0
 	#
@@ -1171,6 +1166,11 @@ class PreexistenceStat
 	var loaded_new = 0
 	#
 	fun incr_loaded_new do loaded_new += 1
+
+	# Count of AST non primivites new nodes
+	var ast_new_no_primitives = 0
+	#
+	fun incr_new_no_primitives do ast_new_no_primitives += 1
 
 	# Count of preexist sites
 	var preexist = 0
@@ -1230,6 +1230,8 @@ class PreexistenceStat
 		ret += "\n------------------ PREEXISTENCE STATS ------------------\n"
 		ret += "\tloaded_new: {loaded_new}\n"
 		ret += "\tunloaded_new: {unloaded_new}\n"
+		ret += "\tloaded_classes: {loaded_classes}\n"
+		ret += "\tast_new_no_primitives: {ast_new_no_primitives}\n"
 		ret += "\n"
 		ret += "\tpreexist: {preexist}\n"
 		ret += "\tnpreexist: {npreexist}\n"
@@ -1264,9 +1266,10 @@ end
 
 # Change preexistence state of new sites compiled before loading
 redef class MClass
-	redef fun handle_new_branch
+	redef fun handle_new_class
 	do
 		super
+		pstats.incr_loaded_classes
 		new_pattern.set_preexist_newsite
 	end
 end

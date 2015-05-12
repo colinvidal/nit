@@ -60,9 +60,7 @@ class MOSitePattern
 		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
 		# Tell to each added lps that this pattern can be a caller
 		for lp in gp.loaded_lps do
-#			if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
-				add_lp(lp)
-#			end
+			add_lp(lp)
 		end
 	end
 
@@ -74,8 +72,8 @@ class MOSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-#		else if gp_pos_unique(vm) then
-#			impl = new SSTImpl(true, gp.absolute_offset)
+		else if gp_pos_unique(vm) then
+			impl = new SSTImpl(true, gp.absolute_offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
@@ -113,17 +111,6 @@ class MOSitePattern
 		if impl == null then compute_impl(vm)
 		return impl.as(not null)
 	end
-
-	# True if a lp is compatible with self pattern (eg. if the lp has
-	# the gp of self and if rst of lp is a subtype of rst of the pattern)
-#	fun compatibl_with(vm: VirtualMachine, lp: MPropDef): Bool
-#	do
-##		dprint("compatible_with sub:{lp.mclassdef.mclass.mclass_type} ({lp.mclassdef.mclass.loaded}) sup:{rst} ({rst.as(MClassType).mclass.loaded})")
-#		if vm.is_subtype(lp.mclassdef.mclass.mclass_type, rst) then
-#			if gp == lp.mproperty then return true
-#		end
-#		return false
-#	end
 
 	# Add a new branch on the pattern
 	fun handle_new_branch(lp: MMethodDef)
@@ -267,7 +254,6 @@ abstract class MOSite
 		end
 		return concretes_receivers.as(not null)
 	end
-
 
 	# Get the implementation of the site
 	fun get_impl(vm: VirtualMachine): Implementation
@@ -428,7 +414,7 @@ redef class MClass
 
 	# Detect new branches added by a loading class
 	# Add introduces and redifines local properties
-	fun handle_new_branch	
+	fun handle_new_class
 	do	
 		var redefs = new List[MMethodDef]
 
@@ -440,14 +426,14 @@ redef class MClass
 					# Add the method implementation in loadeds implementations of the associated gp
 					mdef.mproperty.loaded_lps.add(mdef)
 					if not mdef.is_intro then
-						# Tell the patterns using this method there is a new branch
-#						vm.handle_new_branch(mdef)
+						# There is a new branch
 						redefs.add(mdef)
 					end
 				end
 			end
 		end
 
+		# For each class who know one of the redefs methods, tell the pattern there is a new branch
 		for lp in redefs do
 			for parent in ordering do
 				for p in parent.sites_patterns do
@@ -506,22 +492,6 @@ end
 redef class VirtualMachine
 	# The top of list is the type of the receiver that will be used after new_frame
 	var next_receivers = new List[MType]
-
-	# List of patterns of MONew
-	var new_patterns = new List[MONewPattern]
-
-	redef fun create_class(mclass)
-	do
-		# Get all superclasses loaded implicitly by mclass
-		var implicit_loaded = new List[MClass]
-		for cls in mclass.superclasses_ordering(self) do
-			if not cls.loaded then implicit_loaded.add(cls)
-		end
-
-		super(mclass)
-
-		for cls in implicit_loaded do cls.handle_new_branch
-	end
 end
 
 redef class MType
@@ -550,7 +520,6 @@ redef class MType
 			return self.mtype.get_mclass(vm)
 		else if (self isa MVirtualType or self isa MParameterType) and need_anchor then
 			var anchor: MClassType
-#			var anchor_type = vm.frame.arguments.first.mtype
 			var anchor_type = vm.next_receivers.last
 			
 			if anchor_type isa MNullableType then
@@ -559,10 +528,8 @@ redef class MType
 				anchor = anchor_type.as(MClassType)
 			end
 			
-			dprint("get_mclass {self} need_anchor {anchor} {vm.current_propdef.mpropdef.name}")
 			return anchor_to(vm.mainmodule, anchor).get_mclass(vm)
 		else
-			dprint("{self} {self.class_name}")
 			# NYI
 			abort
 		end
