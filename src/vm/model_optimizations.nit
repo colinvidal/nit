@@ -563,11 +563,14 @@ class StaticImpl
 end
 
 redef class MClass
-	# List of patterns of MOExprSite
-	var sites_patterns = new List[MOSitePattern]
+	# List of patterns of MOPropSite
+	var sites_patterns = new List[MOPropSitePattern]
 
 	# Pattern of MONew of self
 	var new_pattern = new MONewPattern(self)
+
+	# List of patterns of subtypes test
+	var subtype_pattern = new List[MOSubtypeSitePattern]
 
 	# Linearization of classes hierarchy
 	var ordering: nullable Array[MClass]
@@ -637,10 +640,17 @@ redef class MClass
 		return ordering.as(not null)
 	end
 
-	# Create (if not exists) and set a pattern for exprsites
-	fun set_site_pattern(exprsite: MOExprSite, rst: MType, gp: MMethod)
+	# Create (if not exists) and set a pattern for object subtype sites
+	fun set_subtype_pattern(site: MOSubtypeSite, rst: MType)
 	do
-		var pattern: nullable MOSitePattern = null
+		# TODO
+		abort
+	end
+
+	# Create (if not exists) and set a pattern for objet prop sites
+	fun set_site_pattern(site: MOPropSite, rst: MType, gp: MProperty)
+	do
+		var pattern: nullable MOPropSitePattern = null
 
 		for p in sites_patterns do
 			if p.gp == gp and p.rst == rst then
@@ -650,13 +660,20 @@ redef class MClass
 		end
 
 		if pattern == null then 
-#			dprint("set_site_pattern {rst}.{gp}")
-			pattern = new MOSitePattern(rst, gp)
-			sites_patterns.add(pattern)
+			if site isa MOCallSite then
+				pattern = new MOCallSitePattern(rst, gp.as(MMethod))
+			else if site isa MOReadSite then
+				pattern = new MOReadSitePattern(rst, gp.as(MAttribute))
+			else if site isa MOWriteSite then
+				pattern = new MOWriteSitePattern(rst, gp.as(MAttribute))
+			else
+				abort
+			end
+
+			sites_patterns.add(pattern.as(not null))
 		end
 
-		pattern.add_site(exprsite)
-#		dprint("ASendExpr pattern.exprsites: {pattern.exprsites}"s
+		pattern.add_site(site)
 	end
 
 	# Add newsite expression in the NewPattern assocociated to this class
