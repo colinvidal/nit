@@ -400,12 +400,17 @@ redef class MClass
 	var ordering: nullable Array[MClass]
 
 	# Tell if in all loaded subclasses, this class has a method group on unique position
+	# WARNING : this test is totaly broken, and the sub-layer implementation will change
 	fun has_unique_method_pos(meth: MMethod): Bool
 	do
 		var pic = meth.intro_mclassdef.mclass
 
 		if not pic.loaded then return false
-	
+
+		# Actually, we don't need to do that, but sometimes, it's happends that
+		# the pic and self are not compatibles...
+		if not pic.positions_methods.keys.has(self) then return false
+
 		if pic.positions_methods[self] == -1 then return false
 		for cls, pos in positions_methods do if pos == -1 then return false
 	
