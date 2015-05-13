@@ -619,6 +619,18 @@ redef class MMethodDef
 		if flag then for p in callers do p.propage_npreexist
 	end
 
+	# Fill the correct list if the analysed preexistence if unperennial
+	fun fill_nper(expr: MOExpr)
+	do
+		if expr.is_nper then
+			if expr.is_pre then
+				if not exprs_preexist_mut.has(expr) then exprs_preexist_mut.add(expr)
+			else
+				if not exprs_npreexist_mut.has(expr) then exprs_npreexist_mut.add(expr)
+			end
+		end
+	end
+	
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
@@ -630,18 +642,6 @@ redef class MMethodDef
 		else
 			return_expr.set_recursive
 			return return_expr.preexist_expr_value
-		end
-	end
-
-	# Fill the correct list if the analysed preexistence if unperennial
-	fun fill_nper(expr: MOExpr)
-	do
-		if expr.is_nper then
-			if expr.is_pre then
-				if not exprs_preexist_mut.has(expr) then exprs_preexist_mut.add(expr)
-			else
-				if not exprs_npreexist_mut.has(expr) then exprs_npreexist_mut.add(expr)
-			end
 		end
 	end
 
@@ -686,7 +686,17 @@ redef class MMethodDef
 			assert not site.pattern.rst.is_primitive_type
 
 			debug_preexist = site.preexist_site
-			dprint("\tpreexist of {site.pattern.rst}.{site.pattern.gp} {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}")
+			var buff = "\tpreexist of "
+
+			if site isa MOSubtypeSite then
+				buff += "cast {site.pattern.rst} isa {site.target}"
+			else
+				buff += "site {site.pattern.rst}.{site.as(MOPropSite).pattern.gp}" 
+			end
+
+			buff += " {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}"
+			dprint(buff)
+
 			fill_nper(site.expr_recv)
 
 			if site.expr_recv.is_pre then
@@ -1105,7 +1115,7 @@ redef class MOSite
 	end
 end
 
-redef class MOSitePattern
+redef class MOExprSitePattern
 	# Number of uncompiled calles (local properties)
 	var cuc = 0
 
@@ -1127,17 +1137,16 @@ redef class MOSitePattern
 		for lp in lps do lp.propage_npreexist
 	end
 
-	# Set non preesitent all non perenial preexistent expressions known by this pattern 
-	# If the expression if the return of a lp, propage the callers
-	redef fun handle_new_branch(lp)
+	# When add a new branch, if it is not compiled, unset preexistence to all expressions using it
+	redef fun add_lp(lp)
 	do
 		super
 		cuc += 1
 
 		if cuc == 1 then
-			for expr in exprsites do
-				expr.expr_recv.init_preexist
-				expr.lp.propage_preexist
+			for site in sites do
+				site.expr_recv.init_preexist
+				site.lp.propage_preexist
 			end
 		end
 

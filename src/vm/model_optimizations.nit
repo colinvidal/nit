@@ -124,8 +124,7 @@ abstract class MOPropSitePattern
 
 	private fun gp_pos_unique(vm: VirtualMachine): Bool
 	do
-		# TODO
-		return false
+		return rst.get_mclass(vm).unique_gp_pos(gp)
 	end
 end
 
@@ -432,7 +431,7 @@ abstract class MOSite
 	do
 		for recv in get_concretes do
 			if not recv.loaded then return false
-			if not recv.has_unique_method_pos(lp.mproperty) then return false
+			if not recv.unique_gp_pos(lp.mproperty) then return false
 		end
 		return true
 	end
@@ -577,9 +576,9 @@ redef class MClass
 
 	# Tell if in all loaded subclasses, this class has a method group on unique position
 	# WARNING : this test is totaly broken, and the sub-layer implementation will change
-	fun has_unique_method_pos(meth: MMethod): Bool
+	fun unique_gp_pos(gp: MProperty): Bool
 	do
-		var pic = meth.intro_mclassdef.mclass
+		var pic = gp.intro_mclassdef.mclass
 
 		if not pic.loaded then return false
 
@@ -620,7 +619,7 @@ redef class MClass
 				for p in parent.sites_patterns do
 					if p.gp == lp.mproperty then 
 						if not sites_patterns.has(p) then sites_patterns.add(p)
-						p.handle_new_branch(lp)
+						p.add_lp(lp)
 					end
 				end
 			end
