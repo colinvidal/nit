@@ -1137,7 +1137,6 @@ redef class MClass
 	redef fun handle_new_class
 	do
 		super
-		pstats.incr_loaded_classes_explicits
 		new_pattern.set_preexist_newsite
 	end
 end
