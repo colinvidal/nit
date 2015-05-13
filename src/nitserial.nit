@@ -27,7 +27,6 @@ module nitserial
 
 import frontend
 import rapid_type_analysis
-import model_utils
 import template
 
 # A Nit module
@@ -94,7 +93,7 @@ end
 
 redef class MClassType
 	redef fun is_visible_from(mmodule) do
-		return mmodule.is_visible(mclass.intro_mmodule, public_visibility)
+		return mmodule.is_visible(mclass.intro_mmodule, mclass.visibility)
 	end
 end
 

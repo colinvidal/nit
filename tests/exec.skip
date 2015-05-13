@@ -3,3 +3,6 @@ leapfrog_curses
 websocket_server
 converter
 show_basedir
+langannot
+loops_infinite
+read_entire_file

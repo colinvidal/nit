@@ -20,7 +20,7 @@ By default, the generated executables are produced in the current directory.
 
 Internally, nitc rely on the presence of a C compiler. Usually gcc (but nitc was successfully tested with clang).
 A compilation directory is therefore created and (re-)used.
-By default, the compilation directory is named `.nit_compile`.
+By default, the compilation directory is named `nit_compile` and is removed after the compilation.
 (see `--compile-dir` for details.)
 
 Currently, because Nit is still in heavy development, the compilation directory is not cleaned after the compilation.
@@ -168,7 +168,9 @@ See the documentation of these specific modules for details.
 `--compile-dir`
 :   Directory used to generate temporary files.
 
-    By default, it is named `.nit_compile`.
+    By default, it is named `nit_compile` and created in the current directory and destroyed after the compilation.
+
+    If the option `--compile_dir` or `--no-cc` is used, then the directory is not destroyed and let as is.
 
 `--no-cc`
 :   Do not invoke the C compiler.
@@ -183,6 +185,8 @@ See the documentation of these specific modules for details.
     Will produce a `hello` directory that contains the required C files to finish the compilation.
     Only the C files required for the program are generated.
     The final binary will be generated in the same directory.
+
+    Note that, to be useful, the compilation directory is not destroyed when `--no-cc` is used.
 
 `-m`
 :   Additional module to mix-in.
@@ -400,8 +404,18 @@ They are useless for a normal user.
 `--no-main`
 :   Do not generate main entry point.
 
-`--stacktrace`
-:   Control the generation of stack traces.
+`--no-stacktrace`
+:   The compiled program will not display stack traces on runtime errors.
+
+    Because stack traces rely on libunwind, this option might be useful in order to generate more portable binaries
+    since libunwind might be non available on the runtime system (or available with an ABI incompatible version).
+
+    The generated C is API-portable and can be reused, distributed and compiled on any supported system.
+    If the option `--no-stacktrace` is not used but the development files of the library `libunwind` are not available, then a warning will be displayed
+    and stack trace will be disabled.
+
+    Note that the `--no-stacktrace` option (or this absence) can be toggled manually in the generated Makefile (search `NO_STACKTRACE` in the Makefile).
+    Moreover, the environment variable `NIT_NO_STACK` (see bellow) can also be used at runtime to disable stack traces.
 
 `--max-c-lines`
 :   Maximum number of lines in generated C files. Use 0 for unlimited.
@@ -435,6 +449,11 @@ They are useless for a normal user.
 `--stub-man`
 :   Generate a stub manpage in pandoc markdown format.
 
+`--keep-going`
+:   Continue after errors, whatever the consequences.
+
+The tool does not stop after some errors but continue until it produces incorrect result, crashes, erases the hard drive, or just continue forever in an infinite loop.
+This option is used to test the robustness of the tools by allowing phases to progress on incorrect data.
 
 # ENVIRONMENT VARIABLES
 
@@ -471,6 +490,20 @@ They are useless for a normal user.
     * malloc: disable the GC and just use `malloc` without doing any `free`.
     * large: disable the GC and just allocate a large memory area to use for all instantiation.
     * help: show the list of available options.
+
+`NIT_NO_STACK`
+:   Runtime control of stack traces.
+
+    By default, stack traces are printed when a runtime errors occurs during the execution of a compiled program.
+    When setting this environment variable to a non empty value, such stack traces are disabled.
+
+    The environment variable is used when programs are executed, not when they are compiled.
+    Thus, you do not need to recompile programs in order to disable generated stack traces.
+
+    Note that stack traces require that, during the compilation, development files of the library `libunwind` are available.
+    If they are not available, then programs are compiled without any stack trace support.
+
+    To completely disable stack traces, see the option `--no-stacktrace`.
 
 # SEE ALSO
 

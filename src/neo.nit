@@ -845,6 +845,7 @@ class NeoModel
 		node.labels.add "MParameter"
 		node["name"] = mparameter.name
 		node["is_vararg"] = mparameter.is_vararg
+		node["is_default"] = mparameter.is_default
 		node.out_edges.add(new NeoEdge(node, "TYPE", to_node(mparameter.mtype)))
 		return node
 	end
@@ -860,28 +861,15 @@ class NeoModel
 		var name = node["name"].to_s
 		var mtype = to_mtype(model, node.out_nodes("TYPE").first)
 		var is_vararg = node["is_vararg"].as(Bool)
-		var mparameter = new MParameter(name, mtype, is_vararg)
+		var is_default = node["is_default"].as(Bool)
+		var mparameter = new MParameter(name, mtype, is_vararg, is_default)
 		mentities[node.id.as(Int)] = mparameter
 		return mparameter
 	end
 
 	# Get a `Location` from its string representation.
 	private fun to_location(loc: String): Location do
-		#TODO filepath
-		var parts = loc.split_with(":")
-		var file = new SourceFile.from_string(parts[0], "")
-		if parts.length == 1 then
-			return new Location(file, 0, 0, 0, 0)
-		end
-		var pos = parts[1].split_with("--")
-		var pos1 = pos[0].split_with(",")
-		var pos2 = pos[1].split_with(",")
-		var line_s = pos1[0].to_i
-		var line_e = pos2[0].to_i
-		var column_s = pos1[1].to_i
-		var column_e = 0
-		if pos2.length == 2 then pos2[1].to_i
-		return new Location(file, line_s, line_e, column_s, column_e)
+		return new Location.from_string(loc)
 	end
 
 	# Get a `MVisibility` from its string representation.

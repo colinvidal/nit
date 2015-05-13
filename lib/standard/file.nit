@@ -113,30 +113,29 @@ class FileReader
 			return
 		end
 		end_reached = false
-		_buffer_pos = 0
-		_buffer.clear
+		buffer_reset
 	end
 
 	redef fun close
 	do
 		super
-		_buffer.clear
+		buffer_reset
 		end_reached = true
 	end
 
 	redef fun fill_buffer
 	do
-		var nb = _file.io_read(_buffer.items, _buffer.capacity)
+		var nb = _file.io_read(_buffer, _buffer_capacity)
 		if nb <= 0 then
 			end_reached = true
 			nb = 0
 		end
-		_buffer.length = nb
+		_buffer_length = nb
 		_buffer_pos = 0
 	end
 
 	# End of file?
-	redef var end_reached: Bool = false
+	redef var end_reached = false
 
 	# Open the file at `path` for reading.
 	#
@@ -179,17 +178,42 @@ class FileWriter
 	super FileStream
 	super Writer
 
+	redef fun write_bytes(s) do
+		if last_error != null then return
+		if not _is_writable then
+			last_error = new IOError("cannot write to non-writable stream")
+			return
+		end
+		write_native(s.items, s.length)
+	end
+
 	redef fun write(s)
+	do
+		if last_error != null then return
+		if not _is_writable then
+			last_error = new IOError("cannot write to non-writable stream")
+			return
+		end
+		for i in s.substrings do write_native(i.to_cstring, i.length)
+	end
+
+	redef fun write_byte(value)
 	do
 		if last_error != null then return
 		if not _is_writable then
 			last_error = new IOError("Cannot write to non-writable stream")
 			return
 		end
-		if s isa FlatText then
-			write_native(s.to_cstring, s.length)
-		else
-			for i in s.substrings do write_native(i.to_cstring, i.length)
+		if _file.address_is_null then
+			last_error = new IOError("Writing on a null stream")
+			_is_writable = false
+			return
+		end
+
+		var err = _file.write_byte(value)
+		if err != 1 then
+			# Big problem
+			last_error = new IOError("Problem writing a byte: {err}")
 		end
 	end
 
@@ -275,7 +299,7 @@ class Stdin
 		prepare_buffer(1)
 	end
 
-	redef fun poll_in: Bool is extern "file_stdin_poll_in"
+	redef fun poll_in is extern "file_stdin_poll_in"
 end
 
 # Standard output stream.
@@ -415,10 +439,12 @@ class Path
 	# ~~~
 	#
 	# See `Reader::read_all` for details.
-	fun read_all: String
+	fun read_all: String do return read_all_bytes.to_s
+
+	fun read_all_bytes: Bytes
 	do
 		var s = open_ro
-		var res = s.read_all
+		var res = s.read_all_bytes
 		s.close
 		return res
 	end
@@ -1004,39 +1030,23 @@ redef class String
 	#     assert files.is_empty
 	#
 	# TODO find a better way to handle errors and to give them back to the user.
-	fun files: Array[String] is extern import Array[String], Array[String].add, NativeString.to_s, String.to_cstring `{
-		char *dir_path;
-		DIR *dir;
+	fun files: Array[String]
+	do
+		var res = new Array[String]
+		var d = new NativeDir.opendir(to_cstring)
+		if d.address_is_null then return res
 
-		dir_path = String_to_cstring( recv );
-		if ((dir = opendir(dir_path)) == NULL)
-		{
-			//perror( dir_path );
-			//exit( 1 );
-			Array_of_String results;
-			results = new_Array_of_String();
-			return results;
-		}
-		else
-		{
-			Array_of_String results;
-			String file_name;
-			struct dirent *de;
+		loop
+			var de = d.readdir
+			if de.address_is_null then break
+			var name = de.to_s_with_copy
+			if name == "." or name == ".." then continue
+			res.add name
+		end
+		d.closedir
 
-			results = new_Array_of_String();
-
-			while ( ( de = readdir( dir ) ) != NULL )
-				if ( strcmp( de->d_name, ".." ) != 0 &&
-					strcmp( de->d_name, "." ) != 0 )
-				{
-					file_name = NativeString_to_s( strdup( de->d_name ) );
-					Array_of_String_add( results, file_name );
-				}
-
-			closedir( dir );
-			return results;
-		}
-	`}
+		return res
+	end
 end
 
 redef class NativeString
@@ -1046,12 +1056,12 @@ redef class NativeString
 		struct stat* stat_element;
 		int res;
 		stat_element = malloc(sizeof(struct stat));
-		res = lstat(recv, stat_element);
+		res = lstat(self, stat_element);
 		if (res == -1) return NULL;
 		return stat_element;
 	`}
 	private fun file_mkdir: Bool is extern "string_NativeString_NativeString_file_mkdir_0"
-	private fun rmdir: Bool `{ return !rmdir(recv); `}
+	private fun rmdir: Bool `{ return !rmdir(self); `}
 	private fun file_delete: Bool is extern "string_NativeString_NativeString_file_delete_0"
 	private fun file_chdir: Bool is extern "string_NativeString_NativeString_file_chdir_0"
 	private fun file_realpath: NativeString is extern "file_NativeString_realpath"
@@ -1071,28 +1081,32 @@ private extern class NativeFileStat `{ struct stat * `}
 	fun size: Int is extern "file_FileStat_FileStat_size_0"
 
 	# Returns true if it is a regular file (not a device file, pipe, sockect, ...)
-	fun is_reg: Bool `{ return S_ISREG(recv->st_mode); `}
+	fun is_reg: Bool `{ return S_ISREG(self->st_mode); `}
 	# Returns true if it is a directory
-	fun is_dir: Bool `{ return S_ISDIR(recv->st_mode); `}
+	fun is_dir: Bool `{ return S_ISDIR(self->st_mode); `}
 	# Returns true if it is a character device
-	fun is_chr: Bool `{ return S_ISCHR(recv->st_mode); `}
+	fun is_chr: Bool `{ return S_ISCHR(self->st_mode); `}
 	# Returns true if it is a block device
-	fun is_blk: Bool `{ return S_ISBLK(recv->st_mode); `}
+	fun is_blk: Bool `{ return S_ISBLK(self->st_mode); `}
 	# Returns true if the type is fifo
-	fun is_fifo: Bool `{ return S_ISFIFO(recv->st_mode); `}
+	fun is_fifo: Bool `{ return S_ISFIFO(self->st_mode); `}
 	# Returns true if the type is a link
-	fun is_lnk: Bool `{ return S_ISLNK(recv->st_mode); `}
+	fun is_lnk: Bool `{ return S_ISLNK(self->st_mode); `}
 	# Returns true if the type is a socket
-	fun is_sock: Bool `{ return S_ISSOCK(recv->st_mode); `}
+	fun is_sock: Bool `{ return S_ISSOCK(self->st_mode); `}
 end
 
 # Instance of this class are standard FILE * pointers
 private extern class NativeFile `{ FILE* `}
 	fun io_read(buf: NativeString, len: Int): Int is extern "file_NativeFile_NativeFile_io_read_2"
 	fun io_write(buf: NativeString, len: Int): Int is extern "file_NativeFile_NativeFile_io_write_2"
+	fun write_byte(value: Int): Int `{
+		unsigned char b = (unsigned char)value;
+		return fwrite(&b, 1, 1, self);
+	`}
 	fun io_close: Int is extern "file_NativeFile_NativeFile_io_close_0"
 	fun file_stat: NativeFileStat is extern "file_NativeFile_NativeFile_file_stat_0"
-	fun fileno: Int `{ return fileno(recv); `}
+	fun fileno: Int `{ return fileno(self); `}
 	# Flushes the buffer, forcing the write operation
 	fun flush: Int is extern "fflush"
 	# Used to specify how the buffering will be handled for the current stream.
@@ -1103,6 +1117,24 @@ private extern class NativeFile `{ FILE* `}
 	new native_stdin is extern "file_NativeFileCapable_NativeFileCapable_native_stdin_0"
 	new native_stdout is extern "file_NativeFileCapable_NativeFileCapable_native_stdout_0"
 	new native_stderr is extern "file_NativeFileCapable_NativeFileCapable_native_stderr_0"
+end
+
+# Standard `DIR*` pointer
+private extern class NativeDir `{ DIR* `}
+
+	# Open a directory
+	new opendir(path: NativeString) `{ return opendir(path); `}
+
+	# Close a directory
+	fun closedir `{ closedir(self); `}
+
+	# Read the next directory entry
+	fun readdir: NativeString `{
+		struct dirent *de;
+		de = readdir(self);
+		if (!de) return NULL;
+		return de->d_name;
+	`}
 end
 
 redef class Sys
@@ -1204,7 +1236,7 @@ end
 # Print `objects` on the standard output (`stdout`).
 fun printn(objects: Object...)
 do
-	sys.stdout.write(objects.to_s)
+	sys.stdout.write(objects.plain_to_s)
 end
 
 # Print an `object` on the standard output (`stdout`) and add a newline.
@@ -1214,10 +1246,19 @@ do
 	sys.stdout.write("\n")
 end
 
+# Print `object` on the error output (`stderr` or a log system)
+fun print_error(object: Object)
+do
+	sys.stderr.write object.to_s
+	sys.stderr.write "\n"
+end
+
 # Read a character from the standard input (`stdin`).
 fun getc: Char
 do
-	return sys.stdin.read_char.ascii
+	var c = sys.stdin.read_char
+	if c == null then return '\1'
+	return c
 end
 
 # Read a line from the standard input (`stdin`).

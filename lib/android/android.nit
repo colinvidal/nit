@@ -24,54 +24,41 @@ import platform
 import native_app_glue
 import dalvik
 private import log
-private import android_data_store
-
-# Uses Android logs to print everything
-redef fun print(text) do log_write(priority_info, app.log_prefix.to_cstring, text.to_s.to_cstring)
+private import data_store
 
 redef class App
-	redef fun log_error(msg) do log_write(priority_error, log_prefix.to_cstring, msg.to_cstring)
-
-	redef fun log_warning(msg) do log_write(priority_warn, log_prefix.to_cstring, msg.to_cstring)
-
 	redef fun init_window
 	do
 		super
-		window_created
+		on_create
+		on_restore_state
+		on_start
 	end
 
 	redef fun term_window
 	do
 		super
-		window_closing
+		on_stop
 	end
 
 	# Is the application currently paused?
 	var paused = true
 
-	redef fun window_created
-	do
-		super
-		paused = false
-	end
-
-	redef fun window_closing
-	do
-		paused = true
-		super
-	end
-
 	redef fun pause
 	do
 		paused = true
+		on_pause
 		super
 	end
 
 	redef fun resume
 	do
 		paused = false
+		on_resume
 		super
 	end
+
+	redef fun save_state do on_save_state
 
 	redef fun lost_focus
 	do
@@ -85,5 +72,5 @@ redef class App
 		super
 	end
 
-	redef fun destroy do exit 0
+	redef fun destroy do on_destroy
 end

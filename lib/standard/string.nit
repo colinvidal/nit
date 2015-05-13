@@ -60,7 +60,7 @@ abstract class Text
 	fun substring(from: Int, count: Int): SELFTYPE is abstract
 
 	# Iterates on the substrings of self if any
-	fun substrings: Iterator[Text] is abstract
+	fun substrings: Iterator[FlatText] is abstract
 
 	# Is the current Text empty (== "")
 	#
@@ -127,7 +127,7 @@ abstract class Text
 	end
 
 	# Return a null terminated char *
-	fun to_cstring: NativeString do return flatten.to_cstring
+	fun to_cstring: NativeString is abstract
 
 	# The index of the last occurrence of an element starting from pos (in reverse order).
 	#
@@ -249,6 +249,16 @@ abstract class Text
 	#     assert "ff".to_hex == 255
 	fun to_hex: Int do return a_to(16)
 
+	# If `self` contains only digits <= '7', return the corresponding integer.
+	#
+	#     assert "714".to_oct == 460
+	fun to_oct: Int do return a_to(8)
+
+	# If `self` contains only '0' et '1', return the corresponding integer.
+	#
+	#     assert "101101".to_bin == 45
+	fun to_bin: Int do return a_to(2)
+
 	# If `self` contains only digits and letters, return the corresponding integer in a given base
 	#
 	#     assert "120".a_to(3)     == 15
@@ -345,7 +355,7 @@ abstract class Text
 		end
 		return true
 	end
-			
+
 	# Removes the whitespaces at the beginning of self
 	#
 	#     assert " \n\thello \n\t".l_trim == "hello \n\t"
@@ -485,7 +495,7 @@ abstract class Text
 	fun to_cmangle: String
 	do
 		if is_empty then return ""
-		var res = new FlatBuffer
+		var res = new Buffer
 		var underscore = false
 		var start = 0
 		var c = chars[0]
@@ -541,7 +551,7 @@ abstract class Text
 	# The exceptions are the common `\t` and `\n`.
 	fun escape_to_c: String
 	do
-		var b = new FlatBuffer
+		var b = new Buffer
 		for i in [0..length[ do
 			var c = chars[i]
 			if c == '\n' then
@@ -581,7 +591,7 @@ abstract class Text
 	#     assert "ab|\{\}".escape_more_to_c("|\{\}") == "ab\\|\\\{\\\}"
 	fun escape_more_to_c(chars: String): String
 	do
-		var b = new FlatBuffer
+		var b = new Buffer
 		for c in escape_to_c.chars do
 			if chars.chars.has(c) then
 				b.add('\\')
@@ -602,7 +612,7 @@ abstract class Text
 	#
 	#     assert "\n\"'\\\{\}0".escape_to_sh == "'\n\"'\\''\\\{\}0'"
 	fun escape_to_sh: String do
-		var b = new FlatBuffer
+		var b = new Buffer
 		b.chars.add '\''
 		for i in [0..length[ do
 			var c = chars[i]
@@ -623,7 +633,7 @@ abstract class Text
 	# These characters are `;`, `|`, `\`, and the non-printable ones.
 	# They will be rendered as `"?{hex}"`.
 	fun escape_to_mk: String do
-		var b = new FlatBuffer
+		var b = new Buffer
 		for i in [0..length[ do
 			var c = chars[i]
 			if c == '$' then
@@ -649,7 +659,7 @@ abstract class Text
 	#     assert u.chars[0].ascii      ==  10 # (the ASCII value of the "new line" character)
 	fun unescape_nit: String
 	do
-		var res = new FlatBuffer.with_capacity(self.length)
+		var res = new Buffer.with_cap(self.length)
 		var was_slash = false
 		for i in [0..length[ do
 			var c = chars[i]
@@ -684,7 +694,7 @@ abstract class Text
 	#     assert ".com/post?e=asdf&f=123".to_percent_encoding == ".com%2fpost%3fe%3dasdf%26f%3d123"
 	fun to_percent_encoding: String
 	do
-		var buf = new FlatBuffer
+		var buf = new Buffer
 
 		for i in [0..length[ do
 			var c = chars[i]
@@ -713,7 +723,7 @@ abstract class Text
 	#     assert "invalid % usage".from_percent_encoding == "invalid ? usage"
 	fun from_percent_encoding: String
 	do
-		var buf = new FlatBuffer
+		var buf = new Buffer
 
 		var i = 0
 		while i < length do
@@ -750,7 +760,7 @@ abstract class Text
 	# SEE: <https://www.owasp.org/index.php/XSS_%28Cross_Site_Scripting%29_Prevention_Cheat_Sheet#RULE_.231_-_HTML_Escape_Before_Inserting_Untrusted_Data_into_HTML_Element_Content>
 	fun html_escape: String
 	do
-		var buf = new FlatBuffer
+		var buf = new Buffer
 
 		for i in [0..length[ do
 			var c = chars[i]
@@ -828,9 +838,6 @@ abstract class Text
 		return escape_more_to_c("|\{\}<>")
 	end
 
-	# Flat representation of self
-	fun flatten: FlatText is abstract
-
 	private var hash_cache: nullable Int = null
 
 	redef fun hash
@@ -847,6 +854,60 @@ abstract class Text
 			hash_cache = h
 		end
 		return hash_cache.as(not null)
+	end
+
+	# Gives the formatted string back as a Nit string with `args` in place
+	#
+	#    assert "This %1 is a %2.".format("String", "formatted String") == "This String is a formatted String."
+	#    assert "\\%1 This string".format("String") == "\\%1 This string"
+	fun format(args: Object...): String do
+		var s = new Array[Text]
+		var curr_st = 0
+		var i = 0
+		while i < length do
+			# Skip escaped characters
+			if self[i] == '\\' then
+				i += 1
+			# In case of format
+			else if self[i] == '%' then
+				var fmt_st = i
+				i += 1
+				var ciph_st = i
+				while i < length and self[i].is_numeric do
+					i += 1
+				end
+				i -= 1
+				var fmt_end = i
+				var ciph_len = fmt_end - ciph_st + 1
+				s.push substring(curr_st, fmt_st - curr_st)
+				s.push args[substring(ciph_st, ciph_len).to_i - 1].to_s
+				curr_st = i + 1
+			end
+			i += 1
+		end
+		s.push substring(curr_st, length - curr_st)
+		return s.to_s
+	end
+
+	# Copies `n` bytes from `self` at `src_offset` into `dest` starting at `dest_offset`
+	#
+	# Basically a high-level synonym of NativeString::copy_to
+	#
+	# REQUIRE: `n` must be large enough to contain `len` bytes
+	#
+	#	var ns = new NativeString(8)
+	#	"Text is String".copy_to_native(ns, 8, 2, 0)
+	#	assert ns.to_s_with_length(8) == "xt is St"
+	#
+	fun copy_to_native(dest: NativeString, n, src_offset, dest_offset: Int) do
+		var mypos = src_offset
+		var itspos = dest_offset
+		while n > 0 do
+			dest[itspos] = self.chars[mypos]
+			itspos += 1
+			mypos += 1
+			n -= 1
+		end
 	end
 
 end
@@ -881,7 +942,7 @@ abstract class FlatText
 	# copy locally the char* as Nit Strings are immutable.
 	private fun fast_cstring: NativeString is abstract
 
-	redef var length: Int = 0
+	redef var length = 0
 
 	redef fun output
 	do
@@ -892,7 +953,9 @@ abstract class FlatText
 		end
 	end
 
-	redef fun flatten do return self
+	redef fun copy_to_native(dest, n, src_offset, dest_offset) do
+		items.copy_to(dest, n, src_offset, dest_offset)
+	end
 end
 
 # Abstract class for the SequenceRead compatible
@@ -953,7 +1016,7 @@ abstract class String
 	#     assert "helloworld".insert_at(" ", 5)	== "hello world"
 	fun insert_at(s: String, pos: Int): SELFTYPE is abstract
 
-	redef fun substrings: Iterator[String] is abstract
+	redef fun substrings is abstract
 
 	# Returns a reversed version of self
 	#
@@ -972,41 +1035,61 @@ abstract class String
 	#     assert "Hello World!".to_lower     == "hello world!"
 	fun to_lower : SELFTYPE is abstract
 
-	# Takes a camel case `self` and converts it to snake case 
+	# Takes a camel case `self` and converts it to snake case
 	#
 	#     assert "randomMethodId".to_snake_case == "random_method_id"
 	#
-	# If `self` is upper, it is returned unchanged
+	# The rules are the following:
 	#
-	#     assert "RANDOM_METHOD_ID".to_snake_case == "RANDOM_METHOD_ID"
+	# An uppercase is always converted to a lowercase
 	#
-	# If the identifier is prefixed by an underscore, the underscore is ignored
+	#     assert "HELLO_WORLD".to_snake_case == "hello_world"
 	#
-	#     assert "_privateField".to_snake_case == "_private_field"
+	# An uppercase that follows a lowercase is prefixed with an underscore
+	#
+	#     assert "HelloTheWORLD".to_snake_case == "hello_the_world"
+	#
+	# An uppercase that follows an uppercase and is followed by a lowercase, is prefixed with an underscore
+	#
+	#     assert "HelloTHEWorld".to_snake_case == "hello_the_world"
+	#
+	# All other characters are kept as is; `self` does not need to be a proper CamelCased string.
+	#
+	#     assert "=-_H3ll0Th3W0rld_-=".to_snake_case == "=-_h3ll0th3w0rld_-="
 	fun to_snake_case: SELFTYPE
 	do
-		if self.is_upper then return self
+		if self.is_lower then return self
 
-		var new_str = new FlatBuffer.with_capacity(self.length)
-		var is_first_char = true
+		var new_str = new Buffer.with_cap(self.length)
+		var prev_is_lower = false
+		var prev_is_upper = false
 
 		for i in [0..length[ do
 			var char = chars[i]
-			if is_first_char then 
-				new_str.add(char.to_lower)
-				is_first_char = false
+			if char.is_lower then
+				new_str.add(char)
+				prev_is_lower = true
+				prev_is_upper = false
 			else if char.is_upper then
-				new_str.add('_')
+				if prev_is_lower then
+					new_str.add('_')
+				else if prev_is_upper and i+1 < length and chars[i+1].is_lower then
+					new_str.add('_')
+				end
 				new_str.add(char.to_lower)
+				prev_is_lower = false
+				prev_is_upper = true
 			else
 				new_str.add(char)
+				prev_is_lower = false
+				prev_is_upper = false
 			end
 		end
-		
+
 		return new_str.to_s
 	end
 
-	# Takes a snake case `self` and converts it to camel case 
+	# Takes a snake case `self` and converts it to camel case
 	#
 	#     assert "random_method_id".to_camel_case == "randomMethodId"
 	#
@@ -1025,7 +1108,7 @@ abstract class String
 	do
 		if self.is_upper then return self
 
-		var new_str = new FlatBuffer
+		var new_str = new Buffer
 		var is_first_char = true
 		var follows_us = false
 
@@ -1060,7 +1143,7 @@ abstract class String
 	fun capitalized: SELFTYPE do
 		if length == 0 then return self
 
-		var buf = new FlatBuffer.with_capacity(length)
+		var buf = new Buffer.with_cap(length)
 
 		var curr = chars[0].to_upper
 		var prev = curr
@@ -1106,7 +1189,7 @@ class FlatString
 	# Indes in _items of the last item of the string
 	private var index_to: Int is noinit
 
-	redef var chars: SequenceRead[Char] = new FlatStringCharView(self) is lazy
+	redef var chars = new FlatStringCharView(self) is lazy
 
 	redef fun [](index)
 	do
@@ -1231,8 +1314,7 @@ class FlatString
 		index_to = to
 	end
 
-	redef fun to_cstring: NativeString
-	do
+	redef fun to_cstring do
 		if real_items != null then
 			return real_items.as(not null)
 		else
@@ -1459,6 +1541,12 @@ end
 abstract class Buffer
 	super Text
 
+	# New `Buffer` factory, will return a concrete `Buffer` type with default capacity
+	new do return new FlatBuffer
+
+	# New `Buffer` factory, returns a concrete `Buffer` with a capacity of `i`
+	new with_cap(i: Int) do return new FlatBuffer.with_capacity(i)
+
 	redef type SELFTYPE: Buffer is fixed
 
 	# Specific implementations MUST set this to `true` in order to invalidate caches
@@ -1484,7 +1572,7 @@ abstract class Buffer
 
 	# Clears the buffer
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append "hello"
 	#     assert not b.is_empty
 	#     b.clear
@@ -1496,7 +1584,7 @@ abstract class Buffer
 
 	# Adds the content of text `s` at the end of self
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append "hello"
 	#     b.append "world"
 	#     assert b == "helloworld"
@@ -1504,7 +1592,7 @@ abstract class Buffer
 
 	# `self` is appended in such a way that `self` is repeated `r` times
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append "hello"
 	#     b.times 3
 	#     assert b == "hellohellohello"
@@ -1512,7 +1600,7 @@ abstract class Buffer
 
 	# Reverses itself in-place
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append("hello")
 	#     b.reverse
 	#     assert b == "olleh"
@@ -1520,7 +1608,7 @@ abstract class Buffer
 
 	# Changes each lower-case char in `self` by its upper-case variant
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append("Hello World!")
 	#     b.upper
 	#     assert b == "HELLO WORLD!"
@@ -1528,7 +1616,7 @@ abstract class Buffer
 
 	# Changes each upper-case char in `self` by its lower-case variant
 	#
-	#     var b = new FlatBuffer
+	#     var b = new Buffer
 	#     b.append("Hello World!")
 	#     b.lower
 	#     assert b == "hello world!"
@@ -1634,7 +1722,7 @@ class FlatBuffer
 		length = 0
 	end
 
-	redef fun empty do return new FlatBuffer
+	redef fun empty do return new Buffer
 
 	redef fun enlarge(cap)
 	do
@@ -1650,8 +1738,7 @@ class FlatBuffer
 		capacity = c
 	end
 
-	redef fun to_s: String
-	do
+	redef fun to_s do
 		written = true
 		if length == 0 then items = new NativeString(1)
 		return new FlatString.with_infos(items, length, 0, length - 1)
@@ -1759,7 +1846,7 @@ class FlatBuffer
 			var r = new FlatBuffer.with_infos(r_items, len, len)
 			return r
 		else
-			return new FlatBuffer
+			return new Buffer
 		end
 	end
 
@@ -1949,6 +2036,26 @@ redef class Bool
 	end
 end
 
+redef class Byte
+	# C function to calculate the length of the `NativeString` to receive `self`
+	private fun byte_to_s_len: Int is extern "native_byte_length_str"
+
+	# C function to convert an nit Int to a NativeString (char*)
+	private fun native_byte_to_s(nstr: NativeString, strlen: Int) is extern "native_byte_to_s"
+
+	# Displayable byte in its hexadecimal form (0x..)
+	#
+	#     assert 1.to_b.to_s       == "0x01"
+	#     assert (-123).to_b.to_s  == "0x85"
+	redef fun to_s do
+		var nslen = byte_to_s_len
+		var ns = new NativeString(nslen + 1)
+		ns[nslen] = '\0'
+		native_byte_to_s(ns, nslen + 1)
+		return ns.to_s_with_length(nslen)
+	end
+end
+
 redef class Int
 
 	# Wrapper of strerror C function
@@ -2098,7 +2205,7 @@ redef class Char
 	#     assert 'x'.to_s    == "x"
 	redef fun to_s
 	do
-		var s = new FlatBuffer.with_capacity(1)
+		var s = new Buffer.with_cap(1)
 		s.chars[0] = self
 		return s.to_s
 	end
@@ -2142,7 +2249,13 @@ redef class Collection[E]
 	# Concatenate elements.
 	redef fun to_s
 	do
-		var s = new FlatBuffer
+		return plain_to_s
+	end
+
+	# Concatenate element without separators
+	fun plain_to_s: String
+	do
+		var s = new Buffer
 		for e in self do if e != null then s.append(e.to_s)
 		return s.to_s
 	end
@@ -2155,7 +2268,7 @@ redef class Collection[E]
 	do
 		if is_empty then return ""
 
-		var s = new FlatBuffer # Result
+		var s = new Buffer # Result
 
 		# Concat first item
 		var i = iterator
@@ -2177,7 +2290,7 @@ end
 redef class Array[E]
 
 	# Fast implementation
-	redef fun to_s
+	redef fun plain_to_s
 	do
 		var l = length
 		if l == 0 then return ""
@@ -2278,7 +2391,7 @@ redef class Map[K,V]
 	do
 		if is_empty then return ""
 
-		var s = new FlatBuffer # Result
+		var s = new Buffer # Result
 
 		# Concat first item
 		var i = iterator
@@ -2364,7 +2477,7 @@ extern class NativeString `{ char* `}
 end
 
 redef class Sys
-	private var args_cache: nullable Sequence[String]
+	private var args_cache: nullable Sequence[String] = null
 
 	# The arguments of the program as given by the OS
 	fun program_args: Sequence[String]

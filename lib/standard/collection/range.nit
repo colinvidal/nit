@@ -4,7 +4,7 @@
 #
 # This file is free software, which comes along with NIT.  This software is
 # distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-# without  even  the implied warranty of  MERCHANTABILITY or  FITNESS FOR A 
+# without  even  the implied warranty of  MERCHANTABILITY or  FITNESS FOR A
 # PARTICULAR PURPOSE.  You can modify it is you want,  provided this header
 # is kept unaltered, and a notification of the changes is added.
 # You  are  allowed  to  redistribute it and sell it, alone or is a part of
@@ -19,7 +19,7 @@ import abstract_collection
 class Range[E: Discrete]
 	super Collection[E]
 
-	redef var first: E
+	redef var first
 
 	# Get the last element.
 	var last: E
@@ -30,7 +30,7 @@ class Range[E: Discrete]
 	#     assert [1..10].has(5)
 	#     assert [1..10].has(10)
 	#     assert not [1..10[.has(10)
-	redef fun has(item) do return item >= first and item <= last
+	redef fun has(item) do return item isa Comparable and item >= first and item <= last
 
 	#     assert [1..1].has_only(1)
 	#     assert not [1..10].has_only(1)
@@ -48,6 +48,15 @@ class Range[E: Discrete]
 	end
 
 	redef fun iterator do return new IteratorRange[E](self)
+
+	# Gets an iterator starting at the end and going backwards
+	#
+	#     var reviter = [1..4].reverse_iterator
+	#     assert reviter.to_a == [4,3,2,1]
+	#
+	#     reviter = [1..4[.reverse_iterator
+	#     assert reviter.to_a == [3,2,1]
+	fun reverse_iterator: Iterator[E] do return new ReverseIteratorRange[E](self)
 
 	#     assert [1..10].length		== 10
 	#     assert [1..10[.length		== 9
@@ -92,8 +101,13 @@ class Range[E: Discrete]
 	init without_last(from: E, to: E)
 	do
 		first = from
-		last = to.predecessor(1)
-		after = to
+		if from <= to then
+			last = to.predecessor(1)
+			after = to
+		else
+			last = to.successor(1)
+			after = to
+		end
 	end
 
 	# Two ranges are equals if they have the same first and last elements.
@@ -118,18 +132,105 @@ class Range[E: Discrete]
 		# 11 and 23 are magic numbers empirically determined to be not so bad.
 		return first.hash * 11 + last.hash * 23
 	end
+
+	# Gets an iterator that progress with a given step.
+	#
+	# The main usage is in `for` construction.
+	#
+	# ~~~
+	# for i in [10..25].step(10) do assert i == 10 or i == 20
+	# ~~~
+	#
+	# But `step` is usable as any kind of iterator.
+	#
+	# ~~~
+	# assert [10..27].step(5).to_a == [10,15,20,25]
+	# ~~~
+	#
+	# If `step == 1`, then it is equivalent to the default `iterator`.
+	#
+	# ~~~
+	# assert [1..5].step(1).to_a == [1..5].to_a
+	# ~~~
+	#
+	# If `step` is negative, then the iterator will iterate on ranges whose `first` > `last`.
+	#
+	# ~~~
+	# assert [25..12].step(-5).to_a == [25,20,15]
+	# ~~~
+	#
+	# On such ranges, the default `iterator` will be empty
+	#
+	# ~~~
+	# assert [5..1].step(1).to_a.is_empty
+	# assert [5..1].iterator.to_a.is_empty
+	# assert [5..1].to_a.is_empty
+	# assert [5..1].is_empty
+	# ~~~
+	#
+	# Note that on non-empty range, iterating with a negative step will be empty
+	#
+	# ~~~
+	# assert [1..5].step(-1).to_a.is_empty
+	# ~~~
+	fun step(step: Int): Iterator[E]
+	do
+		var i
+		if step >= 0 then
+			i = iterator
+		else
+			i = new DowntoIteratorRange[E](self)
+			step = -step
+		end
+
+		if step == 1 then return i
+		return i.to_step(step)
+	end
 end
 
+# Iterator on ranges.
 private class IteratorRange[E: Discrete]
-	# Iterator on ranges.
 	super Iterator[E]
 	var range: Range[E]
 	redef var item is noinit
 
 	redef fun is_ok do return _item < _range.after
-	
+
 	redef fun next do _item = _item.successor(1)
-	
+
+	init
+	do
+		_item = _range.first
+	end
+end
+
+# Reverse iterator on ranges.
+private class ReverseIteratorRange[E: Discrete]
+	super Iterator[E]
+	var range: Range[E]
+	redef var item is noinit
+
+	redef fun is_ok do return _item >= _range.first
+
+	redef fun next do _item = _item.predecessor(1)
+
+	init
+	do
+		_item = _range.last
+	end
+end
+
+# Iterator on ranges.
+private class DowntoIteratorRange[E: Discrete]
+	super IndexedIterator[E]
+	var range: Range[E]
+	redef var item is noinit
+	redef fun index do return _item.distance(_range.first)
+
+	redef fun is_ok do return _item >= _range.last
+
+	redef fun next do _item = _item.predecessor(1)
+
 	init
 	do
 		_item = _range.first
@@ -137,14 +238,16 @@ private class IteratorRange[E: Discrete]
 end
 
 redef class Int
-	# Returns the range from 0 to `self-1`, is used to do:
+	# Returns the range from 0 to `self-1`.
 	#
-	#     var s = new Array[String]
-	#     for i in 3.times do s.add "cool"
-	#     assert s.join(" ") == "cool cool cool"
+	#     assert 3.times == [0..3[
+	#     assert 10.times == [0..10[
+	#     assert ((-1).times).is_empty
 	#
-	#     s.clear
-	#     for i in 10.times do s.add(i.to_s)
-	#     assert s.to_s == "0123456789"
+	# This can be usefull for loops:
+	#
+	#    var s = new Array[String]
+	#    for i in 3.times do s.add "cool"
+	#    assert s.join(" ") == "cool cool cool"
 	fun times: Range[Int] do return [0 .. self[
 end

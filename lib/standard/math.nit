@@ -47,7 +47,7 @@ redef class Int
 	# Returns the square root of `self`
 	#
 	#     assert 16.sqrt == 4
-	fun sqrt: Int `{ return sqrt(recv); `}
+	fun sqrt: Int `{ return sqrt(self); `}
 
 	# Returns the greatest common divisor of `self` and `o`
 	#
@@ -158,7 +158,7 @@ redef class Float
 	#     assert 12.0.abs == 12.0
 	#     assert (-34.56).abs == 34.56
 	#     assert -34.56.abs == -34.56
-	fun abs: Float `{ return fabs(recv); `}
+	fun abs: Float `{ return fabs(self); `}
 
 	# Returns `self` raised at `e` power.
 	#
@@ -186,13 +186,13 @@ redef class Float
 	#     assert 1.9.ceil == 2.0
 	#     assert 2.0.ceil == 2.0
 	#     assert (-1.5).ceil == -1.0
-	fun ceil: Float `{ return ceil(recv); `}
+	fun ceil: Float `{ return ceil(self); `}
 
 	#     assert 1.1.floor == 1.0
 	#     assert 1.9.floor == 1.0
 	#     assert 2.0.floor == 2.0
 	#     assert (-1.5).floor == -2.0
-	fun floor: Float `{ return floor(recv); `}
+	fun floor: Float `{ return floor(self); `}
 
 	# Rounds the value of a float to its nearest integer value
 	#
@@ -241,6 +241,11 @@ end
 redef class Collection[ E ]
 	# Return a random element form the collection
 	# There must be at least one element in the collection
+	#
+	# ~~~
+	# var x = [1,2,3].rand
+	# assert x == 1 or x == 2 or x == 3
+	# ~~~
 	fun rand: E
 	do
 		if is_empty then abort
@@ -252,6 +257,19 @@ redef class Collection[ E ]
 		end
 		abort
 	end
+
+	# Return a new array made of elements in a random order.
+	#
+	# ~~~
+	# var a = [1,2,1].to_shuffle
+	# assert a == [1,1,2] or a == [1,2,1] or a == [2,1,1]
+	# ~~~
+	fun to_shuffle: Array[E]
+	do
+		var res = self.to_a
+		res.shuffle
+		return res
+	end
 end
 
 redef class SequenceRead[E]
@@ -260,6 +278,36 @@ redef class SequenceRead[E]
 	do
 		assert not is_empty
 		return self[length.rand]
+	end
+end
+
+redef class AbstractArray[E]
+	# Reorder randomly the elements in self.
+	#
+	# ~~~
+	# var a = new Array[Int]
+	#
+	# a.shuffle
+	# assert a.is_empty
+	#
+	# a.add 1
+	# a.shuffle
+	# assert a == [1]
+	#
+	# a.add 2
+	# a.shuffle
+	# assert a == [1,2] or a == [2,1]
+	# ~~~
+	#
+	# ENSURE self.shuffle.has_exactly(old(self))
+	fun shuffle
+	do
+		for i in [0..length[ do
+			var j = i + (length-i).rand
+			var tmp = self[i]
+			self[i] = self[j]
+			self[j] = tmp
+		end
 	end
 end
 

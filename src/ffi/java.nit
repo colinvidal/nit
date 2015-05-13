@@ -105,7 +105,7 @@ class JavaLanguage
 			jni_signature_alt = mclass_type.jni_signature_alt
 			return_type = mclass_type
 		else
-			params.add "recv"
+			params.add "self"
 			if signature.return_mtype != null then
 				var ret_mtype = signature.return_mtype
 				ret_mtype = ret_mtype.resolve_for(mclass_type, mclass_type, mmodule, true)
@@ -424,7 +424,7 @@ redef class MExplicitCall
 		var csignature = mproperty.build_c_implementation_signature(recv_mtype, mmodule, "___indirect", long_signature, from_java_call_context)
 		var cf = new CFunction("JNIEXPORT {csignature}")
 		cf.exprs.add "\t{mproperty.build_ccall(recv_mtype, mainmodule, null, long_signature, from_java_call_context, null)}\n"
-		ccu.add_local_function cf
+		ccu.add_non_static_local_function cf
 
 		# In Java, declare the extern method as a private static local method
 		var java_signature = mproperty.build_csignature(recv_mtype, mainmodule, null, short_signature, java_call_context)
@@ -480,9 +480,10 @@ redef class MClassType
 		if ftype isa ForeignJavaType then return ftype.java_type.
 			replace('/', ".").replace('$', ".").replace(' ', "").replace('\n',"")
 		if mclass.name == "Bool" then return "boolean"
-		if mclass.name == "Char" then return "char"
+		if mclass.name == "Char" then return "int"
 		if mclass.name == "Int" then return "long"
 		if mclass.name == "Float" then return "double"
+		if mclass.name == "Byte" then return "byte"
 		return super
 	end
 
@@ -491,9 +492,10 @@ redef class MClassType
 		var ftype = mclass.ftype
 		if ftype isa ForeignJavaType then return "jobject"
 		if mclass.name == "Bool" then return "jboolean"
-		if mclass.name == "Char" then return "jchar"
+		if mclass.name == "Char" then return "jint"
 		if mclass.name == "Int" then return "jlong"
 		if mclass.name == "Float" then return "jdouble"
+		if mclass.name == "Byte" then return "jbyte"
 		return super
 	end
 
@@ -550,9 +552,10 @@ redef class MClassType
 			return "L{jni_type};"
 		end
 		if mclass.name == "Bool" then return "Z"
-		if mclass.name == "Char" then return "C"
+		if mclass.name == "Char" then return "I"
 		if mclass.name == "Int" then return "J"
 		if mclass.name == "Float" then return "D"
+		if mclass.name == "Byte" then return "B"
 		return super
 	end
 
@@ -562,9 +565,10 @@ redef class MClassType
 
 		if ftype isa ForeignJavaType then return "Object"
 		if mclass.name == "Bool" then return "Boolean"
-		if mclass.name == "Char" then return "Char"
+		if mclass.name == "Char" then return "Int"
 		if mclass.name == "Int" then return "Long"
 		if mclass.name == "Float" then return "Double"
+		if mclass.name == "Byte" then return "Byte"
 		return super
 	end
 end
@@ -637,7 +641,7 @@ redef class MMethod
 		cparams.add "jclass clazz"
 
 		if not self.is_init then
-			cparams.add "{call_context.name_mtype(recv_mtype)} recv"
+			cparams.add "{call_context.name_mtype(recv_mtype)} self"
 		end
 		for p in signature.mparameters do
 			var param_mtype = p.mtype.resolve_for(recv_mtype, recv_mtype, from_mmodule, true)
@@ -651,3 +655,17 @@ end
 private fun java_call_context: JavaCallContext do return new JavaCallContext
 private fun to_java_call_context: ToJavaCallContext do return new ToJavaCallContext
 private fun from_java_call_context: FromJavaCallContext do return new FromJavaCallContext
+
+redef class CCompilationUnit
+	# Similar to `add_local_function` but not `static`
+	#
+	# Used when the signature contains a visibility attribute.
+	private fun add_non_static_local_function(c_function: CFunction)
+	do
+		body_decl.add c_function.signature
+		body_decl.add ";\n"
+
+		body_impl.add "\n"
+		body_impl.add c_function.to_writer
+	end
+end

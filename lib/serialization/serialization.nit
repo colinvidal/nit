@@ -16,7 +16,7 @@
 
 # Abstract services to serialize Nit objects to different formats
 #
-# This module declares the `auto_serializable` annotation to mark Nit classes as serializable.
+# This module declares the `serialize` annotation to mark Nit classes as serializable.
 # For an introduction to this service, refer to the documentation of the `serialization` group.
 # This documentation provides more technical information on interesting entitie of this module.
 #
@@ -44,6 +44,8 @@
 #   `notify_of_creation` must be redefined.
 module serialization is
 	new_annotation auto_serializable
+	new_annotation serialize
+	new_annotation noserialize
 end
 
 # Abstract serialization service to be sub-classed by specialized services.
@@ -63,7 +65,7 @@ interface Serializer
 	fun serialize_attribute(name: String, value: nullable Object)
 	do
 		if not try_to_serialize(value) then
-			warn("argument {value.class_name}::{name} is not serializable.")
+			warn("argument {name} of type {value.class_name} is not serializable.")
 		end
 	end
 
@@ -134,6 +136,24 @@ interface Serializable
 	# The subclass change the default behavior, which will accept references,
 	# to force to always serialize copies of `self`.
 	private fun serialize_to_or_delay(v: Serializer) do v.serialize_reference(self)
+
+	# Create an instance of this class from the `deserializer`
+	#
+	# This constructor is refined by subclasses to correctly build their instances.
+	init from_deserializer(deserializer: Deserializer) do end
+end
+
+redef interface Object
+	# Is `self` the same as `other` in a serialization context?
+	#
+	# Used to determine if an object has already been serialized.
+	fun is_same_serialized(other: nullable Object): Bool do return is_same_instance(other)
+
+	# Hash value use for serialization
+	#
+	# Used in combination with `is_same_serialized`. If two objects are the same
+	# in a serialization context, they must have the same `serialization_hash`.
+	fun serialization_hash: Int do return object_id
 end
 
 # Instances of this class are not delayed and instead serialized immediately
@@ -150,4 +170,39 @@ redef class Int super DirectSerializable end
 redef class Float super DirectSerializable end
 redef class NativeString super DirectSerializable end
 redef class String super DirectSerializable end
-redef class Array[E] super Serializable end
+redef class SimpleCollection[E] super Serializable end
+redef class Map[K, V] super Serializable end
+
+redef class Couple[F, S]
+	super Serializable
+
+	redef init from_deserializer(v)
+	do
+		v.notify_of_creation self
+		var first = v.deserialize_attribute("first")
+		var second = v.deserialize_attribute("second")
+		init(first, second)
+	end
+
+	redef fun core_serialize_to(v)
+	do
+		v.serialize_attribute("first", first)
+		v.serialize_attribute("second", second)
+	end
+end
+
+redef class Container[E]
+	super Serializable
+
+	redef init from_deserializer(v)
+	do
+		v.notify_of_creation self
+		var item = v.deserialize_attribute("item")
+		init item
+	end
+
+	redef fun core_serialize_to(v)
+	do
+		v.serialize_attribute("item", first)
+	end
+end

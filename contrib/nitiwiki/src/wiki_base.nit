@@ -16,7 +16,6 @@
 module wiki_base
 
 import template::macro
-import markdown
 import opts
 import ini
 
@@ -72,6 +71,9 @@ class Nitiwiki
 		end
 	end
 
+	# Render output.
+	fun render do end
+
 	# Show wiki status.
 	fun status do
 		print "nitiWiki"
@@ -105,7 +107,7 @@ class Nitiwiki
 		end
 	end
 
-	# Display msg if `level >= verbose_level`
+	# Display msg if `level <= verbose_level`
 	fun message(msg: String, level: Int) do
 		if level <= verbose_level then print msg
 	end
@@ -113,11 +115,11 @@ class Nitiwiki
 	# List markdown source files from a directory.
 	fun list_md_files(dir: String): Array[String] do
 		var files = new Array[String]
-		var pipe = new ProcessReader("find", dir, "-name", "*.md")
+		var pipe = new ProcessReader("find", dir, "-name", "*.{config.md_ext}")
 		while not pipe.eof do
 			var file = pipe.read_line
 			if file == "" then break # last line
-			var name = file.basename(".md")
+			var name = file.basename(".{config.md_ext}")
 			if name == "header" or name == "footer" or name == "menu" then continue
 			files.add file
 		end
@@ -163,6 +165,7 @@ class Nitiwiki
 	# `path` is used to determine the ancestor sections.
 	protected fun new_article(path: String): WikiArticle do
 		if entries.has_key(path) then return entries[path].as(WikiArticle)
+		message("Found article `{path}`", 2)
 		var article = new WikiArticle.from_source(self, path)
 		var section = new_section(path.dirname)
 		section.add_child(article)
@@ -185,7 +188,10 @@ class Nitiwiki
 	#
 	# REQUIRE: `has_template`
 	fun load_template(name: String): TemplateString do
-		assert has_template(name)
+		if not has_template(name) then
+			message("Error: can't load template `{name}`", 0)
+			exit 1
+		end
 		var file = expand_path(config.root_dir, config.templates_dir, name)
 		var tpl = new TemplateString.from_file(file)
 		if tpl.has_macro("ROOT_URL") then
@@ -447,7 +453,7 @@ class WikiSection
 	private fun try_load_config do
 		var cfile = wiki.expand_path(wiki.config.root_dir, src_path, wiki.config_filename)
 		if not cfile.file_exists then return
-		wiki.message("Custom config for section {name}", 2)
+		wiki.message("Custom config for section {name}", 1)
 		config = new SectionConfig(cfile)
 	end
 
@@ -512,18 +518,13 @@ class WikiArticle
 	# Page content.
 	#
 	# What you want to be displayed in the page.
-	var content: nullable Writable = null
+	var content: nullable Writable = null is writable
 
-	# Headlines ids and titles.
-	var headlines = new ArrayMap[String, HeadLine]
-
-	# Create a new articleu sing a markdown source file.
+	# Create a new article using a markdown source file.
 	init from_source(wiki: Nitiwiki, md_file: String) do
 		src_full_path = md_file
-		init(wiki, md_file.basename(".md"))
-		var md_proc = new MarkdownProcessor
-		content = md_proc.process(md)
-		headlines = md_proc.emitter.decorator.headlines
+		init(wiki, md_file.basename(".{wiki.config.md_ext}"))
+		content = md
 	end
 
 	redef var src_full_path: nullable String = null
@@ -538,8 +539,8 @@ class WikiArticle
 	# Extract the markdown text from `source_file`.
 	#
 	# REQUIRE: `has_source`.
-	var md: String is lazy do
-		assert has_source
+	var md: nullable String is lazy do
+		if not has_source then return null
 		var file = new FileReader.open(src_full_path.to_s)
 		var md = file.read_all
 		file.close
@@ -601,6 +602,14 @@ class WikiConfig
 	# * default: `http://localhost/`
 	var root_url: String is lazy do return value_or_default("wiki.root_url", "http://localhost/")
 
+	# Markdown extension recognized by this wiki.
+	#
+	# We allow only one kind of extension per wiki.
+	# Files with other markdown extensions will be treated as resources.
+	#
+	# * key: `wiki.md_ext`
+	# * default: `md`
+	var md_ext: String is lazy do return value_or_default("wiki.md_ext", "md")
 
 	# Root directory of the wiki.
 	#

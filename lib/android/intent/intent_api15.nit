@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Refines intent module to add API 15 services
-module intent_api15 is min_api_version(15)
+module intent_api15 is android_api_min 15
 
 import intent_api14
 
@@ -24,7 +24,7 @@ in "Java" `{
 `}
 
 redef extern class NativeIntent
-	fun selector=(selector: NativeIntent) in "Java" `{ recv.setSelector(selector); `}
+	fun selector=(selector: NativeIntent) in "Java" `{ self.setSelector(selector); `}
 end
 
 redef class Category

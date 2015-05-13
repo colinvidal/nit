@@ -207,6 +207,15 @@ class NaiveInterpreter
 		return instance
 	end
 
+	# Return the byte instance associated with `val`.
+	fun byte_instance(val: Byte): Instance
+	do
+		var t = mainmodule.byte_type
+		var instance = new PrimitiveInstance[Byte](t, val)
+		init_instance_primitive(instance)
+		return instance
+	end
+
 	# Return the char instance associated with `val`.
 	fun char_instance(val: Char): Instance
 	do
@@ -370,42 +379,50 @@ class NaiveInterpreter
 	# This method is used to manage varargs in signatures and returns the real array
 	# of instances to use in the call.
 	# Return `null` if one of the evaluation of the arguments return null.
-	fun varargize(mpropdef: MMethodDef, recv: Instance, args: SequenceRead[AExpr]): nullable Array[Instance]
+	fun varargize(mpropdef: MMethodDef, map: nullable SignatureMap, recv: Instance, args: SequenceRead[AExpr]): nullable Array[Instance]
 	do
 		var msignature = mpropdef.new_msignature or else mpropdef.msignature.as(not null)
 		var res = new Array[Instance]
 		res.add(recv)
 
-		if args.is_empty then return res
+		if msignature.arity == 0 then return res
 
-		var vararg_rank = msignature.vararg_rank
-		var vararg_len = args.length - msignature.arity
-		if vararg_len < 0 then vararg_len = 0
-
-		for i in [0..msignature.arity[ do
-			if i == vararg_rank then
-				var ne = args[i]
-				if ne isa AVarargExpr then
-					var e = self.expr(ne.n_expr)
-					if e == null then return null
-					res.add(e)
-					continue
-				end
-				var vararg = new Array[Instance]
-				for j in [vararg_rank..vararg_rank+vararg_len] do
-					var e = self.expr(args[j])
-					if e == null then return null
-					vararg.add(e)
-				end
-				var elttype = msignature.mparameters[vararg_rank].mtype.anchor_to(self.mainmodule, recv.mtype.as(MClassType))
-				res.add(self.array_instance(vararg, elttype))
-			else
-				var j = i
-				if i > vararg_rank then j += vararg_len
-				var e = self.expr(args[j])
+		if map == null then
+			assert args.length == msignature.arity else debug("Expected {msignature.arity} args, got {args.length}")
+			for ne in args do
+				var e = self.expr(ne)
 				if e == null then return null
-				res.add(e)
+				res.add e
 			end
+			return res
+		end
+
+		# Eval in order of arguments, not parameters
+		var exprs = new Array[Instance].with_capacity(args.length)
+		for ne in args do
+			var e = self.expr(ne)
+			if e == null then return null
+			exprs.add e
+		end
+
+
+		# Fill `res` with the result of the evaluation according to the mapping
+		for i in [0..msignature.arity[ do
+			var param = msignature.mparameters[i]
+			var j = map.map.get_or_null(i)
+			if j == null then
+				# default value
+				res.add(null_instance)
+				continue
+			end
+			if param.is_vararg and map.vararg_decl > 0 then
+				var vararg = exprs.sub(j, map.vararg_decl)
+				var elttype = param.mtype.anchor_to(self.mainmodule, recv.mtype.as(MClassType))
+				var arg = self.array_instance(vararg, elttype)
+				res.add(arg)
+				continue
+			end
+			res.add exprs[j]
 		end
 		return res
 	end
@@ -624,6 +641,10 @@ abstract class Instance
 	# else aborts
 	fun to_f: Float do abort
 
+	# Return the integer value if the instance is a byte.
+	# else aborts
+	fun to_b: Byte do abort
+
 	# The real value encapsulated if the instance is primitive.
 	# Else aborts.
 	fun val: nullable Object do abort
@@ -669,6 +690,8 @@ class PrimitiveInstance[E]
 	redef fun to_i do return val.as(Int)
 
 	redef fun to_f do return val.as(Float)
+
+	redef fun to_b do return val.as(Byte)
 end
 
 # Information about local variables in a running method
@@ -833,6 +856,8 @@ redef class AMethPropdef
 			var recvval = args[0].to_i
 			if pname == "unary -" then
 				return v.int_instance(-args[0].to_i)
+			else if pname == "unary +" then
+				return args[0]
 			else if pname == "+" then
 				return v.int_instance(args[0].to_i + args[1].to_i)
 			else if pname == "-" then
@@ -857,6 +882,8 @@ redef class AMethPropdef
 				return v.char_instance(args[0].to_i.ascii)
 			else if pname == "to_f" then
 				return v.float_instance(args[0].to_i.to_f)
+			else if pname == "to_b" then
+				return v.byte_instance(args[0].to_i.to_b)
 			else if pname == "lshift" then
 				return v.int_instance(args[0].to_i.lshift(args[1].to_i))
 			else if pname == "rshift" then
@@ -884,6 +911,50 @@ redef class AMethPropdef
 			else if pname == "strerror_ext" then
 				return v.native_string_instance(recvval.strerror)
 			end
+		else if cname == "Byte" then
+			var recvval = args[0].to_b
+			if pname == "unary -" then
+				return v.byte_instance(-args[0].to_b)
+			else if pname == "unary +" then
+				return args[0]
+			else if pname == "+" then
+				return v.byte_instance(args[0].to_b + args[1].to_b)
+			else if pname == "-" then
+				return v.byte_instance(args[0].to_b - args[1].to_b)
+			else if pname == "*" then
+				return v.byte_instance(args[0].to_b * args[1].to_b)
+			else if pname == "%" then
+				return v.byte_instance(args[0].to_b % args[1].to_b)
+			else if pname == "/" then
+				return v.byte_instance(args[0].to_b / args[1].to_b)
+			else if pname == "<" then
+				return v.bool_instance(args[0].to_b < args[1].to_b)
+			else if pname == ">" then
+				return v.bool_instance(args[0].to_b > args[1].to_b)
+			else if pname == "<=" then
+				return v.bool_instance(args[0].to_b <= args[1].to_b)
+			else if pname == ">=" then
+				return v.bool_instance(args[0].to_b >= args[1].to_b)
+			else if pname == "<=>" then
+				return v.int_instance(args[0].to_b <=> args[1].to_b)
+			else if pname == "to_f" then
+				return v.float_instance(args[0].to_b.to_f)
+			else if pname == "to_i" then
+				return v.int_instance(args[0].to_b.to_i)
+			else if pname == "lshift" then
+				return v.byte_instance(args[0].to_b.lshift(args[1].to_i))
+			else if pname == "rshift" then
+				return v.byte_instance(args[0].to_b.rshift(args[1].to_i))
+			else if pname == "byte_to_s_len" then
+				return v.int_instance(recvval.to_s.length)
+			else if pname == "native_byte_to_s" then
+				var s = recvval.to_s
+				var srecv = args[1].val.as(Buffer)
+				srecv.clear
+				srecv.append(s)
+				srecv.add('\0')
+				return null
+			end
 		else if cname == "Char" then
 			var recv = args[0].val.as(Char)
 			if pname == "ascii" then
@@ -907,6 +978,8 @@ redef class AMethPropdef
 			var recv = args[0].to_f
 			if pname == "unary -" then
 				return v.float_instance(-recv)
+			else if pname == "unary +" then
+				return args[0]
 			else if pname == "+" then
 				return v.float_instance(recv + args[1].to_f)
 			else if pname == "-" then
@@ -925,6 +998,8 @@ redef class AMethPropdef
 				return v.bool_instance(recv >= args[1].to_f)
 			else if pname == "to_i" then
 				return v.int_instance(recv.to_i)
+			else if pname == "to_b" then
+				return v.byte_instance(recv.to_b)
 			else if pname == "cos" then
 				return v.float_instance(args[0].to_f.cos)
 			else if pname == "sin" then
@@ -1563,6 +1638,13 @@ redef class AIntExpr
 	end
 end
 
+redef class AByteExpr
+	redef fun expr(v)
+	do
+		return v.byte_instance(self.value.as(not null))
+	end
+end
+
 redef class AFloatExpr
 	redef fun expr(v)
 	do
@@ -1617,7 +1699,7 @@ redef class ASuperstringExpr
 			array.add(i)
 		end
 		var i = v.array_instance(array, v.mainmodule.object_type)
-		var res = v.send(v.force_get_primitive_method("to_s", i.mtype), [i])
+		var res = v.send(v.force_get_primitive_method("plain_to_s", i.mtype), [i])
 		assert res != null
 		return res
 	end
@@ -1736,7 +1818,7 @@ redef class ASendExpr
 	do
 		var recv = v.expr(self.n_expr)
 		if recv == null then return null
-		var args = v.varargize(callsite.mpropdef, recv, self.raw_arguments)
+		var args = v.varargize(callsite.mpropdef, callsite.signaturemap, recv, self.raw_arguments)
 		if args == null then return null
 
 		var res = v.callsite(callsite, args)
@@ -1749,7 +1831,7 @@ redef class ASendReassignFormExpr
 	do
 		var recv = v.expr(self.n_expr)
 		if recv == null then return
-		var args = v.varargize(callsite.mpropdef, recv, self.raw_arguments)
+		var args = v.varargize(callsite.mpropdef, callsite.signaturemap, recv, self.raw_arguments)
 		if args == null then return
 		var value = v.expr(self.n_value)
 		if value == null then return
@@ -1773,29 +1855,35 @@ redef class ASuperExpr
 
 		var callsite = self.callsite
 		if callsite != null then
-			var args = v.varargize(callsite.mpropdef, recv, self.n_args.n_exprs)
-			if args == null then return null
-			# Add additional arguments for the super init call
-			if args.length == 1 then
+			var args
+			if self.n_args.n_exprs.is_empty then
+				# Add automatic arguments for the super init call
+				args = [recv]
 				for i in [0..callsite.msignature.arity[ do
 					args.add(v.frame.arguments[i+1])
 				end
+			else
+				args = v.varargize(callsite.mpropdef, callsite.signaturemap, recv, self.n_args.n_exprs)
+				if args == null then return null
 			end
+
 			# Super init call
 			var res = v.callsite(callsite, args)
 			return res
 		end
 
-		# standard call-next-method
+		# Standard call-next-method
 		var mpropdef = self.mpropdef
 		mpropdef = mpropdef.lookup_next_definition(v.mainmodule, recv.mtype)
 
-		var args = v.varargize(mpropdef, recv, self.n_args.n_exprs)
-		if args == null then return null
-
-		if args.length == 1 then
+		var args
+		if self.n_args.n_exprs.is_empty then
 			args = v.frame.arguments
+		else
+			args = v.varargize(mpropdef, signaturemap, recv, self.n_args.n_exprs)
+			if args == null then return null
 		end
+
 		var res = v.call(mpropdef, args)
 		return res
 	end
@@ -1810,7 +1898,7 @@ redef class ANewExpr
 		var callsite = self.callsite
 		if callsite == null then return recv
 
-		var args = v.varargize(callsite.mpropdef, recv, self.n_args.n_exprs)
+		var args = v.varargize(callsite.mpropdef, callsite.signaturemap, recv, self.n_args.n_exprs)
 		if args == null then return null
 		var res2 = v.callsite(callsite, args)
 		if res2 != null then
@@ -1869,6 +1957,20 @@ redef class AIssetAttrExpr
 		if recv.mtype isa MNullType then fatal(v, "Receiver is null")
 		var mproperty = self.mproperty.as(not null)
 		return v.bool_instance(v.isset_attribute(mproperty, recv))
+	end
+end
+
+redef class AVarargExpr
+	redef fun expr(v)
+	do
+		return v.expr(self.n_expr)
+	end
+end
+
+redef class ANamedargExpr
+	redef fun expr(v)
+	do
+		return v.expr(self.n_expr)
 	end
 end
 

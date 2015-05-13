@@ -5,7 +5,7 @@
 #
 # This file is free software, which comes along with NIT.  This software is
 # distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-# without  even  the implied warranty of  MERCHANTABILITY or  FITNESS FOR A 
+# without  even  the implied warranty of  MERCHANTABILITY or  FITNESS FOR A
 # PARTICULAR PURPOSE.  You can modify it is you want,  provided this header
 # is kept unaltered, and a notification of the changes is added.
 # You  are  allowed  to  redistribute it and sell it, alone or is a part of
@@ -63,10 +63,9 @@ abstract class AbstractArrayRead[E]
 
 	redef fun index_of(item) do return index_of_from(item, 0)
 
-	redef fun last_index_of(item: E): Int do return last_index_of_from(item, length-1)
+	redef fun last_index_of(item) do return last_index_of_from(item, length-1)
 
-	redef fun index_of_from(item: E, pos: Int): Int
-	do
+	redef fun index_of_from(item, pos) do
 		var i = pos
 		var len = length
 		while i < len do
@@ -78,8 +77,7 @@ abstract class AbstractArrayRead[E]
 		return -1
 	end
 
-	redef fun last_index_of_from(item: E, pos: Int): Int
-	do
+	redef fun last_index_of_from(item, pos)	do
 		var i = pos
 		while i >= 0 do
 			if self[i] == item then
@@ -147,6 +145,55 @@ abstract class AbstractArrayRead[E]
 	private var free_iterator: nullable ArrayIterator[E] = null
 
 	redef fun reverse_iterator do return new ArrayReverseIterator[E](self)
+
+	# Returns a sub-array containing `count` elements starting from `from`.
+	#
+	# For most cases (see other case bellow),
+	# the first element is `from` and
+	# the last element is `from+count-1`.
+	#
+	# ~~~
+	# var a = [10, 20, 30, 40, 50]
+	# assert a.sub(0, 3) == [10, 20, 30]
+	# assert a.sub(3, 2) == [40, 50]
+	# assert a.sub(3, 1) == [40]
+	# ~~~
+	#
+	# If `count` is 0 or negative then an empty array is returned
+	#
+	# ~~~
+	# assert a.sub(3,0).is_empty
+	# assert a.sub(3,-1).is_empty
+	# ~~~
+	#
+	# If `from < 0` or `from+count>length` then inexistent elements are ignored.
+	# In this case the length of the result is lower than count.
+	#
+	# ~~~
+	# assert a.sub(-2, 4)  == [10, 20]
+	# assert a.sub(4, 99)  == [50]
+	# assert a.sub(-9, 99) == [10,20,30,40,50]
+	# assert a.sub(-99, 9).is_empty
+	# ~~~
+	fun sub(from: Int, count: Int): Array[E] do
+		if from < 0 then
+			count += from
+			from = 0
+		end
+		if count < 0 then
+			count = 0
+		end
+		var to = from + count
+		if to > length then
+			to = length
+		end
+		var res = new Array[E].with_capacity(to - from)
+		while from < to do
+			res.add(self[from])
+			from += 1
+		end
+		return res
+	end
 end
 
 # Resizable one dimension array of objects.
@@ -193,8 +240,7 @@ abstract class AbstractArray[E]
 		self[0] = item
 	end
 
-	redef fun insert(item: E, pos: Int)
-	do
+	redef fun insert(item, pos) do
 		enlarge(length + 1)
 		copy_to(pos, length-pos, self, pos + 1)
 		self[pos] = item

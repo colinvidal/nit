@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # Refines intent module to add API 16 services
-module intent_api16 is min_api_version(16)
+module intent_api16 is android_api_min 16
 
 import intent_api15
 
@@ -25,9 +25,9 @@ in "Java" `{
 `}
 
 redef extern class NativeIntent
-	fun set_data_and_normalize(data_uri: JavaString): NativeIntent in "Java" `{ return recv.setDataAndNormalize(Uri.parse(data_uri)); `}
-	fun set_data_and_type_and_normalize(data_uri: JavaString, type_: JavaString): NativeIntent in "Java" `{ return recv.setDataAndTypeAndNormalize(Uri.parse(data_uri), type_); `}
-	fun set_mime_type_and_normalize(mime_type: JavaString): NativeIntent in "Java" `{ return recv.setTypeAndNormalize(mime_type); `}
+	fun set_data_and_normalize(data_uri: JavaString): NativeIntent in "Java" `{ return self.setDataAndNormalize(Uri.parse(data_uri)); `}
+	fun set_data_and_type_and_normalize(data_uri: JavaString, type_: JavaString): NativeIntent in "Java" `{ return self.setDataAndTypeAndNormalize(Uri.parse(data_uri), type_); `}
+	fun set_mime_type_and_normalize(mime_type: JavaString): NativeIntent in "Java" `{ return self.setTypeAndNormalize(mime_type); `}
 end
 
 redef class Extra

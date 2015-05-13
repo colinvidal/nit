@@ -206,6 +206,9 @@ redef class MModule
 	# The primitive type `Int`
 	var int_type: MClassType = self.get_primitive_class("Int").mclass_type is lazy
 
+	# The primitive type `Byte`
+	var byte_type: MClassType = self.get_primitive_class("Byte").mclass_type is lazy
+
 	# The primitive type `Char`
 	var char_type: MClassType = self.get_primitive_class("Char").mclass_type is lazy
 
@@ -514,6 +517,18 @@ class MClass
 
 	# Is there a `new` factory to allow the pseudo instantiation?
 	var has_new_factory = false is writable
+
+	# Is `self` a standard or abstract class kind?
+	var is_class: Bool is lazy do return kind == concrete_kind or kind == abstract_kind
+
+	# Is `self` an interface kind?
+	var is_interface: Bool is lazy do return kind == interface_kind
+
+	# Is `self` an enum kind?
+	var is_enum: Bool is lazy do return kind == enum_kind
+
+	# Is `self` and abstract class?
+	var is_abstract: Bool is lazy do return kind == abstract_kind
 end
 
 
@@ -1697,8 +1712,32 @@ class MNullType
 	redef fun c_name do return "null"
 	redef fun as_nullable do return self
 
-	# Aborts on `null`
-	redef fun as_notnull do abort # sorry...
+	redef var as_notnull = new MBottomType(model) is lazy
+	redef fun need_anchor do return false
+	redef fun resolve_for(mtype, anchor, mmodule, cleanup_virtual) do return self
+	redef fun can_resolve_for(mtype, anchor, mmodule) do return true
+
+	redef fun collect_mclassdefs(mmodule) do return new HashSet[MClassDef]
+
+	redef fun collect_mclasses(mmodule) do return new HashSet[MClass]
+
+	redef fun collect_mtypes(mmodule) do return new HashSet[MClassType]
+end
+
+# The special universal most specific type.
+#
+# This type is intended to be only used internally for type computation or analysis and should not be exposed to the user.
+# The bottom type can de used to denote things that are absurd, dead, or the absence of knowledge.
+#
+# Semantically it is the singleton `null.as_notnull`.
+class MBottomType
+	super MType
+	redef var model: Model
+	redef fun to_s do return "bottom"
+	redef fun full_name do return "bottom"
+	redef fun c_name do return "bottom"
+	redef fun as_nullable do return model.null_type
+	redef fun as_notnull do return self
 	redef fun need_anchor do return false
 	redef fun resolve_for(mtype, anchor, mmodule, cleanup_virtual) do return self
 	redef fun can_resolve_for(mtype, anchor, mmodule) do return true
@@ -1716,6 +1755,15 @@ class MSignature
 
 	# The each parameter (in order)
 	var mparameters: Array[MParameter]
+
+	# Returns a parameter named `name`, if any.
+	fun mparameter_by_name(name: String): nullable MParameter
+	do
+		for p in mparameters do
+			if p.name == name then return p
+		end
+		return null
+	end
 
 	# The return type (null for a procedure)
 	var return_mtype: nullable MType
@@ -1762,8 +1810,24 @@ class MSignature
 	# Example: for "(a: Int, b: Bool..., c: Char)" #-> vararg_rank=1
 	var vararg_rank: Int is noinit
 
-	# The number or parameters
+	# The number of parameters
 	fun arity: Int do return mparameters.length
+
+	# The number of non-default parameters
+	#
+	# The number of default parameters is then `arity-min_arity`.
+	#
+	# Note that there cannot be both varargs and default prameters, thus
+	# if `vararg_rank != -1` then `min_arity` == `arity`
+	fun min_arity: Int
+	do
+		if vararg_rank != -1 then return arity
+		var res = 0
+		for p in mparameters do
+			if not p.is_default then res += 1
+		end
+		return res
+	end
 
 	redef fun to_s
 	do
@@ -1818,6 +1882,9 @@ class MParameter
 	# Is the parameter a vararg?
 	var is_vararg: Bool
 
+	# Is the parameter a default one?
+	var is_default: Bool
+
 	redef fun to_s
 	do
 		if is_vararg then
@@ -1833,7 +1900,7 @@ class MParameter
 	do
 		if not self.mtype.need_anchor then return self
 		var newtype = self.mtype.resolve_for(mtype, anchor, mmodule, cleanup_virtual)
-		var res = new MParameter(self.name, newtype, self.is_vararg)
+		var res = new MParameter(self.name, newtype, self.is_vararg, self.is_default)
 		return res
 	end
 
@@ -2101,6 +2168,10 @@ class MMethod
 	do
 		return self.is_init
 	end
+
+	# A specific method that is safe to call on null.
+	# Currently, only `==`, `!=` and `is_same_instance` are safe
+	fun is_null_safe: Bool do return name == "==" or name == "!=" or name == "is_same_instance"
 end
 
 # A global attribute

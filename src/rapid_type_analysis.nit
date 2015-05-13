@@ -213,6 +213,7 @@ class RapidTypeAnalysis
 		force_alive("Float")
 		force_alive("Char")
 		force_alive("Pointer")
+		force_alive("Byte")
 
 		while not todo.is_empty do
 			var mmethoddef = todo.shift
@@ -516,6 +517,13 @@ redef class AIntExpr
 	end
 end
 
+redef class AByteExpr
+	redef fun accept_rapid_type_visitor(v)
+	do
+		v.add_type(self.mtype.as(MClassType))
+	end
+end
+
 redef class AFloatExpr
 	redef fun accept_rapid_type_visitor(v)
 	do
@@ -540,6 +548,8 @@ redef class AArrayExpr
 		mtype = v.cleanup_type(mtype).as(not null)
 		var prop = v.get_method(mtype, "with_native")
 		v.add_monomorphic_send(mtype, prop)
+		v.add_callsite(with_capacity_callsite)
+		v.add_callsite(push_callsite)
 	end
 end
 
@@ -557,7 +567,7 @@ redef class ASuperstringExpr
 	redef fun accept_rapid_type_visitor(v)
 	do
 		var mmodule = v.analysis.mainmodule
-		var object_type = mmodule.object_type
+		var object_type = mmodule.string_type
 		var arraytype = mmodule.array_type(object_type)
 		v.add_type(arraytype)
 		var nattype = mmodule.native_array_type(object_type)

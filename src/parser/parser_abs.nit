@@ -190,6 +190,33 @@ end
 class TMinuseq
 	super Token
 end
+class TStareq
+	super Token
+end
+class TSlasheq
+	super Token
+end
+class TPercenteq
+	super Token
+end
+class TStarstareq
+	super Token
+end
+class TPipeeq
+	super Token
+end
+class TCareteq
+	super Token
+end
+class TAmpeq
+	super Token
+end
+class TLleq
+	super Token
+end
+class TGgeq
+	super Token
+end
 class TDotdotdot
 	super Token
 end
@@ -215,6 +242,18 @@ class TSlash
 	super Token
 end
 class TPercent
+	super Token
+end
+class TPipe
+	super Token
+end
+class TCaret
+	super Token
+end
+class TAmp
+	super Token
+end
+class TTilde
 	super Token
 end
 class TEq
@@ -250,6 +289,9 @@ end
 class TAt
 	super Token
 end
+class TSemi
+	super Token
+end
 class TClassid
 	super Token
 end
@@ -263,6 +305,24 @@ class TNumber
 	super Token
 end
 class THexNumber
+	super Token
+end
+class TBinNumber
+	super Token
+end
+class TOctNumber
+	super Token
+end
+class TBytenum
+	super Token
+end
+class THexBytenum
+	super Token
+end
+class TBinBytenum
+	super Token
+end
+class TOctBytenum
 	super Token
 end
 class TFloat
@@ -384,7 +444,9 @@ class AStdClassdef
 	var n_visibility: AVisibility is writable, noinit
 	var n_classkind: AClasskind is writable, noinit
 	var n_id: nullable TClassid = null is writable
+	var n_obra: nullable TObra = null is writable
 	var n_formaldefs: List[AFormaldef] = new List[AFormaldef]
+	var n_cbra: nullable TCbra = null is writable
 	var n_extern_code_block: nullable AExternCodeBlock = null is writable
 	var n_propdefs: List[APropdef] = new List[APropdef]
 	var n_kwend: TKwend is writable, noinit
@@ -433,9 +495,12 @@ class AAttrPropdef
 	var n_kwvar: TKwvar is writable, noinit
 	var n_id2: TId is writable, noinit
 	var n_type: nullable AType = null is writable
+	var n_assign: nullable TAssign = null is writable
 	var n_expr: nullable AExpr = null is writable
 	var n_annotations: nullable AAnnotations = null is writable
+	var n_kwdo: nullable TKwdo = null is writable
 	var n_block: nullable AExpr = null is writable
+	var n_kwend: nullable TKwend = null is writable
 end
 class AMainMethPropdef
 	super APropdef
@@ -465,7 +530,9 @@ class AMethPropdef
 	var n_annotations: nullable AAnnotations = null is writable
 	var n_extern_calls: nullable AExternCalls = null is writable
 	var n_extern_code_block: nullable AExternCodeBlock = null is writable
+	var n_kwdo: nullable TKwdo = null is writable
 	var n_block: nullable AExpr = null is writable
+	var n_kwend: nullable TKwend = null is writable
 end
 class ASuperPropdef
 	super APropdef
@@ -493,68 +560,84 @@ class AIdMethid
 end
 class APlusMethid
 	super AMethid
-	var n_plus: TPlus is writable, noinit
+	var n_op: TPlus is writable, noinit
 end
 class AMinusMethid
 	super AMethid
-	var n_minus: TMinus is writable, noinit
+	var n_op: TMinus is writable, noinit
 end
 class AStarMethid
 	super AMethid
-	var n_star: TStar is writable, noinit
+	var n_op: TStar is writable, noinit
 end
 class AStarstarMethid
 	super AMethid
-	var n_starstar: TStarstar is writable, noinit
+	var n_op: TStarstar is writable, noinit
 end
 class ASlashMethid
 	super AMethid
-	var n_slash: TSlash is writable, noinit
+	var n_op: TSlash is writable, noinit
 end
 class APercentMethid
 	super AMethid
-	var n_percent: TPercent is writable, noinit
+	var n_op: TPercent is writable, noinit
 end
 class AEqMethid
 	super AMethid
-	var n_eq: TEq is writable, noinit
+	var n_op: TEq is writable, noinit
 end
 class ANeMethid
 	super AMethid
-	var n_ne: TNe is writable, noinit
+	var n_op: TNe is writable, noinit
 end
 class ALeMethid
 	super AMethid
-	var n_le: TLe is writable, noinit
+	var n_op: TLe is writable, noinit
 end
 class AGeMethid
 	super AMethid
-	var n_ge: TGe is writable, noinit
+	var n_op: TGe is writable, noinit
 end
 class ALtMethid
 	super AMethid
-	var n_lt: TLt is writable, noinit
+	var n_op: TLt is writable, noinit
 end
 class AGtMethid
 	super AMethid
-	var n_gt: TGt is writable, noinit
+	var n_op: TGt is writable, noinit
 end
 class ALlMethid
 	super AMethid
-	var n_ll: TLl is writable, noinit
+	var n_op: TLl is writable, noinit
 end
 class AGgMethid
 	super AMethid
-	var n_gg: TGg is writable, noinit
+	var n_op: TGg is writable, noinit
+end
+class AStarshipMethid
+	super AMethid
+	var n_op: TStarship is writable, noinit
+end
+class APipeMethid
+	super AMethid
+	var n_op: TPipe is writable, noinit
+end
+class ACaretMethid
+	super AMethid
+	var n_op: TCaret is writable, noinit
+end
+class AAmpMethid
+	super AMethid
+	var n_op: TAmp is writable, noinit
+end
+class ATildeMethid
+	super AMethid
+	var n_op: TTilde is writable, noinit
 end
 class ABraMethid
 	super AMethid
 	var n_obra: TObra is writable, noinit
 	var n_cbra: TCbra is writable, noinit
-end
-class AStarshipMethid
-	super AMethid
-	var n_starship: TStarship is writable, noinit
 end
 class AAssignMethid
 	super AMethid
@@ -585,7 +668,9 @@ class AType
 	super AType
 	var n_kwnullable: nullable TKwnullable = null is writable
 	var n_id: TClassid is writable, noinit
+	var n_obra: nullable TObra = null is writable
 	var n_types: List[AType] = new List[AType]
+	var n_cbra: nullable TCbra = null is writable
 	var n_annotations: nullable AAnnotations = null is writable
 end
 class ALabel
@@ -636,7 +721,9 @@ class AIfExpr
 	super AExpr
 	var n_kwif: TKwif is writable, noinit
 	var n_expr: AExpr is writable, noinit
+	var n_kwthen: TKwthen is writable, noinit
 	var n_then: nullable AExpr = null is writable
+	var n_kwelse: nullable TKwelse = null is writable
 	var n_else: nullable AExpr = null is writable
 end
 class AIfexprExpr
@@ -666,6 +753,7 @@ class AForExpr
 	super AExpr
 	var n_kwfor: TKwfor is writable, noinit
 	var n_ids: List[TId] = new List[TId]
+	var n_kwin: TKwin is writable, noinit
 	var n_expr: AExpr is writable, noinit
 	var n_kwdo: TKwdo is writable, noinit
 	var n_block: nullable AExpr = null is writable
@@ -684,6 +772,7 @@ class AAssertExpr
 	var n_kwassert: TKwassert is writable, noinit
 	var n_id: nullable TId = null is writable
 	var n_expr: AExpr is writable, noinit
+	var n_kwelse: nullable TKwelse = null is writable
 	var n_else: nullable AExpr = null is writable
 end
 class AOnceExpr
@@ -703,21 +792,26 @@ end
 class AOrExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TKwor is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AAndExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TKwand is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AOrElseExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TKwor is writable, noinit
+	var n_kwelse: TKwelse is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AImpliesExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TKwimplies is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ANotExpr
@@ -728,86 +822,130 @@ end
 class AEqExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TEq is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ANeExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TNe is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ALtExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TLt is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ALeExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TLe is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ALlExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TLl is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AGtExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TGt is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AGeExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TGe is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AGgExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TGg is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AIsaExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_kwisa: TKwisa is writable, noinit
 	var n_type: AType is writable, noinit
 end
 class APlusExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TPlus is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AMinusExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TMinus is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AStarshipExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TStarship is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AStarExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TStar is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AStarstarExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TStarstar is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class ASlashExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TSlash is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class APercentExpr
 	super AExpr
 	var n_expr: AExpr is writable, noinit
+	var n_op: TPercent is writable, noinit
+	var n_expr2: AExpr is writable, noinit
+end
+class APipeExpr
+	super AExpr
+	var n_expr: AExpr is writable, noinit
+	var n_op: TPipe is writable, noinit
+	var n_expr2: AExpr is writable, noinit
+end
+class ACaretExpr
+	super AExpr
+	var n_expr: AExpr is writable, noinit
+	var n_op: TCaret is writable, noinit
+	var n_expr2: AExpr is writable, noinit
+end
+class AAmpExpr
+	super AExpr
+	var n_expr: AExpr is writable, noinit
+	var n_op: TAmp is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 end
 class AUminusExpr
 	super AExpr
-	var n_minus: TMinus is writable, noinit
+	var n_op: TMinus is writable, noinit
+	var n_expr: AExpr is writable, noinit
+end
+class AUplusExpr
+	super AExpr
+	var n_op: TPlus is writable, noinit
+	var n_expr: AExpr is writable, noinit
+end
+class AUtildeExpr
+	super AExpr
+	var n_op: TTilde is writable, noinit
 	var n_expr: AExpr is writable, noinit
 end
 class ANewExpr
@@ -915,6 +1053,7 @@ class ACrangeExpr
 	super AExpr
 	var n_obra: TObra is writable, noinit
 	var n_expr: AExpr is writable, noinit
+	var n_dotdot: TDotdot is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 	var n_cbra: TCbra is writable, noinit
 	var n_annotations: nullable AAnnotations = null is writable
@@ -923,6 +1062,7 @@ class AOrangeExpr
 	super AExpr
 	var n_obra: TObra is writable, noinit
 	var n_expr: AExpr is writable, noinit
+	var n_dotdot: TDotdot is writable, noinit
 	var n_expr2: AExpr is writable, noinit
 	var n_cbra: TObra is writable, noinit
 	var n_annotations: nullable AAnnotations = null is writable
@@ -966,6 +1106,36 @@ end
 class AHexIntExpr
 	super AExpr
 	var n_hex_number: THexNumber is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class ABinIntExpr
+	super AExpr
+	var n_bin_number: TBinNumber is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class AOctIntExpr
+	super AExpr
+	var n_oct_number: TOctNumber is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class ADecByteExpr
+	super AExpr
+	var n_bytenum: TBytenum is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class AHexByteExpr
+	super AExpr
+	var n_hex_bytenum: THexBytenum is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class ABinByteExpr
+	super AExpr
+	var n_bin_bytenum: TBinBytenum is writable, noinit
+	var n_annotations: nullable AAnnotations = null is writable
+end
+class AOctByteExpr
+	super AExpr
+	var n_oct_bytenum: TOctBytenum is writable, noinit
 	var n_annotations: nullable AAnnotations = null is writable
 end
 class AFloatExpr
@@ -1042,6 +1212,12 @@ class AVarargExpr
 	var n_expr: AExpr is writable, noinit
 	var n_dotdotdot: TDotdotdot is writable, noinit
 end
+class ANamedargExpr
+	super AExpr
+	var n_id: TId is writable, noinit
+	var n_assign: TAssign is writable, noinit
+	var n_expr: AExpr is writable, noinit
+end
 class ATypeExpr
 	super AExpr
 	var n_type: AType is writable, noinit
@@ -1077,11 +1253,47 @@ class ABraExprs
 end
 class APlusAssignOp
 	super AAssignOp
-	var n_pluseq: TPluseq is writable, noinit
+	var n_op: TPluseq is writable, noinit
 end
 class AMinusAssignOp
 	super AAssignOp
-	var n_minuseq: TMinuseq is writable, noinit
+	var n_op: TMinuseq is writable, noinit
+end
+class AStarAssignOp
+	super AAssignOp
+	var n_op: TStareq is writable, noinit
+end
+class ASlashAssignOp
+	super AAssignOp
+	var n_op: TSlasheq is writable, noinit
+end
+class APercentAssignOp
+	super AAssignOp
+	var n_op: TPercenteq is writable, noinit
+end
+class AStarstarAssignOp
+	super AAssignOp
+	var n_op: TStarstareq is writable, noinit
+end
+class APipeAssignOp
+	super AAssignOp
+	var n_op: TPipeeq is writable, noinit
+end
+class ACaretAssignOp
+	super AAssignOp
+	var n_op: TCareteq is writable, noinit
+end
+class AAmpAssignOp
+	super AAssignOp
+	var n_op: TAmpeq is writable, noinit
+end
+class ALlAssignOp
+	super AAssignOp
+	var n_op: TLleq is writable, noinit
+end
+class AGgAssignOp
+	super AAssignOp
+	var n_op: TGgeq is writable, noinit
 end
 class AModuleName
 	super AModuleName
@@ -1156,10 +1368,12 @@ class ADoc
 end
 class AAnnotations
 	super AAnnotations
+	var n_kwis: nullable TKwis = null is writable
 	var n_at: nullable TAt = null is writable
 	var n_opar: nullable TOpar = null is writable
 	var n_items: List[AAnnotation] = new List[AAnnotation]
 	var n_cpar: nullable TCpar = null is writable
+	var n_kwend: nullable TKwend = null is writable
 end
 class AAnnotation
 	super AAnnotation

@@ -53,14 +53,14 @@ class Counter[E]
 	redef fun iterator do return map.iterator
 
 	# The number of counted occurrences of `e`
-	redef fun [](e: E): Int
+	redef fun [](e)
 	do
 		var map = self.map
 		if map.has_key(e) then return map[e]
 		return 0
 	end
 
-	redef fun []=(e: E, value: Int)
+	redef fun []=(e, value)
 	do
 		sum -= self[e]
 		self.map[e] = value
@@ -91,6 +91,22 @@ class Counter[E]
 	fun inc_all(es: Collection[E])
 	do
 		for e in es do inc(e)
+	end
+
+	# Decrement the value of `e` by 1
+	fun dec(e: E) do
+		if not has_key(e) then
+			self.map[e] = 0
+		else
+			self.map[e] = self[e] - 1
+			sum += - 1
+		end
+	end
+
+	# Decrement the value for each element of `es`
+	fun dec_all(es: Collection[E])
+	do
+		for e in es do dec(e)
 	end
 
 	# A new Counter initialized with `inc_all`.

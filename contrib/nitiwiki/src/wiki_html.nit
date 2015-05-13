@@ -15,12 +15,14 @@
 # HTML wiki rendering
 module wiki_html
 
-import wiki_base
+import wiki_links
+import markdown::decorators
 
 redef class Nitiwiki
 
 	# Render HTML output looking for changes in the markdown sources.
-	fun render do
+	redef fun render do
+		super
 		if not root_section.is_dirty and not force_render then return
 		var out_dir = expand_path(config.root_dir, config.out_dir)
 		out_dir.mkdir
@@ -44,13 +46,21 @@ redef class Nitiwiki
 		sitemap.is_dirty = true
 		return sitemap
 	end
+
+	# Markdown processor used for inline element such as titles in TOC.
+	private var inline_processor: MarkdownProcessor is lazy do
+		var proc = new MarkdownProcessor
+		proc.emitter.decorator = new InlineDecorator
+		return proc
+	end
+
+	# Inline markdown (remove h1, p, ... elements).
+	private fun inline_md(md: Writable): Writable do
+		return inline_processor.process(md.write_to_string)
+	end
 end
 
 redef class WikiEntry
-
-	# Url to `self` once generated.
-	fun url: String do return wiki.config.root_url.join_path(breadcrumbs.join("/"))
-
 	# Get a `<a>` template link to `self`
 	fun tpl_link: Writable do
 		return "<a href=\"{url}\">{title}</a>"
@@ -101,17 +111,6 @@ redef class WikiSection
 			if not wiki.need_render(src, out) then continue
 			sys.system "cp -R {src} {out_full_path}"
 		end
-	end
-
-	# The index page for this section.
-	#
-	# If no file `index.md` exists for this section,
-	# a summary is generated using contained articles.
-	var index: WikiArticle is lazy do
-		for child in children.values do
-			if child isa WikiArticle and child.is_index then return child
-		end
-		return new WikiSectionIndex(wiki, "index", self)
 	end
 
 	redef fun tpl_link do return index.tpl_link
@@ -173,26 +172,13 @@ redef class WikiArticle
 		end
 	end
 
-	redef fun url do
-		if parent == null then
-			return wiki.config.root_url.join_path("{name}.html")
-		else
-			return parent.url.join_path("{name}.html")
-		end
-	end
-
-	# Is `self` an index page?
-	#
-	# Checks if `self.name == "index"`.
-	fun is_index: Bool do return name == "index"
-
 	redef fun render do
+		super
 		if not is_dirty and not wiki.force_render then return
 		wiki.message("Render article {name}", 2)
 		var file = out_full_path
 		file.dirname.mkdir
 		tpl_page.write_to_file file
-		super
 	end
 
 
@@ -245,8 +231,7 @@ redef class WikiArticle
 		while iter.is_ok do
 			var hl = iter.item
 			# parse title as markdown
-			var title = hl.title.md_to_html.to_s
-			title = title.substring(3, title.length - 8)
+			var title = wiki.inline_md(hl.title)
 			tpl.add "<li><a href=\"#{hl.id}\">{title}</a>"
 			iter.next
 			if iter.is_ok then
@@ -317,15 +302,7 @@ class WikiSitemap
 end
 
 # A `WikiArticle` that contains the section index tree.
-class WikiSectionIndex
-	super WikiArticle
-
-	# The section described by `self`.
-	var section: WikiSection
-
-	redef fun title do return section.title
-
-	redef fun url do return section.url
+redef class WikiSectionIndex
 
 	redef var is_dirty = false
 

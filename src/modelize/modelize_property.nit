@@ -182,7 +182,7 @@ redef class ModelBuilder
 		var initializers = new Array[MProperty]
 		for npropdef in nclassdef.n_propdefs do
 			if npropdef isa AMethPropdef then
-				if npropdef.mpropdef == null then return # Skip broken attribute
+				if npropdef.mpropdef == null then return # Skip broken method
 				var at = npropdef.get_single_annotation("autoinit", self)
 				if at == null then continue # Skip non tagged init
 
@@ -196,32 +196,33 @@ redef class ModelBuilder
 
 				for param in sig.mparameters do
 					var ret_type = param.mtype
-					var mparameter = new MParameter(param.name, ret_type, false)
+					var mparameter = new MParameter(param.name, ret_type, false, ret_type isa MNullableType)
 					mparameters.add(mparameter)
 				end
 				initializers.add(npropdef.mpropdef.mproperty)
 				npropdef.mpropdef.mproperty.is_autoinit = true
 			end
 			if npropdef isa AAttrPropdef then
-				if npropdef.mpropdef == null then return # Skip broken attribute
+				var mreadpropdef = npropdef.mreadpropdef
+				if mreadpropdef == null or mreadpropdef.msignature == null then return # Skip broken attribute
 				if npropdef.noinit then continue # Skip noinit attribute
-				var atautoinit = npropdef.get_single_annotation("autoinit", self)
-				if atautoinit != null then
-					# For autoinit attributes, call the reader to force
+				var atlateinit = npropdef.get_single_annotation("lateinit", self)
+				if atlateinit != null then
+					# For lateinit attributes, call the reader to force
 					# the lazy initialization of the attribute.
-					initializers.add(npropdef.mreadpropdef.mproperty)
-					npropdef.mreadpropdef.mproperty.is_autoinit = true
+					initializers.add(mreadpropdef.mproperty)
+					mreadpropdef.mproperty.is_autoinit = true
 					continue
 				end
 				if npropdef.has_value then continue
-				var paramname = npropdef.mpropdef.mproperty.name.substring_from(1)
-				var ret_type = npropdef.mpropdef.static_mtype
+				var paramname = mreadpropdef.mproperty.name
+				var ret_type = mreadpropdef.msignature.return_mtype
 				if ret_type == null then return
-				var mparameter = new MParameter(paramname, ret_type, false)
+				var mparameter = new MParameter(paramname, ret_type, false, ret_type isa MNullableType)
 				mparameters.add(mparameter)
 				var msetter = npropdef.mwritepropdef
 				if msetter == null then
-					# No setter, it is a old-style attribute, so just add it
+					# No setter, it is a readonly attribute, so just add it
 					initializers.add(npropdef.mpropdef.mproperty)
 					npropdef.mpropdef.mproperty.is_autoinit = true
 				else
@@ -286,31 +287,31 @@ redef class ModelBuilder
 				if pd isa MMethodDef then
 					# Get the signature resolved for the current receiver
 					var sig = pd.msignature.resolve_for(mclassdef.mclass.mclass_type, mclassdef.bound_mtype, mclassdef.mmodule, false)
-					mparameters.add_all sig.mparameters
+					# Because the last parameter of setters is never default, try to default them for the autoinit.
+					for param in sig.mparameters do
+						if not param.is_default and param.mtype isa MNullableType then
+							param = new MParameter(param.name, param.mtype, param.is_vararg, true)
+						end
+						mparameters.add(param)
+					end
 				else
 					# TODO attributes?
 					abort
 				end
 			end
-		else if noautoinit != null then
-			if initializers.is_empty then
-				warning(noautoinit, "useless-noautoinit", "Warning: the list of autoinit is already empty.")
-			end
-			# Just clear initializers
-			mparameters.clear
-			initializers.clear
 		else
 			# Search the longest-one and checks for conflict
 			var longest = spropdefs.first
 			if spropdefs.length > 1 then
-				# Check for conflict in the order of initializers
-				# Each initializer list must me a prefix of the longest list
 				# part 1. find the longest list
 				for spd in spropdefs do
 					if spd.initializers.length > longest.initializers.length then longest = spd
 				end
 				# part 2. compare
-				for spd in spropdefs do
+				# Check for conflict in the order of initializers
+				# Each initializer list must me a prefix of the longest list
+				# If `noautoinit` is set, just ignore conflicts
+				if noautoinit == null then for spd in spropdefs do
 					var i = 0
 					for p in spd.initializers do
 						if p != longest.initializers[i] then
@@ -323,17 +324,27 @@ redef class ModelBuilder
 				end
 			end
 
-			# Can we just inherit?
-			if spropdefs.length == 1 and mparameters.is_empty and defined_init == null then
-				self.toolcontext.info("{mclassdef} inherits the basic constructor {longest}", 3)
-				mclassdef.mclass.root_init = longest
-				return
-			end
+			if noautoinit != null then
+				# If there is local or inherited initializers, then complain.
+				if initializers.is_empty and longest.initializers.is_empty then
+					warning(noautoinit, "useless-noautoinit", "Warning: the list of autoinit is already empty.")
+				end
+				# Just clear initializers
+				mparameters.clear
+				initializers.clear
+			else
+				# Can we just inherit?
+				if spropdefs.length == 1 and mparameters.is_empty and defined_init == null then
+					self.toolcontext.info("{mclassdef} inherits the basic constructor {longest}", 3)
+					mclassdef.mclass.root_init = longest
+					return
+				end
 
-			# Combine the inherited list to what is collected
-			if longest.initializers.length > 0 then
-				mparameters.prepend longest.new_msignature.mparameters
-				initializers.prepend longest.initializers
+				# Combine the inherited list to what is collected
+				if longest.initializers.length > 0 then
+					mparameters.prepend longest.new_msignature.mparameters
+					initializers.prepend longest.initializers
+				end
 			end
 		end
 
@@ -649,6 +660,8 @@ redef class APropdef
 		return true
 	end
 
+	# Checks for useless type in redef signatures.
+	private fun check_repeated_types(modelbuilder: ModelBuilder) do end
 end
 
 redef class ASignature
@@ -790,8 +803,19 @@ redef class AMethPropdef
 			name = amethodid.collect_text
 			name_node = amethodid
 
-			if name == "-" and self.n_signature.n_params.length == 0 then
+			var arity = self.n_signature.n_params.length
+			if name == "+" and arity == 0 then
+				name = "unary +"
+			else if name == "-" and arity == 0 then
 				name = "unary -"
+			else if name == "~" and arity == 0 then
+				name = "unary ~"
+			else
+				if amethodid.is_binary and arity != 1 then
+					modelbuilder.error(self.n_signature, "Syntax Error: binary operator `{name}` requires exactly one parameter; got {arity}.")
+				else if amethodid.min_arity > arity then
+					modelbuilder.error(self.n_signature, "Syntax Error: `{name}` requires at least {amethodid.min_arity} parameter(s); got {arity}.")
+				end
 			end
 		end
 
@@ -865,6 +889,9 @@ redef class AMethPropdef
 			end
 		end
 
+		var accept_special_last_parameter = self.n_methid == null or self.n_methid.accept_special_last_parameter
+		var return_is_mandatory = self.n_methid != null and self.n_methid.return_is_mandatory
+
 		# Retrieve info from the signature AST
 		var param_names = new Array[String] # Names of parameters from the AST
 		var param_types = new Array[MType] # Types of parameters from the AST
@@ -930,13 +957,27 @@ redef class AMethPropdef
 
 		var mparameters = new Array[MParameter]
 		for i in [0..param_names.length[ do
-			var mparameter = new MParameter(param_names[i], param_types[i], i == vararg_rank)
+			var is_default = false
+			if vararg_rank == -1 and param_types[i] isa MNullableType then
+				if i < param_names.length-1 or accept_special_last_parameter then
+					is_default = true
+				end
+			end
+			var mparameter = new MParameter(param_names[i], param_types[i], i == vararg_rank, is_default)
 			if nsig != null then nsig.n_params[i].mparameter = mparameter
 			mparameters.add(mparameter)
 		end
 
 		# In `new`-factories, the return type is by default the classtype.
 		if ret_type == null and mpropdef.mproperty.is_new then ret_type = mclassdef.mclass.mclass_type
+
+		# Special checks for operator methods
+		if not accept_special_last_parameter and mparameters.not_empty and mparameters.last.is_vararg then
+			modelbuilder.error(self.n_signature.n_params.last, "Error: illegal variadic parameter `{mparameters.last}` for `{mpropdef.mproperty.name}`.")
+		end
+		if ret_type == null and return_is_mandatory then
+			modelbuilder.error(self.n_methid, "Error: mandatory return type for `{mpropdef.mproperty.name}`.")
+		end
 
 		msignature = new MSignature(mparameters, ret_type)
 		mpropdef.msignature = msignature
@@ -1016,7 +1057,79 @@ redef class AMethPropdef
 			var nt = nsig.n_type
 			if nt != null then modelbuilder.check_visibility(nt, nt.mtype.as(not null), mpropdef)
 		end
+		check_repeated_types(modelbuilder)
 	end
+
+	# For parameters, type is always useless in a redef.
+	# For return type, type is useless if not covariant with introduction.
+	redef fun check_repeated_types(modelbuilder) do
+		if mpropdef.is_intro or n_signature == null then return
+		# check params
+		for param in n_signature.n_params do
+			if param.n_type != null then
+				modelbuilder.advice(param.n_type, "useless-signature", "Warning: useless type repetition on parameter `{param.n_id.text}` for redefined method `{mpropdef.name}`")
+			end
+		end
+		# get intro
+		var intro = mpropdef.mproperty.intro
+		var n_intro = modelbuilder.mpropdef2npropdef.get_or_null(intro)
+		if n_intro == null or not n_intro isa AMethPropdef then return
+		# check return type
+		var ret_type = n_signature.ret_type
+		if ret_type != null and ret_type == n_intro.n_signature.ret_type then
+			modelbuilder.advice(n_signature.n_type, "useless-signature", "Warning: useless return type repetition for redefined method `{mpropdef.name}`")
+		end
+	end
+end
+
+redef class AMethid
+	# Is a return required?
+	#
+	# * True for operators and brackets.
+	# * False for id and assignment.
+	fun return_is_mandatory: Bool do return true
+
+	# Can the last parameter be special like a vararg?
+	#
+	# * False for operators: the last one is in fact the only one.
+	# * False for assignments: it is the right part of the assignment.
+	# * True for ids and brackets.
+	fun accept_special_last_parameter: Bool do return false
+
+	# The minimum required number of parameters.
+	#
+	# * 1 for binary operators
+	# * 1 for brackets
+	# * 1 for assignments
+	# * 2 for bracket assignments
+	# * 0 for ids
+	fun min_arity: Int do return 1
+
+	# Is the `self` a binary operator?
+	fun is_binary: Bool do return true
+end
+
+redef class AIdMethid
+	redef fun return_is_mandatory do return false
+	redef fun accept_special_last_parameter do return true
+	redef fun min_arity do return 0
+	redef fun is_binary do return false
+end
+
+redef class ABraMethid
+	redef fun accept_special_last_parameter do return true
+	redef fun is_binary do return false
+end
+
+redef class ABraassignMethid
+	redef fun return_is_mandatory do return false
+	redef fun min_arity do return 2
+	redef fun is_binary do return false
+end
+
+redef class AAssignMethid
+	redef fun return_is_mandatory do return false
+	redef fun is_binary do return false
 end
 
 redef class AAttrPropdef
@@ -1102,17 +1215,17 @@ redef class AAttrPropdef
 		end
 
 		var atlazy = self.get_single_annotation("lazy", modelbuilder)
-		var atautoinit = self.get_single_annotation("autoinit", modelbuilder)
-		if atlazy != null or atautoinit != null then
-			if atlazy != null and atautoinit != null then
-				modelbuilder.error(atlazy, "Error: `lazy` incompatible with `autoinit`.")
+		var atlateinit = self.get_single_annotation("lateinit", modelbuilder)
+		if atlazy != null or atlateinit != null then
+			if atlazy != null and atlateinit != null then
+				modelbuilder.error(atlazy, "Error: `lazy` incompatible with `lateinit`.")
 				return
 			end
 			if not has_value then
 				if atlazy != null then
 					modelbuilder.error(atlazy, "Error: `lazy` attributes need a value.")
-				else if atautoinit != null then
-					modelbuilder.error(atautoinit, "Error: `autoinit` attributes need a value.")
+				else if atlateinit != null then
+					modelbuilder.error(atlateinit, "Error: `lateinit` attributes need a value.")
 				end
 				has_value = true
 				return
@@ -1130,6 +1243,10 @@ redef class AAttrPropdef
 			end
 			# No setter, so just leave
 			return
+		end
+
+		if not mclassdef.is_intro and not has_value and not noinit then
+			modelbuilder.advice(self, "attr-in-refinement", "Warning: attributes in refinement need a value or `noautoinit`.")
 		end
 
 		var writename = name + "="
@@ -1204,6 +1321,9 @@ redef class AAttrPropdef
 				else if nexpr isa AIntExpr then
 					var cla = modelbuilder.try_get_mclass_by_name(nexpr, mmodule, "Int")
 					if cla != null then mtype = cla.mclass_type
+				else if nexpr isa AByteExpr then
+					var cla = modelbuilder.try_get_mclass_by_name(nexpr, mmodule, "Byte")
+					if cla != null then mtype = cla.mclass_type
 				else if nexpr isa AFloatExpr then
 					var cla = modelbuilder.try_get_mclass_by_name(nexpr, mmodule, "Float")
 					if cla != null then mtype = cla.mclass_type
@@ -1252,7 +1372,7 @@ redef class AAttrPropdef
 		if mwritepropdef != null then
 			var name: String
 			name = n_id2.text
-			var mparameter = new MParameter(name, mtype, false)
+			var mparameter = new MParameter(name, mtype, false, false)
 			var msignature = new MSignature([mparameter], null)
 			mwritepropdef.msignature = msignature
 		end
@@ -1261,6 +1381,7 @@ redef class AAttrPropdef
 		if mlazypropdef != null then
 			mlazypropdef.static_mtype = modelbuilder.model.get_mclasses_by_name("Bool").first.mclass_type
 		end
+		check_repeated_types(modelbuilder)
 	end
 
 	redef fun check_signature(modelbuilder)
@@ -1364,6 +1485,25 @@ redef class AAttrPropdef
 				end
 			end
 		end
+	end
+
+	# Type is useless if the attribute type is the same thant the intro.
+	redef fun check_repeated_types(modelbuilder) do
+		if mreadpropdef.is_intro or n_type == null then return
+		# get intro
+		var intro = mreadpropdef.mproperty.intro
+		var n_intro = modelbuilder.mpropdef2npropdef.get_or_null(intro)
+		if n_intro == null then return
+		# get intro type
+		var ntype = null
+		if n_intro isa AMethPropdef then
+			ntype = n_intro.n_signature.ret_type
+		else if n_intro isa AAttrPropdef and n_intro.n_type != null then
+			ntype = n_intro.n_type.mtype
+		end
+		# check
+		if ntype ==null or ntype != n_type.mtype then return
+		modelbuilder.advice(n_type, "useless-signature", "Warning: useless type repetition on redefined attribute `{mpropdef.name}`")
 	end
 end
 

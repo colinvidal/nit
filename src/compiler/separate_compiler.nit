@@ -252,7 +252,7 @@ class SeparateCompiler
 	do
 		# Collect all bas box class
 		# FIXME: this is not completely fine with a separate compilation scheme
-		for classname in ["Int", "Bool", "Char", "Float", "NativeString", "Pointer"] do
+		for classname in ["Int", "Bool", "Byte", "Char", "Float", "NativeString", "Pointer"] do
 			var classes = self.mainmodule.model.get_mclasses_by_name(classname)
 			if classes == null then continue
 			assert classes.length == 1 else print classes.join(", ")
@@ -768,7 +768,8 @@ class SeparateCompiler
 			end
 			v.add_decl("\},")
 		else
-			v.add_decl("0, \{\}, /*DEAD TYPE*/")
+			# Use -1 to indicate dead type, the info is used by --hardening
+			v.add_decl("-1, \{\}, /*DEAD TYPE*/")
 		end
 		v.add_decl("\};")
 	end
@@ -1036,7 +1037,7 @@ class SeparateCompiler
 		v.add("if({t} == NULL) \{")
 		v.add_abort("type null")
 		v.add("\}")
-		v.add("if({t}->table_size == 0) \{")
+		v.add("if({t}->table_size < 0) \{")
 		v.add("PRINT_ERROR(\"Insantiation of a dead type: %s\\n\", {t}->name);")
 		v.add_abort("type dead")
 		v.add("\}")
@@ -1192,7 +1193,7 @@ class SeparateCompilerVisitor
 				if mtype.name == "Int" then
 					return self.new_expr("(long)({value})>>2", mtype)
 				else if mtype.name == "Char" then
-					return self.new_expr("(char)((long)({value})>>2)", mtype)
+					return self.new_expr("(uint32_t)((long)({value})>>2)", mtype)
 				else if mtype.name == "Bool" then
 					return self.new_expr("(short int)((long)({value})>>2)", mtype)
 				else
@@ -1436,12 +1437,13 @@ class SeparateCompilerVisitor
 		if compiler.modelbuilder.toolcontext.opt_invocation_metrics.value then add("count_invoke_by_tables++;")
 
 		assert arguments.length == mmethod.intro.msignature.arity + 1 else debug("Invalid arity for {mmethod}. {arguments.length} arguments given.")
-		var recv = arguments.first
 
 		var res0 = before_send(mmethod, arguments)
 
 		var runtime_function = mmethod.intro.virtual_runtime_function
 		var msignature = runtime_function.called_signature
+
+		adapt_signature(mmethod.intro, arguments)
 
 		var res: nullable RuntimeVariable
 		var ret = msignature.return_mtype
@@ -1451,18 +1453,7 @@ class SeparateCompilerVisitor
 			res = self.new_var(ret)
 		end
 
-		var ss = new FlatBuffer
-
-		ss.append("{recv}")
-		for i in [0..msignature.arity[ do
-			var a = arguments[i+1]
-			var t = msignature.mparameters[i].mtype
-			if i == msignature.vararg_rank then
-				t = arguments[i+1].mcasttype
-			end
-			a = self.autobox(a, t)
-			ss.append(", {a}")
-		end
+		var ss = arguments.join(", ")
 
 		var const_color = mentity.const_color
 		var ress
@@ -2042,6 +2033,7 @@ class SeparateCompilerVisitor
 		self.require_declaration("NEW_{mtype.mclass.c_name}")
 		assert mtype isa MGenericType
 		var compiler = self.compiler
+		length = autobox(length, compiler.mainmodule.int_type)
 		if mtype.need_anchor then
 			hardening_live_open_type(mtype)
 			link_unresolved_type(self.frame.mpropdef.mclassdef, mtype)

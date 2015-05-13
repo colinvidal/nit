@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import serialization
-import json_serialization
 
 # Simple class
 class A
@@ -27,6 +26,7 @@ class A
 	var i = 123
 	var s = "asdf"
 	var n: nullable Int
+	var password = "p4ssw0rd" is lazy, noserialize
 
 	init(b: Bool, c: Char, f: Float, i: Int, s: String, n: nullable Int)
 	do
@@ -37,7 +37,7 @@ class A
 		self.s = s
 	end
 
-	redef fun to_s do return "<A: {b} {c} {f} {i} {s} {n != null}>"
+	redef fun to_s do return "<A: {b} {c} {f} {i} {s} {n != null} {password}>"
 end
 
 # Sub-class of A
@@ -93,45 +93,61 @@ class E
 
 	var a = new Array[Object].with_items("hello", 1234, 123.4)
 	var b = new Array[nullable Serializable].with_items("hella", 2345, 234.5)
-	init do end
 
 	redef fun to_s do return "<E: a: {a.join(", ")}; b: {b.join(", ")}>"
 end
 
-# Class with generics
+# Parameterized class
 class F[N: Numeric]
 	auto_serializable
 
 	var n: N
-	init(n: N) do self.n = n
 
 	redef fun to_s do return "<E: {n}>"
 end
 
-var a = new A(true, 'a', 0.1234, 1234, "asdf", null)
-var b = new B(false, 'b', 123.123, 2345, "hjkl", 12, 1111, "qwer")
-var c = new C(a, b)
-var d = new D(false, 'b', 123.123, 2345, "new line ->\n<-", null, 1111, "\t\f\"\r\\/")
-d.d = d
-var e = new E
-var fi = new F[Int](2222)
-var ff = new F[Float](33.33)
+# Other collections
+class G
+	auto_serializable
 
-# Default works only with Nit serial
-var tests = new Array[Serializable].with_items(a, b, c, d, e, fi, ff)
+	var hs = new HashSet[Int]
+	var s: Set[String] = new ArraySet[String]
+	var hm = new HashMap[String, Int]
+	var am = new ArrayMap[String, String]
 
-# Alt1 should work without nitserial
-#alt1# tests = new Array[Serializable].with_items(a, b, c, d)
+	init
+	do
+		hs.add -1
+		hs.add 0
+		s.add "one"
+		s.add "two"
+		hm["one"] = 1
+		hm["two"] = 2
+		am["three"] = 3.to_s
+		am["four"] = 4.to_s
+	end
 
-for o in tests do
-	var stream = new StringWriter
-	var serializer = new JsonSerializer(stream)
-	serializer.serialize(o)
-
-	var deserializer = new JsonDeserializer(stream.to_s)
-	var deserialized = deserializer.deserialize
-
-	print "# Nit:\n{o}\n"
-	print "# Json:\n{stream}\n"
-	print "# Back in Nit:\n{deserialized or else "null"}\n"
+	redef fun to_s do return "<G: hs: {hs.join(", ")}; s: {s.join(", ")}; "+
+		"hm: {hm.join(", ", ". ")}; am: {am.join(", ", ". ")}>"
 end
+
+class TestEntities
+	var a = new A(true, 'a', 0.1234, 1234, "asdf", null)
+	var b = new B(false, 'b', 123.123, 2345, "hjkl", 12, 1111, "qwer")
+	var c = new C(a, b)
+	var d = new D(false, 'b', 123.123, 2345, "new line ->\n<-", null, 1111, "\t\f\"\r\\/")
+	init do d.d = d
+	var e = new E
+	var fi = new F[Int](2222)
+	var ff = new F[Float](33.33)
+	var g = new G
+
+	# should work without nitserial
+	var without_generics: Array[Serializable] = [a, b, c, d: Serializable]
+
+	# Default works only with Nit serial
+	var with_generics: Array[Serializable] = [a, b, c, d, e, fi, ff, g: Serializable]
+end
+
+# We instanciate it here so that `nitserial` detects generic types as being alive
+var entities = new TestEntities

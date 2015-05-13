@@ -126,133 +126,6 @@
 	  min: base_simple3 (1)
 	  std: 0.0
 	  sum: 1
-
-# MClasses metrics
-
- ## project base_simple3
-  `- group base_simple3
-	cnoa: number of ancestor classes
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnop: number of parent classes
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnoc: number of child classes
-	  avg: 0.0
-	  max: Object (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 6
-	cnod: number of descendant classes
-	  avg: 0.0
-	  max: Object (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 6
-	cdit: depth in class tree
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnbp: number of accessible properties (inherited + local)
-	  avg: 3.0
-	  max: C (7)
-	  min: Object (1)
-	  std: 2.36
-	  sum: 24
-	cnba: number of accessible attributes (inherited + local)
-	  avg: 0.0
-	  max: C (2)
-	  min: Object (0)
-	  std: 0.845
-	  sum: 3
-	cnbip: number of introduced properties
-	  avg: 2.0
-	  max: C (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 18
-	cnbrp: number of redefined properties
-	  avg: 0.0
-	  max: A (1)
-	  min: Object (0)
-	  std: 0.535
-	  sum: 2
-	cnbhp: number of inherited properties
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-
- ## global metrics
-	cnoa: number of ancestor classes
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnop: number of parent classes
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnoc: number of child classes
-	  avg: 0.0
-	  max: Object (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 6
-	cnod: number of descendant classes
-	  avg: 0.0
-	  max: Object (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 6
-	cdit: depth in class tree
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
-	cnbp: number of accessible properties (inherited + local)
-	  avg: 3.0
-	  max: C (7)
-	  min: Object (1)
-	  std: 2.36
-	  sum: 24
-	cnba: number of accessible attributes (inherited + local)
-	  avg: 0.0
-	  max: C (2)
-	  min: Object (0)
-	  std: 0.845
-	  sum: 3
-	cnbip: number of introduced properties
-	  avg: 2.0
-	  max: C (6)
-	  min: Bool (0)
-	  std: 2.268
-	  sum: 18
-	cnbrp: number of redefined properties
-	  avg: 0.0
-	  max: A (1)
-	  min: Object (0)
-	  std: 0.535
-	  sum: 2
-	cnbhp: number of inherited properties
-	  avg: 0.0
-	  max: Bool (1)
-	  min: Object (0)
-	  std: 0.926
-	  sum: 6
 --- Metrics of refinement usage ---
 Number of modules: 1
 
@@ -402,41 +275,41 @@ Distribution of direct smallers
   <=8: sub-population=1 (14.28%); cumulated value=6 (100.00%)
 --- AST Metrics ---
 ## All nodes of the AST
- population: 48
+ population: 50
  minimum value: 1
  maximum value: 40
- total value: 261
- average value: 5.43
+ total value: 270
+ average value: 5.40
  distribution:
-  <=1: sub-population=15 (31.25%); cumulated value=15 (5.74%)
-  <=2: sub-population=5 (10.41%); cumulated value=10 (3.83%)
-  <=4: sub-population=10 (20.83%); cumulated value=32 (12.26%)
-  <=8: sub-population=10 (20.83%); cumulated value=64 (24.52%)
-  <=16: sub-population=4 (8.33%); cumulated value=44 (16.85%)
-  <=32: sub-population=3 (6.25%); cumulated value=56 (21.45%)
-  <=64: sub-population=1 (2.08%); cumulated value=40 (15.32%)
+  <=1: sub-population=16 (32.00%); cumulated value=16 (5.92%)
+  <=2: sub-population=5 (10.00%); cumulated value=10 (3.70%)
+  <=4: sub-population=9 (18.00%); cumulated value=28 (10.37%)
+  <=8: sub-population=12 (24.00%); cumulated value=76 (28.14%)
+  <=16: sub-population=4 (8.00%); cumulated value=44 (16.29%)
+  <=32: sub-population=3 (6.00%); cumulated value=56 (20.74%)
+  <=64: sub-population=1 (2.00%); cumulated value=40 (14.81%)
  list:
-  TId: 40 (15.32%)
-  APublicVisibility: 19 (7.27%)
-  AListExprs: 19 (7.27%)
-  ACallExpr: 18 (6.89%)
-  TClassid: 15 (5.74%)
-  TNumber: 10 (3.83%)
-  ADecIntExpr: 10 (3.83%)
-  AType: 9 (3.44%)
-  TKwend: 8 (3.06%)
-  ASignature: 8 (3.06%)
+  TId: 40 (14.81%)
+  APublicVisibility: 19 (7.03%)
+  AListExprs: 19 (7.03%)
+  ACallExpr: 18 (6.66%)
+  TClassid: 15 (5.55%)
+  TNumber: 10 (3.70%)
+  ADecIntExpr: 10 (3.70%)
+  AType: 9 (3.33%)
+  TKwend: 8 (2.96%)
+  ASignature: 8 (2.96%)
   ...
-  ACallAssignExpr: 1 (0.38%)
-  AAnnotations: 1 (0.38%)
-  AReturnExpr: 1 (0.38%)
-  TKwreturn: 1 (0.38%)
-  AInterfaceClasskind: 1 (0.38%)
-  TKwinterface: 1 (0.38%)
-  ANoImport: 1 (0.38%)
-  AMainMethPropdef: 1 (0.38%)
-  AMainClassdef: 1 (0.38%)
-  TKwimport: 1 (0.38%)
+  ASelfExpr: 1 (0.37%)
+  AAnnotations: 1 (0.37%)
+  ACallAssignExpr: 1 (0.37%)
+  TKwreturn: 1 (0.37%)
+  AInterfaceClasskind: 1 (0.37%)
+  TKwinterface: 1 (0.37%)
+  ANoImport: 1 (0.37%)
+  AMainMethPropdef: 1 (0.37%)
+  AMainClassdef: 1 (0.37%)
+  TKwimport: 1 (0.37%)
 ## All identifiers of the AST
  population: 20
  minimum value: 1
@@ -488,6 +361,133 @@ Distribution of direct smallers
   bivariants: 0 (na%)
   invariants: 0 (na%)
   total: 0
+
+# MClasses metrics
+
+ ## project base_simple3
+  `- group base_simple3
+	cnoa: number of ancestor classes
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnop: number of parent classes
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnoc: number of child classes
+	  avg: 0.0
+	  max: Object (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 6
+	cnod: number of descendant classes
+	  avg: 0.0
+	  max: Object (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 6
+	cdit: depth in class tree
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnbp: number of accessible properties (inherited + local)
+	  avg: 3.0
+	  max: C (7)
+	  min: Object (1)
+	  std: 2.36
+	  sum: 24
+	cnba: number of accessible attributes (inherited + local)
+	  avg: 0.0
+	  max: C (2)
+	  min: Object (0)
+	  std: 0.845
+	  sum: 3
+	cnbip: number of introduced properties
+	  avg: 2.0
+	  max: C (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 18
+	cnbrp: number of redefined properties
+	  avg: 0.0
+	  max: A (1)
+	  min: Object (0)
+	  std: 0.535
+	  sum: 2
+	cnbhp: number of inherited properties
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+
+ ## global metrics
+	cnoa: number of ancestor classes
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnop: number of parent classes
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnoc: number of child classes
+	  avg: 0.0
+	  max: Object (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 6
+	cnod: number of descendant classes
+	  avg: 0.0
+	  max: Object (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 6
+	cdit: depth in class tree
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
+	cnbp: number of accessible properties (inherited + local)
+	  avg: 3.0
+	  max: C (7)
+	  min: Object (1)
+	  std: 2.36
+	  sum: 24
+	cnba: number of accessible attributes (inherited + local)
+	  avg: 0.0
+	  max: C (2)
+	  min: Object (0)
+	  std: 0.845
+	  sum: 3
+	cnbip: number of introduced properties
+	  avg: 2.0
+	  max: C (6)
+	  min: Bool (0)
+	  std: 2.268
+	  sum: 18
+	cnbrp: number of redefined properties
+	  avg: 0.0
+	  max: A (1)
+	  min: Object (0)
+	  std: 0.535
+	  sum: 2
+	cnbhp: number of inherited properties
+	  avg: 0.0
+	  max: Bool (1)
+	  min: Object (0)
+	  std: 0.926
+	  sum: 6
 generating project_hierarchy.dot
 generating module_hierarchy.dot
 
@@ -697,12 +697,10 @@ Statistics of type usage:
 # Mendel metrics
 	large mclasses (threshold: 3.354)
 	   Sys: 4
-	budding mclasses (threshold: 3.51)
-	   Sys: 4.0
-	blooming mclasses (threshold: 12.0)
-	   Sys: 16.0
-	blooming mclasses (threshold: 12.0)
-	   Sys: 16.0
+	budding mclasses (threshold: 4.177)
+	   Sys: 5.0
+	blooming mclasses (threshold: 14.626)
+	   Sys: 20.0
 --- Detection of the usage of covariance static type conformance ---
 -- Total --
 - Kinds of the subtype -
@@ -774,7 +772,8 @@ Statistics of type usage:
 	  sum: 0
 --- Sends on Nullable Receiver ---
 Total number of sends: 19
-Number of sends on a nullable receiver: 0 (0.00%)
+Number of sends on a unsafe nullable receiver: 0 (0.00%)
+Number of sends on a safe nullable receiver: 0 (0.00%)
 Number of buggy sends (cannot determine the type of the receiver): 0 (0.00%)
 
 # RTA metrics

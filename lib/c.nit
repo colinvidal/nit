@@ -111,10 +111,10 @@ extern class NativeCIntArray `{ int* `}
 	# Initialize a new NativeCIntArray of `size` elements.
 	new(size: Int) `{ return calloc(size, sizeof(int)); `}
 
-	redef fun [](index) `{ return recv[index]; `}
-	redef fun []=(index, val) `{ recv[index] = val; `}
+	redef fun [](index) `{ return self[index]; `}
+	redef fun []=(index, val) `{ self[index] = val; `}
 
-	redef fun +(offset) `{ return recv + offset; `}
+	redef fun +(offset) `{ return self + offset; `}
 end
 
 # Wrapper around an array of `unsigned char` in C (`unsigned char*`) with length and destroy state
@@ -147,15 +147,52 @@ extern class NativeCByteArray `{ unsigned char* `}
 	# Allocate a new array of `size`
 	new(size: Int) `{ return calloc(size, sizeof(unsigned char)); `}
 
-	redef fun [](index) `{ return recv[index]; `}
-	redef fun []=(index, val) `{ recv[index] = val; `}
+	redef fun [](index) `{ return self[index]; `}
+	redef fun []=(index, val) `{ self[index] = val; `}
 
-	redef fun +(offset) `{ return recv + offset; `}
+	redef fun +(offset) `{ return self + offset; `}
+end
+
+# Wrapper around an array of `NativeString` in C (`char**`) with length and destroy state.
+class CNativeStringArray
+	super CArray[NativeString]
+
+	redef type NATIVE: NativeCStringArray
+
+	# Initialize a new NativeCStringArray of `size` elements.
+	init(size: Int) is old_style_init do
+		native_array = new NativeCStringArray(size)
+		super size
+	end
+
+	# Build from an `Array[NativeString]`
+	new from(array: Array[NativeString])
+	do
+		var carray = new CNativeStringArray(array.length)
+		for i in array.length.times do
+			carray[i] = array[i]
+		end
+		return carray
+	end
+end
+
+# An array of `NativeString` in C (`char**`)
+extern class NativeCStringArray `{ char** `}
+	super NativeCArray
+
+	redef type E: NativeString
+
+	# Initialize a new NativeCStringArray of `size` elements.
+	new(size: Int) `{ return calloc(size, sizeof(char*)); `}
+
+	redef fun [](index) `{ return self[index]; `}
+	redef fun []=(index, val) `{ self[index] = val; `}
+	redef fun +(offset) `{ return self + offset; `}
 end
 
 redef class NativeString
 	super NativeCArray
 	redef type E: Char
 
-	redef fun +(offset) `{ return recv + offset; `}
+	redef fun +(offset) `{ return self + offset; `}
 end
