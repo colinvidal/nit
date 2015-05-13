@@ -639,14 +639,12 @@ redef class MClass
 
 		# TODO: rewrite it
 		for parent in ordering do
-			if parent.loaded then 
-				continue
-			else if parent == self then
+			if parent == self then
 				pstats.incr_loaded_classes_explicits
-			else if parent != self then 
-				pstats.incr_loaded_classes_implicits
 			else if parent.kind == abstract_kind then
 				pstats.incr_loaded_classes_abstracts
+			else
+				pstats.incr_loaded_classes_implicits
 			end
 		end
 	end
