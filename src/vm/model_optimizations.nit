@@ -43,8 +43,23 @@ redef class ModelBuilder
 		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
 
 		super(mainmodule, arguments)
-		
-		if toolcontext.stats_on.value then print(pstats.pretty)
+
+		if toolcontext.stats_on.value then 
+			print(pstats.pretty)
+			check_counters(mainmodule)
+		end
+	end	
+
+	# At the end of execution, check if counters are rights
+	fun check_counters(mainmodule: MModule)
+	do
+		var loaded_cls = 0
+		for cls in mainmodule.model.mclasses do if cls.loaded then loaded_cls += 1
+
+		var analysed_cls = pstats.get("loaded_classes_implicits")
+		analysed_cls += pstats.get("loaded_classes_explicits")
+		analysed_cls += pstats.get("loaded_classes_abstracts")
+		if loaded_cls != analysed_cls then trace("WARNING: numbers of loaded classes in [model: {loaded_cls}] [vm: {analysed_cls}]")
 	end
 end
 
