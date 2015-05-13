@@ -59,7 +59,9 @@ redef class ModelBuilder
 		var analysed_cls = pstats.get("loaded_classes_implicits")
 		analysed_cls += pstats.get("loaded_classes_explicits")
 		analysed_cls += pstats.get("loaded_classes_abstracts")
-		if loaded_cls != analysed_cls then trace("WARNING: numbers of loaded classes in [model: {loaded_cls}] [vm: {analysed_cls}]")
+		if loaded_cls != analysed_cls then
+			print("WARNING: numbers of loaded classes in [model: {loaded_cls}] [vm: {analysed_cls}]")
+		end
 	end
 end
 
