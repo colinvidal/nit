@@ -741,52 +741,28 @@ end
 # UNKNOWN:	1...
 
 # Preexistence mask of perennial value preexistence
-fun pmask_PVAL_PER: Int
-do
-	return 15
-end
+fun pmask_PVAL_PER: Int do return 15
 
 # Preexistence mask of perennial type preexistence
-fun pmask_PTYPE_PER: Int
-do
-	return 13
-end
+fun pmask_PTYPE_PER: Int do return 13
 
 # Preexistence mask of no perennial value preexistence
-fun pmask_PVAL_NPER: Int
-do
-	return 11
-end
+fun pmask_PVAL_NPER: Int do return 11
 
 # Preexistence mask of no perennial type preexistence
-fun pmask_PTYPE_NPER: Int
-do
-	return 9
-end
+fun pmask_PTYPE_NPER: Int do return 9
 
 # Preexistence mask of perennial no preexistence
-fun pmask_NPRE_PER: Int
-do
-	return 12
-end
+fun pmask_NPRE_PER: Int do return 12
 
 # Preexistence mask of no perennial no preexistence
-fun pmask_NPRE_NPER: Int
-do
-	return 8
-end
+fun pmask_NPRE_NPER: Int do return 8
 
 # Preexistence mask of recursive calls
-fun pmask_RECURSIV: Int
-do
-	return 0
-end
+fun pmask_RECURSIV: Int do return 0
 
 # Preexistence mask of unknown preexistence
-fun pmask_UNKNOWN: Int
-do
-	return -1
-end
+fun pmask_UNKNOWN: Int do return -1
 
 redef class MOExpr
 	# The cached preexistence of the expression (the return of the expression)
@@ -820,100 +796,52 @@ redef class MOExpr
 	end
 
 	# Set type preexist perennial
-	fun set_ptype_per
-	do
-		set_status_mask(pmask_PTYPE_PER)
-	end
+	fun set_ptype_per do set_status_mask(pmask_PTYPE_PER)
 
 	# Set value preexist perennial
-	fun set_pval_per
-	do
-		set_status_mask(pmask_PVAL_PER)
-	end
+	fun set_pval_per do set_status_mask(pmask_PVAL_PER)
 
 	# Set non preexist non perennial
-	fun set_npre_nper
-	do
-		set_status_mask(pmask_NPRE_NPER)
-	end
+	fun set_npre_nper do set_status_mask(pmask_NPRE_NPER)
 
 	# Set non preexist perennial
-	fun set_npre_per
-	do
-		preexist_expr_value = pmask_NPRE_PER
-	end
+	fun set_npre_per do preexist_expr_value = pmask_NPRE_PER
 
 	# Set val preexist non perennial
-	fun set_pval_nper
-	do
-		set_status_mask(pmask_PVAL_NPER)
-	end
+	fun set_pval_nper do set_status_mask(pmask_PVAL_NPER)
 
 	# Set recursive flag
-	fun set_recursive
-	do
-		preexist_expr_value = pmask_RECURSIV
-	end
+	fun set_recursive do preexist_expr_value = pmask_RECURSIV
 
 	# Return true if the preexistence of the expression isn't known
-	fun is_pre_unknown: Bool
-	do
-		return preexist_expr_value == pmask_UNKNOWN
-	end
+	fun is_pre_unknown: Bool do return preexist_expr_value == pmask_UNKNOWN
 
 	# Return true if the expression is recursive
-	fun is_rec: Bool
-	do
-		return preexist_expr_value == 0
-	end
+	fun is_rec: Bool do return preexist_expr_value == 0
 
 	# Return true if the expression preexists (recursive case is interpreted as preexistent)
-	fun is_pre: Bool
-	do
-		return preexist_expr_value.bin_and(1) == 1 or preexist_expr_value == 0
-	end
+	fun is_pre: Bool do return preexist_expr_value.bin_and(1) == 1 or preexist_expr_value == 0
 
 	# True true if the expression non preexists
-	fun is_npre: Bool
-	do
-		return not is_pre
-	end
+	fun is_npre: Bool do return not is_pre
 
 	# Return true if the preexistence state of the expression is perennial
-	fun is_per: Bool
-	do
-		return preexist_expr_value.bin_and(4) == 4
-	end
+	fun is_per: Bool do return preexist_expr_value.bin_and(4) == 4
 
 	# Return true if the preexistence state if not perennial
-	fun is_nper: Bool
-	do
-		return not is_per
-	end
+	fun is_nper: Bool do return not is_per
 
 	# Return true if the prexistence state is preexist and no perennial
-	fun is_pre_nper: Bool
-	do
-		return is_pre and is_nper
-	end
+	fun is_pre_nper: Bool do return is_pre and is_nper
 
 	# Return true if the preexistence state is no preexist and no perennial
-	fun is_npre_nper: Bool
-	do
-		return is_npre and is_nper
-	end
+	fun is_npre_nper: Bool do return is_npre and is_nper
 
 	# Return true if the preexistence state is no preexist and perennial
-	fun is_npre_per: Bool
-	do
-		return is_npre and is_per
-	end
+	fun is_npre_per: Bool do return is_npre and is_per
 
 	# Initialize preexist_cache to UNKNOWN
-	fun init_preexist
-	do
-		preexist_expr_value = pmask_UNKNOWN
-	end
+	fun init_preexist do preexist_expr_value = pmask_UNKNOWN
 
 	# Merge dependecies and preexistence state
 	fun merge_preexistence(expr: MOExpr): Int
