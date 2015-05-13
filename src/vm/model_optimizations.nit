@@ -12,7 +12,19 @@ redef class Sys
 
 	# Disable inter-procedural analysis and 'new' cases
 	var disable_preexistence_extensions = true
+
+	# Access to preexistence stats from everywhere
+	var pstats = new MOStats
 end
+
+redef class ModelBuilder
+	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	do
+		super(mainmodule, arguments)
+		self.toolcontext.info(sys.pstats.pretty_dump, 1)
+	end
+end
+
 
 # Pattern of instantiation sites
 class MONewPattern
@@ -616,6 +628,12 @@ redef class MClass
 		# For each class who know one of the redefs methods, tell the pattern there is a new branch
 		for lp in redefs do
 			for parent in ordering do
+				if parent != self then 
+					pstats.incr_loaded_classes_implicits
+				else if parent.kind == abstract_kind then
+					pstats.incr_loaded_classes_abstracts
+				end
+
 				for p in parent.sites_patterns do
 					if p.gp == lp.mproperty then 
 						if not sites_patterns.has(p) then sites_patterns.add(p)
@@ -729,4 +747,114 @@ redef class MType
 		end
 	end
 end
+
+# Stats of the optimizing model
+class MOStats
+	# Count of the total loaded explicits classes
+	var loaded_classes_explicits = 0
+	#
+	fun incr_loaded_classes_explicits do loaded_classes_explicits += 1
+
+	# Count of the total loaded implicits classes
+	var loaded_classes_implicits = 0
+	#
+	fun incr_loaded_classes_implicits do loaded_classes_explicits += 1
+
+	# Count of the total loaded abstracts classes
+	var loaded_classes_abstracts = 0
+	#
+	fun incr_loaded_classes_abstracts do loaded_classes_abstracts += 1
+
+	# Count of new on unloaded class
+	var unloaded_new = 0
+	#
+	fun incr_unloaded_new do unloaded_new += 1
+	
+	# Count of new on loaded class
+	var loaded_new = 0
+	#
+	fun incr_loaded_new do loaded_new += 1
+
+	# Count of AST non primivites new nodes
+	var ast_new_no_primitives = 0
+	#
+	fun incr_new_no_primitives do ast_new_no_primitives += 1
+
+	# Count of method invocation sites
+	var call_site = 0
+	#
+	fun incr_call_site do call_site += 1
+
+	# Count of subtype test sites
+	var subtypetest_site = 0
+	#
+	fun incr_subtypetest_site do subtypetest_site += 1
+
+	# Count of attr read sites
+	var readattr_site = 0
+	#
+	fun incr_readattr_site do readattr_site += 1
+
+	# Count of attr write sites
+	var writeattr_site = 0
+	#
+	fun incr_writeattr_site do writeattr_site += 1
+	
+	# Count of primitives (and ignored) receivers
+	var primitives = 0
+	#
+	fun incr_primitives do primitives += 1
+
+	# Count of NYI receivers
+	var nyi = 0
+	#
+	fun incr_nyi do nyi += 1
+
+	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
+	var concretes_receivers_site = 0
+	#
+	fun incr_concretes_receivers_site do concretes_receivers_site += 1
+
+	# Count of site with litterals
+	var lits = 0
+	#
+	fun incr_lits do lits += 1
+
+	# Return list of statistics
+	fun generate_dump: String
+	do
+		var ret = ""
+
+		ret += "\tloaded_new: {loaded_new}\n"
+		ret += "\tunloaded_new: {unloaded_new}\n"
+		ret += "\tloaded_classes_explicits: {loaded_classes_explicits}\n"
+		ret += "\tloaded_classes_implicits: {loaded_classes_implicits}\n"
+		ret += "\tast_new_no_primitives: {ast_new_no_primitives}\n"
+		ret += "\n"
+		ret += "\tcall_site: {call_site}\n"
+		ret += "\tsubtypetest_site: {subtypetest_site}\n"
+		ret += "\treadattr_site: {readattr_site}\n"
+		ret += "\twriteattr_site: {writeattr_site}\n"
+		ret += "\n"
+		ret += "\tprimitives: {primitives}\n"
+		ret += "\tlits: {lits}\n"
+		ret += "\tnyi: {nyi}\n"
+		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
+		
+		return ret
+	end
+
+	# Return list of statistic more pretty
+	fun pretty_dump: String
+	do
+		var ret = "" 
+
+		ret += "\n------------------ MO STATS ------------------\n"
+		ret += generate_dump
+		ret += "------------------------------------------------\n"
+
+		return ret
+	end
+end
+
 

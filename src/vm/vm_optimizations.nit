@@ -1171,28 +1171,7 @@ redef class MONewPattern
 	end
 end
 
-# Specifics stats for preexistence
-class PreexistenceStat
-	# Count of the total loaded classes
-	var loaded_classes = 0
-	#
-	fun incr_loaded_classes do loaded_classes += 1
-
-	# Count of new on unloaded class
-	var unloaded_new = 0
-	#
-	fun incr_unloaded_new do unloaded_new += 1
-	
-	# Count of new on loaded class
-	var loaded_new = 0
-	#
-	fun incr_loaded_new do loaded_new += 1
-
-	# Count of AST non primivites new nodes
-	var ast_new_no_primitives = 0
-	#
-	fun incr_new_no_primitives do ast_new_no_primitives += 1
-
+redef class MOStats
 	# Count of preexist sites
 	var preexist = 0
 	#
@@ -1203,85 +1182,25 @@ class PreexistenceStat
 	#
 	fun incr_npreexist do npreexist += 1
 
-	# Count of method invocation sites
-	var call_site = 0
-	#
-	fun incr_call_site do call_site += 1
-
-	# Count of subtype test sites
-	var subtypetest_site = 0
-	#
-	fun incr_subtypetest_site do subtypetest_site += 1
-
-	# Count of attr read sites
-	var readattr_site = 0
-	#
-	fun incr_readattr_site do readattr_site += 1
-
-	# Count of attr write sites
-	var writeattr_site = 0
-	#
-	fun incr_writeattr_site do writeattr_site += 1
-	
-	# Count of primitives (and ignored) receivers
-	var primitives = 0
-	#
-	fun incr_primitives do primitives += 1
-
-	# Count of NYI receivers
-	var nyi = 0
-	#
-	fun incr_nyi do nyi += 1
-
-	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
-	var concretes_receivers_site = 0
-	#
-	fun incr_concretes_receivers_site do concretes_receivers_site += 1
-
-	# Count of site with litterals
-	var lits = 0
-	#
-	fun incr_lits do lits += 1
-
-	# Display stats informations
-	fun infos: String
+	redef fun generate_dump
 	do
-		var ret = "" 
+		var ret = super
 
-		ret += "\n------------------ PREEXISTENCE STATS ------------------\n"
-		ret += "\tloaded_new: {loaded_new}\n"
-		ret += "\tunloaded_new: {unloaded_new}\n"
-		ret += "\tloaded_classes: {loaded_classes}\n"
-		ret += "\tast_new_no_primitives: {ast_new_no_primitives}\n"
-		ret += "\n"
 		ret += "\tpreexist: {preexist}\n"
 		ret += "\tnpreexist: {npreexist}\n"
-		ret += "\n"
-		ret += "\tcall_site: {call_site}\n"
-		ret += "\tsubtypetest_site: {subtypetest_site}\n"
-		ret += "\treadattr_site: {readattr_site}\n"
-		ret += "\twriteattr_site: {writeattr_site}\n"
-		ret += "\n"
-		ret += "\tprimitives: {primitives}\n"
-		ret += "\tlits: {lits}\n"
-		ret += "\tnyi: {nyi}\n"
-		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
-		ret += "--------------------------------------------------------\n"
 
 		return ret
 	end
-end
 
-redef class Sys
-	# Access to preexistence stats from everywhere
-	var pstats = new PreexistenceStat
-end
-
-redef class ModelBuilder
-	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	redef fun pretty_dump
 	do
-		super(mainmodule, arguments)
-		self.toolcontext.info(sys.pstats.infos, 1)
+		var ret = ""
+
+		ret += "\n------------------ PREEXISTENCE STATS ------------------\n"
+		ret += generate_dump
+		ret += "--------------------------------------------------------\n"
+
+		return ret
 	end
 end
 
@@ -1290,7 +1209,7 @@ redef class MClass
 	redef fun handle_new_class
 	do
 		super
-		pstats.incr_loaded_classes
+		pstats.incr_loaded_classes_explicits
 		new_pattern.set_preexist_newsite
 	end
 end
