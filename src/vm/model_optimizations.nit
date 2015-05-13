@@ -7,7 +7,7 @@ redef class Sys
 	#
 	fun dprint(buf: String)
 	do
-		print(buf)
+#		print(buf)
 	end
 
 	# Disable inter-procedural analysis and 'new' cases

@@ -665,22 +665,27 @@ redef class MClass
 	end
 end
 
-redef class MAttribute
-	# Relative offset of this attribute in the runtime instance
-	# (beginning of the block of its introducing class)
+redef class MProperty
 	var offset: Int
-
-	# Absolute offset of this attribute in the runtime instance (beginning of the attribute table)
 	var absolute_offset: Int
 end
 
-redef class MMethod
-	# Relative offset of this method in the virtual table (from the beginning of the block)
-	var offset: Int
-
-	# Absolute offset of this method in the virtual table (from the beginning of the vtable)
-	var absolute_offset: Int
-end
+#redef class MAttribute
+#	# Relative offset of this attribute in the runtime instance
+#	# (beginning of the block of its introducing class)
+#	var offset: Int
+#
+#	# Absolute offset of this attribute in the runtime instance (beginning of the attribute table)
+#	var absolute_offset: Int
+#end
+#
+#redef class MMethod
+#	# Relative offset of this method in the virtual table (from the beginning of the block)
+#	var offset: Int
+#
+#	# Absolute offset of this method in the virtual table (from the beginning of the vtable)
+#	var absolute_offset: Int
+#end
 
 # Redef MutableInstance to improve implementation of attributes in objects
 redef class MutableInstance
