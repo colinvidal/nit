@@ -24,6 +24,8 @@ import model_optimizations
 redef class VirtualMachine
 	redef fun create_class(mclass)
 	do
+		pstats.incr_loaded_classes_explicits
+
 		# Get all superclasses loaded implicitly by mclass
 		var implicit_loaded = new List[MClass]
 		for cls in mclass.superclasses_ordering(self) do
@@ -32,7 +34,15 @@ redef class VirtualMachine
 
 		super(mclass)
 
-		for cls in implicit_loaded do cls.handle_new_class
+		for cls in implicit_loaded do 
+			if cls.kind == abstract_kind then
+				pstats.incr_loaded_classes_abstracts
+			else
+				pstats.incr_loaded_classes_implicits
+			end
+
+			cls.handle_new_class
+		end
 	end
 	
 	redef fun new_frame(node, mpropdef, args)

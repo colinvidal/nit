@@ -636,17 +636,6 @@ redef class MClass
 				end
 			end
 		end
-
-		# TODO: rewrite it
-		for parent in ordering do
-			if parent == self then
-				pstats.incr_loaded_classes_explicits
-			else if parent.kind == abstract_kind then
-				pstats.incr_loaded_classes_abstracts
-			else
-				pstats.incr_loaded_classes_implicits
-			end
-		end
 	end
 
 	# `self` is an instance of object
