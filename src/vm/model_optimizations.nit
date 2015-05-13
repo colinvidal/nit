@@ -44,7 +44,7 @@ redef class ModelBuilder
 
 		super(mainmodule, arguments)
 		
-		if toolcontext.stats_on.value then print(pstats.pretty_dump)
+		if toolcontext.stats_on.value then print(pstats.pretty)
 	end
 end
 
@@ -767,83 +767,60 @@ end
 
 # Stats of the optimizing model
 class MOStats
-	# Count of the total loaded explicits classes
-	var loaded_classes_explicits = 0 is writable
+	# Internal encoding of counters
+	var map = new HashMap[String, Int]
 
-	# Count of the total loaded implicits classes
-	var loaded_classes_implicits = 0 is writable
+	# Increment a counter
+	fun inc(el: String) do map[el] += 1
 
-	# Count of the total loaded abstracts classes
-	var loaded_classes_abstracts = 0 is writable
+	# Decrement a counter
+	fun dec(el: String)
+	do
+		map[el] -= 1
+		assert map[el] >= 0
+	end
+       
+	# Get a value
+	fun get(el: String): Int do return map[el]
 
-	# Count of new on unloaded class
-	var unloaded_new = 0 is writable
-	
-	# Count of new on loaded class
-	var loaded_new = 0 is writable
-
-	# Count of AST non primivites new nodes
-	var ast_new_no_primitives = 0 is writable
-
-	# Count of method invocation sites
-	var call_site = 0 is writable
-
-	# Count of subtype test sites
-	var subtypetest_site = 0 is writable
-
-	# Count of attr read sites
-	var readattr_site = 0 is writable
-
-	# Count of attr write sites
-	var writeattr_site = 0 is writable
-	
-	# Count of primitives (and ignored) receivers
-	var primitives = 0 is writable
-
-	# Count of NYI receivers
-	var nyi = 0 is writable
-
-	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
-	var concretes_receivers_site = 0 is writable
-
-	# Count of site with litterals
-	var lits = 0 is writable
-
-	# Return list of statistics
-	fun generate_dump: String
+	# Dump and format all values
+	fun dump(prefix: String): String
 	do
 		var ret = ""
 
-		ret += "\tloaded_new: {loaded_new}\n"
-		ret += "\tunloaded_new: {unloaded_new}\n"
-		ret += "\tloaded_classes_explicits: {loaded_classes_explicits}\n"
-		ret += "\tloaded_classes_implicits: {loaded_classes_implicits}\n"
-		ret += "\tloaded_classes_abstracts: {loaded_classes_abstracts}\n"
-		ret += "\tast_new_no_primitives: {ast_new_no_primitives}\n"
-		ret += "\n"
-		ret += "\tcall_site: {call_site}\n"
-		ret += "\tsubtypetest_site: {subtypetest_site}\n"
-		ret += "\treadattr_site: {readattr_site}\n"
-		ret += "\twriteattr_site: {writeattr_site}\n"
-		ret += "\n"
-		ret += "\tprimitives: {primitives}\n"
-		ret += "\tlits: {lits}\n"
-		ret += "\tnyi: {nyi}\n"
-		ret += "\tconcretes_receivers_site: {concretes_receivers_site}\n"
-		
+		for key, val in map do ret += "{prefix}{key}: {val}\n"
+
 		return ret
 	end
 
-	# Return list of statistic more pretty
-	fun pretty_dump: String
+	# Pretty format
+	fun pretty: String
 	do
 		var ret = "" 
 
 		ret += "\n------------------ MO STATS ------------------\n"
-		ret += generate_dump
+		ret += dump("\t")
 		ret += "------------------------------------------------\n"
 
 		return ret
+	end
+
+	init
+	do
+		map["loaded_classes_explicits"] = 0
+		map["loaded_classes_implicits"] = 0
+		map["loaded_classes_abstracts"] = 0
+		map["loaded_new"] = 0
+		map["unloaded_new"] = 0
+		map["ast_new"] = 0
+		map["call_sites"] = 0
+		map["cast_sites"] = 0
+		map["attr_read_sites"] = 0
+		map["attr_write_sites"] = 0
+		map["primitive_sites"] = 0
+		map["nyi"] = 0
+		map["concretes_receivers_sites"] = 0
+		map["lits"] = 0
 	end
 end
 

@@ -34,11 +34,11 @@ redef class VirtualMachine
 
 		for cls in implicit_loaded do 
 			if mclass == cls and not cls.mclass_type.is_primitive_type then
-				pstats.loaded_classes_explicits += 1
+				pstats.inc("loaded_classes_explicits")
 			else if cls.kind == abstract_kind and not cls.mclass_type.is_primitive_type then
-				pstats.loaded_classes_abstracts += 1
+				pstats.inc("loaded_classes_abstracts")
 			else if not cls.mclass_type.is_primitive_type then
-				pstats.loaded_classes_implicits += 1
+				pstats.inc("loaded_classes_implicits")
 			end
 
 			cls.handle_new_class
@@ -426,7 +426,7 @@ redef class ANewExpr
 			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
 			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
 			recvtype.mclass.set_new_pattern(monew.as(not null))
-			pstats.ast_new_no_primitives += 1
+			pstats.inc("ast_new")
 		end
 
 		return sup
@@ -453,9 +453,9 @@ redef class ANode
 	fun ast2mo: nullable MOExpr
 	do
 		if is_primitive_node then
-			sys.pstats.primitives += 1
+			sys.pstats.inc("primitive_sites")
 		else
-			sys.pstats.nyi += 1
+			sys.pstats.inc("nyi")
 			trace("WARN: NYI {self}")
 		end
 
@@ -536,11 +536,11 @@ redef class ASendExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			pstats.lits += 1
+			pstats.inc("lits")
 		else if n_expr.mtype.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			pstats.primitives += 1
+			pstats.inc("primitive_sites")
 		end
 
 		var recv = n_expr.ast2mo
@@ -581,7 +581,7 @@ redef class ABinopExpr
 	# If a binary operation on primitives types return something (or test of equality), it's primitive
 	# TODO: what about obj1 + obj2 ?
 	redef fun ast2mo do
-		pstats.primitives += 1
+		pstats.inc("primitive_sites")
 		return null
 	end
 end
@@ -691,9 +691,9 @@ redef class MMethodDef
 				fill_nper(newexpr)
 				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
 				if newexpr.pattern.is_loaded then
-					pstats.loaded_new += 1
+					pstats.inc("loaded_new")
 				else
-					pstats.unloaded_new += 1
+					pstats.inc("unloaded_new")
 				end
 			end
 		end
@@ -716,18 +716,18 @@ redef class MMethodDef
 			fill_nper(site.expr_recv)
 
 			if site.expr_recv.is_pre then
-				pstats.preexist += 1
+				pstats.inc("preexist")
 			else
-				pstats.npreexist += 1
+				pstats.inc("npreexist")
 			end
 
 			if site isa MOCallSite then
-				pstats.call_site += 1
+				pstats.inc("call_sites")
 			else # A read site
-				pstats.readattr_site += 1
+				pstats.inc("attr_read_sites")
 			end
 
-			if site.get_concretes.length > 0 then pstats.concretes_receivers_site += 1
+			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
 			
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
 			trace("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
@@ -1110,37 +1110,13 @@ redef class MONewPattern
 end
 
 redef class MOStats
-	# Count of preexist sites
-	var preexist = 0
-	
-	# Count of non preexist sites
-	var npreexist = 0
-
-	# Count of static/inline preexist sites
-	var preexist_static = 0
-
-	# Count of preexist attributes
-	var preexist_attr = 0
-
-	redef fun generate_dump
+	redef init
 	do
-		var ret = super
-
-		ret += "\tpreexist: {preexist}\n"
-		ret += "\tnpreexist: {npreexist}\n"
-
-		return ret
-	end
-
-	redef fun pretty_dump
-	do
-		var ret = ""
-
-		ret += "\n------------------ PREEXISTENCE STATS ------------------\n"
-		ret += generate_dump
-		ret += "--------------------------------------------------------\n"
-
-		return ret
+		super
+		map["preexist"] = 0
+		map["npreexist"] = 0
+		map["preexist_static"] = 0
+		map["preexist_attr"] = 0
 	end
 end
 
