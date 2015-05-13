@@ -162,13 +162,15 @@ abstract class MOPropSitePattern
 	# Determine an implementation with pic/rst
 	redef fun compute_impl(vm)
 	do
+		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
+
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, gp.absolute_offset)
+			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-		else if gp_pos_unique(vm) then
-			impl = new SSTImpl(true, gp.absolute_offset)
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
@@ -512,9 +514,10 @@ abstract class MOPropSite
 	redef fun compute_impl(vm)
 	do
 		var gp = pattern.gp
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, gp.absolute_offset)
+			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
 			if cls.loaded then
@@ -530,7 +533,7 @@ abstract class MOPropSite
 			end
 		else if unique_meth_pos_concrete then
 			# SST immutable because it can't be more than these concretes receiver statically
-			impl = new SSTImpl(false, gp.absolute_offset)
+			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
@@ -623,9 +626,6 @@ redef class MClass
 	# List of patterns of subtypes test
 	var subtype_pattern = new List[MOSubtypeSitePattern]
 
-	# Linearization of classes hierarchy
-	var ordering: nullable Array[MClass]
-
 	# Tell if in all loaded subclasses, this class has a method group on unique position
 	# WARNING : this test is totaly broken, and the sub-layer implementation will change
 	fun unique_gp_pos(gp: MProperty): Bool
@@ -682,13 +682,6 @@ redef class MClass
 	fun is_instance_of_object(vm:VirtualMachine): Bool
 	do
 		return self.in_hierarchy(vm.mainmodule).greaters.length == 1
-	end
-
-	# Get a copy of a linearization
-	redef fun superclasses_ordering(v)
-	do
-		if ordering == null then ordering = super(v)
-		return ordering.as(not null)
 	end
 
 	# Create (if not exists) and set a pattern for object subtype sites
