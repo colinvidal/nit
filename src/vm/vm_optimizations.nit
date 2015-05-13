@@ -586,7 +586,7 @@ redef class Int
 	end
 end
 
-redef class MMethodDef
+redef class MPropDef
 	# List of mutable preexists expressions
 	var exprs_preexist_mut = new List[MOExpr]
 
@@ -598,12 +598,14 @@ redef class MMethodDef
 	fun propage_preexist
 	do
 		var flag = false
-		if return_expr != null then flag = return_expr.is_pre_nper
-	
+		if self isa MMethodDef then
+			if return_expr != null then flag = return_expr.is_pre_nper
+		end
+
 		for expr in exprs_preexist_mut do expr.init_preexist
 		exprs_preexist_mut.clear
 
-		if flag then for p in callers do p.propage_preexist
+		if flag then for p in callers do p.as(MOExprSitePattern).propage_preexist
 	end
 
 	# Drop exprs_npreesit_mut and set unknown state to all expression inside
@@ -611,12 +613,14 @@ redef class MMethodDef
 	fun propage_npreexist
 	do
 		var flag = false
-		if return_expr != null then flag = return_expr.is_npre_nper
+		if self isa MMethodDef then
+			if return_expr != null then flag = return_expr.is_npre_nper
+		end
 
 		for expr in exprs_npreexist_mut do expr.init_preexist
 		exprs_npreexist_mut.clear
 
-		if flag then for p in callers do p.propage_npreexist
+		if flag then for p in callers do p.as(MOExprSitePattern).propage_npreexist
 	end
 
 	# Fill the correct list if the analysed preexistence if unperennial
@@ -630,7 +634,9 @@ redef class MMethodDef
 			end
 		end
 	end
-	
+end
+
+redef class MMethodDef
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
