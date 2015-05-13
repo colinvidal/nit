@@ -401,7 +401,7 @@ redef class MClass
 	var mmethods = new Array[MMethod]
 
 	# Allocates a VTable for this class and gives it an id
-	fun make_vt(v: VirtualMachine)
+	private fun make_vt(v: VirtualMachine)
 	do
 		if loaded then return
 
@@ -579,7 +579,7 @@ redef class MClass
 
 	# Order superclasses of self
 	# Return the order of superclasses in runtime structures of this class
-	fun superclasses_ordering(v: VirtualMachine): Array[MClass]
+	private fun superclasses_ordering(v: VirtualMachine): Array[MClass]
 	do
 		var superclasses = new Array[MClass]
 
@@ -665,27 +665,22 @@ redef class MClass
 	end
 end
 
-redef class MProperty
+redef class MAttribute
+	# Relative offset of this attribute in the runtime instance
+	# (beginning of the block of its introducing class)
 	var offset: Int
+
+	# Absolute offset of this attribute in the runtime instance (beginning of the attribute table)
 	var absolute_offset: Int
 end
 
-#redef class MAttribute
-#	# Relative offset of this attribute in the runtime instance
-#	# (beginning of the block of its introducing class)
-#	var offset: Int
-#
-#	# Absolute offset of this attribute in the runtime instance (beginning of the attribute table)
-#	var absolute_offset: Int
-#end
-#
-#redef class MMethod
-#	# Relative offset of this method in the virtual table (from the beginning of the block)
-#	var offset: Int
-#
-#	# Absolute offset of this method in the virtual table (from the beginning of the vtable)
-#	var absolute_offset: Int
-#end
+redef class MMethod
+	# Relative offset of this method in the virtual table (from the beginning of the block)
+	var offset: Int
+
+	# Absolute offset of this method in the virtual table (from the beginning of the vtable)
+	var absolute_offset: Int
+end
 
 # Redef MutableInstance to improve implementation of attributes in objects
 redef class MutableInstance
