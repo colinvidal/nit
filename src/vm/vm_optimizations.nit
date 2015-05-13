@@ -24,9 +24,7 @@ import model_optimizations
 redef class VirtualMachine
 	redef fun create_class(mclass)
 	do
-		pstats.incr_loaded_classes_explicits
-
-		# Get all superclasses loaded implicitly by mclass
+		# Get all superclasses loaded implicitly by mclass (mclass included)
 		var implicit_loaded = new List[MClass]
 		for cls in mclass.superclasses_ordering(self) do
 			if not cls.loaded then implicit_loaded.add(cls)
@@ -35,10 +33,12 @@ redef class VirtualMachine
 		super(mclass)
 
 		for cls in implicit_loaded do 
-			if cls.kind == abstract_kind then
-				pstats.incr_loaded_classes_abstracts
-			else
-				pstats.incr_loaded_classes_implicits
+			if mclass == cls and not cls.mclass_type.is_primitive_type then
+				pstats.loaded_classes_explicits += 1
+			else if cls.kind == abstract_kind and not cls.mclass_type.is_primitive_type then
+				pstats.loaded_classes_abstracts += 1
+			else if not cls.mclass_type.is_primitive_type then
+				pstats.loaded_classes_implicits += 1
 			end
 
 			cls.handle_new_class
@@ -48,7 +48,7 @@ redef class VirtualMachine
 	redef fun new_frame(node, mpropdef, args)
 	do
 		next_receivers.push(args.first.mtype)
-#		dprint("NEXT_RECEIVERS: {next_receivers}")
+#		trace("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
 		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
 		next_receivers.pop
@@ -403,7 +403,7 @@ redef class Variable
 						movar = new MOSSAVar(node.variable.position + 1, phi.first)
 					else
 						movar = new MOPhiVar(node.variable.position + 1, phi)
-						dprint("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
+						trace("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
 					end
 				end
 			end
@@ -426,7 +426,7 @@ redef class ANewExpr
 			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
 			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
 			recvtype.mclass.set_new_pattern(monew.as(not null))
-			pstats.incr_new_no_primitives
+			pstats.ast_new_no_primitives += 1
 		end
 
 		return sup
@@ -453,10 +453,10 @@ redef class ANode
 	fun ast2mo: nullable MOExpr
 	do
 		if is_primitive_node then
-			sys.pstats.incr_primitives
+			sys.pstats.primitives += 1
 		else
-			sys.pstats.incr_nyi
-			dprint("WARN: NYI {self}")
+			sys.pstats.nyi += 1
+			trace("WARN: NYI {self}")
 		end
 
 		return null
@@ -536,11 +536,11 @@ redef class ASendExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			sys.pstats.incr_lits
+			pstats.lits += 1
 		else if n_expr.mtype.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			sys.pstats.incr_primitives
+			pstats.primitives += 1
 		end
 
 		var recv = n_expr.ast2mo
@@ -581,7 +581,7 @@ redef class ABinopExpr
 	# If a binary operation on primitives types return something (or test of equality), it's primitive
 	# TODO: what about obj1 + obj2 ?
 	redef fun ast2mo do
-		pstats.incr_primitives
+		pstats.primitives += 1
 		return null
 	end
 end
@@ -672,7 +672,7 @@ redef class MMethodDef
 		if compiled or is_intern or is_extern then return
 		compiled = true
 
-		dprint("\npreexist_all of {self}")
+		trace("\npreexist_all of {self}")
 		var debug_preexist: Int
 
 		if not disable_preexistence_extensions then
@@ -681,7 +681,7 @@ redef class MMethodDef
 				if return_expr.is_rec then return_expr.set_pval_nper
 				fill_nper(return_expr.as(not null))
 				debug_preexist = return_expr.preexist_expr_value
-				dprint("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
+				trace("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
 			end
 
 			for newexpr in monews do
@@ -689,11 +689,11 @@ redef class MMethodDef
 
 				debug_preexist = newexpr.preexist_expr
 				fill_nper(newexpr)
-				dprint("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
+				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
 				if newexpr.pattern.is_loaded then
-					sys.pstats.incr_loaded_new
+					pstats.loaded_new += 1
 				else
-					sys.pstats.incr_unloaded_new
+					pstats.unloaded_new += 1
 				end
 			end
 		end
@@ -711,30 +711,30 @@ redef class MMethodDef
 			end
 
 			buff += " {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}"
-			dprint(buff)
+			trace(buff)
 
 			fill_nper(site.expr_recv)
 
 			if site.expr_recv.is_pre then
-				sys.pstats.incr_preexist
+				pstats.preexist += 1
 			else
-				sys.pstats.incr_npreexist
+				pstats.npreexist += 1
 			end
 
 			if site isa MOCallSite then
-				sys.pstats.incr_call_site
+				pstats.call_site += 1
 			else # A read site
-				sys.pstats.incr_readattr_site
+				pstats.readattr_site += 1
 			end
 
-			if site.get_concretes.length > 0 then sys.pstats.incr_concretes_receivers_site
+			if site.get_concretes.length > 0 then pstats.concretes_receivers_site += 1
 			
-			dprint("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
-			dprint("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
+			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
+			trace("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
 
-		if exprs_preexist_mut.length > 0 then dprint("\tmutables pre: {exprs_preexist_mut}")
-		if exprs_npreexist_mut.length > 0 then dprint("\tmutables nper: {exprs_npreexist_mut}")
+		if exprs_preexist_mut.length > 0 then trace("\tmutables pre: {exprs_preexist_mut}")
+		if exprs_npreexist_mut.length > 0 then trace("\tmutables nper: {exprs_npreexist_mut}")
 	end
 end
 
@@ -1029,7 +1029,7 @@ redef class MOCallSite
 					# Lazy attribute not yet initialized
 					# WARNING
 					# Be sure that it can't be anything else that lazy attributes here
-					dprint("WARN NULL RETURN_EXPR {candidate} {candidate.mproperty}")
+					trace("WARN NULL RETURN_EXPR {candidate} {candidate.mproperty}")
 					set_npre_nper
 					break
 				end
@@ -1112,13 +1112,15 @@ end
 redef class MOStats
 	# Count of preexist sites
 	var preexist = 0
-	#
-	fun incr_preexist do preexist += 1
 	
 	# Count of non preexist sites
 	var npreexist = 0
-	#
-	fun incr_npreexist do npreexist += 1
+
+	# Count of static/inline preexist sites
+	var preexist_static = 0
+
+	# Count of preexist attributes
+	var preexist_attr = 0
 
 	redef fun generate_dump
 	do

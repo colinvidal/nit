@@ -3,15 +3,34 @@ module model_optimizations
 
 import ssa
 
-redef class Sys
-	#
-	fun dprint(buf: String)
-	do
-#		print(buf)
-	end
-
+redef class ToolContext
 	# Disable inter-procedural analysis and 'new' cases
-	var disable_preexistence_extensions = true
+	var disable_preexistence_extensions = new OptionBool("Disable preexistence extensions", "--no-preexist-ext")
+
+	# Enable traces of analysis
+	var trace_on = new OptionBool("Display the trace of model optimizing / preexistence analysis", "--mo-trace")
+
+	# Enable print stats
+	var stats_on = new OptionBool("Display statistics of model optimizing / preexistence after execution", "--mo-stats")
+
+	redef init
+	do
+		super
+		option_context.add_option(disable_preexistence_extensions)
+		option_context.add_option(trace_on)
+		option_context.add_option(stats_on)
+	end
+end
+
+redef class Sys
+	# Display trace if --mo-trace is set
+	fun trace(buf: String) do if trace_on then print(buf)
+
+	# Tell if trace is enabled
+	var trace_on: Bool
+
+	# Tell if preexistence extensions are disabled
+	var disable_preexistence_extensions: Bool
 
 	# Access to preexistence stats from everywhere
 	var pstats = new MOStats
@@ -20,8 +39,12 @@ end
 redef class ModelBuilder
 	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
 	do
+		sys.trace_on = toolcontext.trace_on.value
+		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
+
 		super(mainmodule, arguments)
-		self.toolcontext.info(sys.pstats.pretty_dump, 1)
+		
+		if toolcontext.stats_on.value then print(pstats.pretty_dump)
 	end
 end
 
@@ -245,7 +268,7 @@ end
 #	# Add a new callee
 #	fun add_lp(lp: MMethodDef)
 #	do
-##		dprint("add lp {lp} in pattern {self}")
+##		trace("add lp {lp} in pattern {self}")
 #		if not lps.has(lp) then
 #			lps.add(lp)
 #			lp.callers.add(self)
@@ -264,7 +287,7 @@ end
 #	# Add a new branch on the pattern
 #	fun handle_new_branch(lp: MMethodDef)
 #	do
-##		dprint("pattern handle_new_branch")
+##		trace("pattern handle_new_branch")
 #		add_lp(lp)
 #	end
 #end
@@ -745,74 +768,46 @@ end
 # Stats of the optimizing model
 class MOStats
 	# Count of the total loaded explicits classes
-	var loaded_classes_explicits = 0
-	#
-	fun incr_loaded_classes_explicits do loaded_classes_explicits += 1
+	var loaded_classes_explicits = 0 is writable
 
 	# Count of the total loaded implicits classes
-	var loaded_classes_implicits = 0
-	#
-	fun incr_loaded_classes_implicits do loaded_classes_explicits += 1
+	var loaded_classes_implicits = 0 is writable
 
 	# Count of the total loaded abstracts classes
-	var loaded_classes_abstracts = 0
-	#
-	fun incr_loaded_classes_abstracts do loaded_classes_abstracts += 1
+	var loaded_classes_abstracts = 0 is writable
 
 	# Count of new on unloaded class
-	var unloaded_new = 0
-	#
-	fun incr_unloaded_new do unloaded_new += 1
+	var unloaded_new = 0 is writable
 	
 	# Count of new on loaded class
-	var loaded_new = 0
-	#
-	fun incr_loaded_new do loaded_new += 1
+	var loaded_new = 0 is writable
 
 	# Count of AST non primivites new nodes
-	var ast_new_no_primitives = 0
-	#
-	fun incr_new_no_primitives do ast_new_no_primitives += 1
+	var ast_new_no_primitives = 0 is writable
 
 	# Count of method invocation sites
-	var call_site = 0
-	#
-	fun incr_call_site do call_site += 1
+	var call_site = 0 is writable
 
 	# Count of subtype test sites
-	var subtypetest_site = 0
-	#
-	fun incr_subtypetest_site do subtypetest_site += 1
+	var subtypetest_site = 0 is writable
 
 	# Count of attr read sites
-	var readattr_site = 0
-	#
-	fun incr_readattr_site do readattr_site += 1
+	var readattr_site = 0 is writable
 
 	# Count of attr write sites
-	var writeattr_site = 0
-	#
-	fun incr_writeattr_site do writeattr_site += 1
+	var writeattr_site = 0 is writable
 	
 	# Count of primitives (and ignored) receivers
-	var primitives = 0
-	#
-	fun incr_primitives do primitives += 1
+	var primitives = 0 is writable
 
 	# Count of NYI receivers
-	var nyi = 0
-	#
-	fun incr_nyi do nyi += 1
+	var nyi = 0 is writable
 
 	# Count of site with concretes receivers can be statically determined without inter-procedural analysis
-	var concretes_receivers_site = 0
-	#
-	fun incr_concretes_receivers_site do concretes_receivers_site += 1
+	var concretes_receivers_site = 0 is writable
 
 	# Count of site with litterals
-	var lits = 0
-	#
-	fun incr_lits do lits += 1
+	var lits = 0 is writable
 
 	# Return list of statistics
 	fun generate_dump: String
