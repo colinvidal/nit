@@ -182,7 +182,7 @@ redef class ModelBuilder
 		var initializers = new Array[MProperty]
 		for npropdef in nclassdef.n_propdefs do
 			if npropdef isa AMethPropdef then
-				if npropdef.mpropdef == null then return # Skip broken attribute
+				if npropdef.mpropdef == null then return # Skip broken method
 				var at = npropdef.get_single_annotation("autoinit", self)
 				if at == null then continue # Skip non tagged init
 
@@ -196,32 +196,33 @@ redef class ModelBuilder
 
 				for param in sig.mparameters do
 					var ret_type = param.mtype
-					var mparameter = new MParameter(param.name, ret_type, false)
+					var mparameter = new MParameter(param.name, ret_type, false, ret_type isa MNullableType)
 					mparameters.add(mparameter)
 				end
 				initializers.add(npropdef.mpropdef.mproperty)
 				npropdef.mpropdef.mproperty.is_autoinit = true
 			end
 			if npropdef isa AAttrPropdef then
-				if npropdef.mpropdef == null then return # Skip broken attribute
+				var mreadpropdef = npropdef.mreadpropdef
+				if mreadpropdef == null or mreadpropdef.msignature == null then return # Skip broken attribute
 				if npropdef.noinit then continue # Skip noinit attribute
 				var atautoinit = npropdef.get_single_annotation("autoinit", self)
 				if atautoinit != null then
 					# For autoinit attributes, call the reader to force
 					# the lazy initialization of the attribute.
-					initializers.add(npropdef.mreadpropdef.mproperty)
-					npropdef.mreadpropdef.mproperty.is_autoinit = true
+					initializers.add(mreadpropdef.mproperty)
+					mreadpropdef.mproperty.is_autoinit = true
 					continue
 				end
 				if npropdef.has_value then continue
-				var paramname = npropdef.mpropdef.mproperty.name.substring_from(1)
-				var ret_type = npropdef.mpropdef.static_mtype
+				var paramname = mreadpropdef.mproperty.name
+				var ret_type = mreadpropdef.msignature.return_mtype
 				if ret_type == null then return
-				var mparameter = new MParameter(paramname, ret_type, false)
+				var mparameter = new MParameter(paramname, ret_type, false, ret_type isa MNullableType)
 				mparameters.add(mparameter)
 				var msetter = npropdef.mwritepropdef
 				if msetter == null then
-					# No setter, it is a old-style attribute, so just add it
+					# No setter, it is a readonly attribute, so just add it
 					initializers.add(npropdef.mpropdef.mproperty)
 					npropdef.mpropdef.mproperty.is_autoinit = true
 				else
@@ -286,7 +287,13 @@ redef class ModelBuilder
 				if pd isa MMethodDef then
 					# Get the signature resolved for the current receiver
 					var sig = pd.msignature.resolve_for(mclassdef.mclass.mclass_type, mclassdef.bound_mtype, mclassdef.mmodule, false)
-					mparameters.add_all sig.mparameters
+					# Because the last parameter of setters is never default, try to default them for the autoinit.
+					for param in sig.mparameters do
+						if not param.is_default and param.mtype isa MNullableType then
+							param = new MParameter(param.name, param.mtype, param.is_vararg, true)
+						end
+						mparameters.add(param)
+					end
 				else
 					# TODO attributes?
 					abort
@@ -790,8 +797,19 @@ redef class AMethPropdef
 			name = amethodid.collect_text
 			name_node = amethodid
 
-			if name == "-" and self.n_signature.n_params.length == 0 then
+			var arity = self.n_signature.n_params.length
+			if name == "+" and arity == 0 then
+				name = "unary +"
+			else if name == "-" and arity == 0 then
 				name = "unary -"
+			else if name == "~" and arity == 0 then
+				name = "unary ~"
+			else
+				if amethodid.is_binary and arity != 1 then
+					modelbuilder.error(self.n_signature, "Syntax Error: binary operator `{name}` requires exactly one parameter; got {arity}.")
+				else if amethodid.min_arity > arity then
+					modelbuilder.error(self.n_signature, "Syntax Error: `{name}` requires at least {amethodid.min_arity} parameter(s); got {arity}.")
+				end
 			end
 		end
 
@@ -865,6 +883,9 @@ redef class AMethPropdef
 			end
 		end
 
+		var accept_special_last_parameter = self.n_methid == null or self.n_methid.accept_special_last_parameter
+		var return_is_mandatory = self.n_methid != null and self.n_methid.return_is_mandatory
+
 		# Retrieve info from the signature AST
 		var param_names = new Array[String] # Names of parameters from the AST
 		var param_types = new Array[MType] # Types of parameters from the AST
@@ -930,13 +951,27 @@ redef class AMethPropdef
 
 		var mparameters = new Array[MParameter]
 		for i in [0..param_names.length[ do
-			var mparameter = new MParameter(param_names[i], param_types[i], i == vararg_rank)
+			var is_default = false
+			if vararg_rank == -1 and param_types[i] isa MNullableType then
+				if i < param_names.length-1 or accept_special_last_parameter then
+					is_default = true
+				end
+			end
+			var mparameter = new MParameter(param_names[i], param_types[i], i == vararg_rank, is_default)
 			if nsig != null then nsig.n_params[i].mparameter = mparameter
 			mparameters.add(mparameter)
 		end
 
 		# In `new`-factories, the return type is by default the classtype.
 		if ret_type == null and mpropdef.mproperty.is_new then ret_type = mclassdef.mclass.mclass_type
+
+		# Special checks for operator methods
+		if not accept_special_last_parameter and mparameters.not_empty and mparameters.last.is_vararg then
+			modelbuilder.error(self.n_signature.n_params.last, "Error: illegal variadic parameter `{mparameters.last}` for `{mpropdef.mproperty.name}`.")
+		end
+		if ret_type == null and return_is_mandatory then
+			modelbuilder.error(self.n_methid, "Error: mandatory return type for `{mpropdef.mproperty.name}`.")
+		end
 
 		msignature = new MSignature(mparameters, ret_type)
 		mpropdef.msignature = msignature
@@ -1017,6 +1052,56 @@ redef class AMethPropdef
 			if nt != null then modelbuilder.check_visibility(nt, nt.mtype.as(not null), mpropdef)
 		end
 	end
+end
+
+redef class AMethid
+	# Is a return required?
+	#
+	# * True for operators and brackets.
+	# * False for id and assignment.
+	fun return_is_mandatory: Bool do return true
+
+	# Can the last parameter be special like a vararg?
+	#
+	# * False for operators: the last one is in fact the only one.
+	# * False for assignments: it is the right part of the assignment.
+	# * True for ids and brackets.
+	fun accept_special_last_parameter: Bool do return false
+
+	# The minimum required number of parameters.
+	#
+	# * 1 for binary operators
+	# * 1 for brackets
+	# * 1 for assignments
+	# * 2 for bracket assignments
+	# * 0 for ids
+	fun min_arity: Int do return 1
+
+	# Is the `self` a binary operator?
+	fun is_binary: Bool do return true
+end
+
+redef class AIdMethid
+	redef fun return_is_mandatory do return false
+	redef fun accept_special_last_parameter do return true
+	redef fun min_arity do return 0
+	redef fun is_binary do return false
+end
+
+redef class ABraMethid
+	redef fun accept_special_last_parameter do return true
+	redef fun is_binary do return false
+end
+
+redef class ABraassignMethid
+	redef fun return_is_mandatory do return false
+	redef fun min_arity do return 2
+	redef fun is_binary do return false
+end
+
+redef class AAssignMethid
+	redef fun return_is_mandatory do return false
+	redef fun is_binary do return false
 end
 
 redef class AAttrPropdef
@@ -1252,7 +1337,7 @@ redef class AAttrPropdef
 		if mwritepropdef != null then
 			var name: String
 			name = n_id2.text
-			var mparameter = new MParameter(name, mtype, false)
+			var mparameter = new MParameter(name, mtype, false, false)
 			var msignature = new MSignature([mparameter], null)
 			mwritepropdef.msignature = msignature
 		end

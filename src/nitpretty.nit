@@ -32,6 +32,12 @@ redef class ToolContext
 	var opt_meld = new OptionBool("Show diff between source and output using meld",
 	   "--meld")
 
+	# --line-width
+	var opt_line_width = new OptionInt("Maximum length of lines (use 0 to disable automatic line breaks)", 80, "--line-width")
+
+	# --no-inline
+	var opt_no_inline = new OptionBool("Disable automatic one-liners", "--no-inline")
+
 	# Break too long string literals.
 	var opt_break_str = new OptionBool("Break too long string literals", "--break-strings")
 
@@ -48,9 +54,9 @@ redef class ToolContext
 
 	# Check formatting instead of pretty printing.
 	#
-	# This option create a tempory pretty printed file then check if
-	# the output of the diff command on the source file and the pretty
-	# printed one is empty.
+	# This option creates a temporary pretty printed file then checks if the
+	# output of the diff command on the source file and the pretty printed one is
+	# empty.
 	var opt_check = new OptionBool("Check format of Nit source files", "--check")
 end
 
@@ -69,7 +75,8 @@ var toolcontext = new ToolContext
 var opts = toolcontext.option_context
 opts.add_option(toolcontext.opt_dir, toolcontext.opt_output)
 opts.add_option(toolcontext.opt_diff, toolcontext.opt_meld, toolcontext.opt_check)
-opts.add_option(toolcontext.opt_break_str, toolcontext.opt_inline_do)
+opts.add_option(toolcontext.opt_line_width, toolcontext.opt_break_str, toolcontext.opt_inline_do)
+opts.add_option(toolcontext.opt_no_inline)
 opts.add_option(toolcontext.opt_skip_empty)
 
 toolcontext.tooldescription = "Usage: nitpretty [OPTION]... <file.nit>\n" +
@@ -80,7 +87,7 @@ var arguments = toolcontext.option_context.rest
 # build model
 var model = new Model
 var mbuilder = new ModelBuilder(model, toolcontext)
-var mmodules = mbuilder.parse(arguments)
+var mmodules = mbuilder.parse_full(arguments)
 mbuilder.run_phases
 
 if mmodules.is_empty then
@@ -97,6 +104,7 @@ var dir = toolcontext.opt_dir.value or else ".nitpretty"
 if not dir.file_exists then dir.mkdir
 var v = new PrettyPrinterVisitor
 
+v.max_size = toolcontext.opt_line_width.value
 if toolcontext.opt_break_str.value then
 	v.break_strings = true
 end
@@ -105,6 +113,9 @@ if toolcontext.opt_inline_do.value then
 end
 if toolcontext.opt_skip_empty.value then
 	v.skip_empty = true
+end
+if toolcontext.opt_no_inline.value then
+	v.no_inline = true
 end
 
 for mmodule in mmodules do

@@ -105,13 +105,13 @@ private class TypeVisitor
 	# If `sub` is a safe subtype of `sup` then return `sub`.
 	# If `sub` is an unsafe subtype (ie an implicit cast is required), then return `sup`.
 	#
-	# The point of the return type is to determinate the usable type on an expression:
+	# The point of the return type is to determinate the usable type on an expression when `autocast` is true:
 	# If the suptype is safe, then the return type is the one on the expression typed by `sub`.
 	# Is the subtype is unsafe, then the return type is the one of an implicit cast on `sup`.
-	fun check_subtype(node: ANode, sub, sup: MType): nullable MType
+	fun check_subtype(node: ANode, sub, sup: MType, autocast: Bool): nullable MType
 	do
 		if self.is_subtype(sub, sup) then return sub
-		if self.is_subtype(sub, self.anchor_to(sup)) then
+		if autocast and self.is_subtype(sub, self.anchor_to(sup)) then
 			# FIXME workaround to the current unsafe typing policy. To remove once fixed virtual types exists.
 			#node.debug("Unsafe typing: expected {sup}, got {sub}")
 			return sup
@@ -166,7 +166,7 @@ private class TypeVisitor
 
 		if sup == null then return null # Forward error
 
-		var res = check_subtype(nexpr, sub, sup)
+		var res = check_subtype(nexpr, sub, sup, true)
 		if res != sub then
 			nexpr.implicit_cast_to = res
 		end
@@ -398,47 +398,125 @@ private class TypeVisitor
 	# Visit the expressions of args and check their conformity with the corresponding type in signature
 	# The point of this method is to handle varargs correctly
 	# Note: The signature must be correctly adapted
-	fun check_signature(node: ANode, args: Array[AExpr], mproperty: MProperty, msignature: MSignature): Bool
+	fun check_signature(node: ANode, args: Array[AExpr], mproperty: MProperty, msignature: MSignature): nullable SignatureMap
 	do
 		var vararg_rank = msignature.vararg_rank
 		if vararg_rank >= 0 then
 			if args.length < msignature.arity then
 				modelbuilder.error(node, "Error: expected at least {msignature.arity} argument(s) for `{mproperty}{msignature}`; got {args.length}. See introduction at `{mproperty.full_name}`.")
-				return false
+				return null
 			end
 		else if args.length != msignature.arity then
-			modelbuilder.error(node, "Error: expected {msignature.arity} argument(s) for `{mproperty}{msignature}`; got {args.length}. See introduction at `{mproperty.full_name}`.")
-			return false
+			if msignature.arity == msignature.min_arity then
+				modelbuilder.error(node, "Error: expected {msignature.arity} argument(s) for `{mproperty}{msignature}`; got {args.length}. See introduction at `{mproperty.full_name}`.")
+				return null
+			end
+			if args.length > msignature.arity then
+				modelbuilder.error(node, "Error: expected at most {msignature.arity} argument(s) for `{mproperty}{msignature}`; got {args.length}. See introduction at `{mproperty.full_name}`.")
+				return null
+			end
+			if args.length < msignature.min_arity then
+				modelbuilder.error(node, "Error: expected at least {msignature.min_arity} argument(s) for `{mproperty}{msignature}`; got {args.length}. See introduction at `{mproperty.full_name}`.")
+				return null
+			end
 		end
 
 		#debug("CALL {unsafe_type}.{msignature}")
 
-		var vararg_decl = args.length - msignature.arity
-		for i in [0..msignature.arity[ do
-			var j = i
-			if i == vararg_rank then continue # skip the vararg
-			if i > vararg_rank then
-				j = i + vararg_decl
+		# Associate each parameter to a position in the arguments
+		var map = new SignatureMap
+
+		var setted = args.length - msignature.min_arity
+
+		# First, handle named arguments
+		for i in [0..args.length[ do
+			var e = args[i]
+			if not e isa ANamedargExpr then continue
+			var name = e.n_id.text
+			var param = msignature.mparameter_by_name(name)
+			if param == null then
+				modelbuilder.error(e.n_id, "Error: no parameter `{name}` for `{mproperty}{msignature}`.")
+				return null
 			end
-			var paramtype = msignature.mparameters[i].mtype
-			self.visit_expr_subtype(args[j], paramtype)
+			if not param.is_default then
+				modelbuilder.error(e, "Error: parameter `{name}` is not optional for `{mproperty}{msignature}`.")
+				return null
+			end
+			var idx = msignature.mparameters.index_of(param)
+			var prev = map.map.get_or_null(idx)
+			if prev != null then
+				modelbuilder.error(e, "Error: parameter `{name}` already associated with argument #{prev} for `{mproperty}{msignature}`.")
+				return null
+			end
+			map.map[idx] = i
+			setted -= 1
+			e.mtype = self.visit_expr_subtype(e.n_expr, param.mtype)
 		end
+
+		# Second, associate remaining parameters
+		var vararg_decl = args.length - msignature.arity
+		var j = 0
+		for i in [0..msignature.arity[ do
+			# Skip parameters associated by name
+			if map.map.has_key(i) then continue
+
+			var param = msignature.mparameters[i]
+			if param.is_default then
+				if setted > 0 then
+					setted -= 1
+				else
+					continue
+				end
+			end
+
+			# Search the next free argument: skip named arguments since they are already associated
+			while args[j] isa ANamedargExpr do j += 1
+			var arg = args[j]
+			map.map[i] = j
+			j += 1
+
+			if i == vararg_rank then
+				j += vararg_decl
+				continue # skip the vararg
+			end
+
+			var paramtype = param.mtype
+			self.visit_expr_subtype(arg, paramtype)
+		end
+
+		# Third, check varargs
 		if vararg_rank >= 0 then
 			var paramtype = msignature.mparameters[vararg_rank].mtype
 			var first = args[vararg_rank]
-			if vararg_decl == 0 and first isa AVarargExpr then
+			if vararg_decl == 0 then
 				var mclass = get_mclass(node, "Array")
-				if mclass == null then return false # Forward error
+				if mclass == null then return null # Forward error
 				var array_mtype = mclass.get_mtype([paramtype])
-				self.visit_expr_subtype(first.n_expr, array_mtype)
-				first.mtype  = first.n_expr.mtype
+				if first isa AVarargExpr then
+					self.visit_expr_subtype(first.n_expr, array_mtype)
+					first.mtype  = first.n_expr.mtype
+				else
+					# only one vararg, maybe `...` was forgot, so be gentle!
+					var t = visit_expr(first)
+					if t == null then return null # Forward error
+					if not is_subtype(t, paramtype) and is_subtype(t, array_mtype) then
+						# Not acceptable but could be a `...`
+						error(first, "Type Error: expected `{paramtype}`, got `{t}`. Is an ellipsis `...` missing on the argument?")
+						return null
+					end
+					# Standard valid vararg, finish the job
+					map.vararg_decl = 1
+					self.visit_expr_subtype(first, paramtype)
+				end
 			else
-				for j in [vararg_rank..vararg_rank+vararg_decl] do
-					self.visit_expr_subtype(args[j], paramtype)
+				map.vararg_decl = vararg_decl + 1
+				for i in [vararg_rank..vararg_rank+vararg_decl] do
+					self.visit_expr_subtype(args[i], paramtype)
 				end
 			end
 		end
-		return true
+
+		return map
 	end
 
 	fun error(node: ANode, message: String)
@@ -508,6 +586,20 @@ private class TypeVisitor
 	end
 end
 
+# Mapping between parameters and arguments in a call.
+#
+# Parameters and arguments are not stored in the class but referenced by their position (starting from 0)
+#
+# The point of this class is to help engine and other things to map arguments in the AST to parameters of the model.
+class SignatureMap
+	# Associate a parameter to an argument
+	var map = new ArrayMap[Int, Int]
+
+	# The length of the vararg sequence
+	# 0 if no vararg or if reverse vararg (cf `AVarargExpr`)
+	var vararg_decl: Int = 0
+end
+
 # A specific method call site with its associated informations.
 class CallSite
 	# The associated node for location
@@ -540,9 +632,15 @@ class CallSite
 	# Is a implicit cast required on erasure typing policy?
 	var erasure_cast: Bool
 
+	# The mapping used on the call to associate arguments to parameters
+	# If null then no specific association is required.
+	var signaturemap: nullable SignatureMap = null
+
 	private fun check_signature(v: TypeVisitor, args: Array[AExpr]): Bool
 	do
-		return v.check_signature(self.node, args, self.mproperty, self.msignature)
+		var map = v.check_signature(self.node, args, self.mproperty, self.msignature)
+		signaturemap = map
+		return map == null
 	end
 end
 
@@ -822,14 +920,7 @@ redef class AReassignFormExpr
 	# Return the static type of the value to store.
 	private fun resolve_reassignment(v: TypeVisitor, readtype, writetype: MType): nullable MType
 	do
-		var reassign_name: String
-		if self.n_assign_op isa APlusAssignOp then
-			reassign_name = "+"
-		else if self.n_assign_op isa AMinusAssignOp then
-			reassign_name = "-"
-		else
-			abort
-		end
+		var reassign_name = self.n_assign_op.operator
 
 		self.read_type = readtype
 
@@ -844,7 +935,7 @@ redef class AReassignFormExpr
 		var value_type = v.visit_expr_subtype(self.n_value, msignature.mparameters.first.mtype)
 		if value_type == null then return null # Skip error
 
-		v.check_subtype(self, rettype, writetype)
+		v.check_subtype(self, rettype, writetype, false)
 		return rettype
 	end
 end
@@ -1336,7 +1427,7 @@ redef class AArrayExpr
 			end
 			set_comprehension(e)
 			if mtype != null then
-				if v.check_subtype(e, t, mtype) == null then return # Skip error
+				if v.check_subtype(e, t, mtype, false) == null then return # Forward error
 				if t == mtype then useless = true
 			else
 				mtypes.add(t)
@@ -1581,9 +1672,10 @@ end
 
 redef class ABinopExpr
 	redef fun compute_raw_arguments do return [n_expr2]
+	redef fun property_name do return operator
+	redef fun property_node do return n_op
 end
 redef class AEqExpr
-	redef fun property_name do return "=="
 	redef fun accept_typing(v)
 	do
 		super
@@ -1591,55 +1683,15 @@ redef class AEqExpr
 	end
 end
 redef class ANeExpr
-	redef fun property_name do return "!="
 	redef fun accept_typing(v)
 	do
 		super
 		v.null_test(self)
 	end
 end
-redef class ALtExpr
-	redef fun property_name do return "<"
-end
-redef class ALeExpr
-	redef fun property_name do return "<="
-end
-redef class ALlExpr
-	redef fun property_name do return "<<"
-end
-redef class AGtExpr
-	redef fun property_name do return ">"
-end
-redef class AGeExpr
-	redef fun property_name do return ">="
-end
-redef class AGgExpr
-	redef fun property_name do return ">>"
-end
-redef class APlusExpr
-	redef fun property_name do return "+"
-end
-redef class AMinusExpr
-	redef fun property_name do return "-"
-end
-redef class AStarshipExpr
-	redef fun property_name do return "<=>"
-end
-redef class AStarExpr
-	redef fun property_name do return "*"
-end
-redef class AStarstarExpr
-	redef fun property_name do return "**"
-end
-redef class ASlashExpr
-	redef fun property_name do return "/"
-end
-redef class APercentExpr
-	redef fun property_name do return "%"
-end
 
-redef class AUminusExpr
-	redef fun property_name do return "unary -"
+redef class AUnaryopExpr
+	redef fun property_name do return "unary {operator}"
 	redef fun compute_raw_arguments do return new Array[AExpr]
 end
 
@@ -1778,13 +1830,17 @@ redef class ASuperExpr
 		msignature = v.resolve_for(msignature, recvtype, true).as(MSignature)
 		var args = self.n_args.to_a
 		if args.length > 0 then
-			v.check_signature(self, args, mproperty, msignature)
+			signaturemap = v.check_signature(self, args, mproperty, msignature)
 		end
 		self.mtype = msignature.return_mtype
 		self.is_typed = true
 		v.mpropdef.has_supercall = true
 		mpropdef = v.mpropdef.as(MMethodDef)
 	end
+
+	# The mapping used on the call to associate arguments to parameters.
+	# If null then no specific association is required.
+	var signaturemap: nullable SignatureMap
 
 	private fun process_superinit(v: TypeVisitor)
 	do

@@ -18,6 +18,7 @@
 module panels
 
 import templates_events
+import markdown
 
 # A panel can be displayed in a html page.
 #
@@ -96,6 +97,86 @@ class ErrorPanel
 		add msg.html_escape
 	end
 
+end
+
+# A panel that display a markdown content rendered as HTML.
+class MDPanel
+	super Panel
+
+	# Markdown text to display.
+	var text: String
+
+	redef fun rendering do
+		add """<div class="panel">
+			    <div class="panel-body">{{{text.md_to_html}}}</div>
+			  </div>"""
+	end
+end
+
+# Display a list of active game.
+#
+# Used for NitRPG homepage.
+class GamesShortListPanel
+	super Panel
+
+	# Root url used for links.
+	var root_url: String
+
+	# List of NitRPG games to display.
+	var games: Array[Game]
+
+	redef fun render_title do
+		add "<span class=\"glyphicon glyphicon-home\"></span>&nbsp;&nbsp;"
+		add "<a href=\"{root_url}/games\">Active games</a>"
+	end
+
+	redef fun render_body do
+		if games.is_empty then
+			add "<em>No game yet...</em>"
+			return
+		end
+		var sorted = games.to_a
+		(new GamePlayersComparator).sort(sorted)
+		for game in sorted do
+			add "{game.link} ({game.load_players.length} players)<br>"
+		end
+	end
+end
+
+# A panel that display a list of player in a repo.
+class GamesListPanel
+	super GamesShortListPanel
+	super TablePanel
+
+	redef fun render_title do
+		add "<span class=\"glyphicon glyphicon-home\"></span>&nbsp;&nbsp;"
+		add "<a href=\"{root_url}/games\">Active games</a>"
+	end
+
+	redef fun render_body do
+		if games.is_empty then
+			add "<div class=\"panel-body\">"
+			add "<em>No player yet...</em>"
+			add "</div>"
+			return
+		end
+		var sorted = games.to_a
+		(new GamePlayersComparator).sort(sorted)
+		add """<table class="table table-striped table-hover">
+			    <tr>
+				 <th>Game</th>
+				 <th>Players</th>
+				 <th>Achievements</th>
+				</tr>"""
+		for game in sorted do
+			add "<tr>"
+			add " <td>{game.link}</td>"
+			add " <td>{game.load_players.length}</td>"
+			add " <td>{game.load_achievements.length}</td>"
+			add "</tr>"
+		end
+		add "</table>"
+	end
 end
 
 # A panel that display repo statistics.
@@ -279,16 +360,67 @@ class PlayerReviewsPanel
 
 	redef fun render_title do
 		add "<span class=\"glyphicon glyphicon-check\"></span>&nbsp;&nbsp;"
-		add "Review pull requests to gain nitcoins!"
+		add "Review pull requests and comment issues to gain nitcoins!"
 	end
 
 	redef fun render_body do
 		var q = "is:open label:need_review sort:updated-asc " +
 			"-involves:{player.name}"
 
-		var issues = game.repo.search_issues(q)
+		var q2 = "is:open label:request_for_comments sort:updated-asc " +
+			"-involves:{player.name}"
+
+		var issues = new ArraySet[Issue]
+		issues.add_all game.repo.search_issues(q).as(not null)
+		issues.add_all game.repo.search_issues(q2).as(not null)
 		if issues.is_empty then
-			add "<em>No pull request to review yet...</em>"
+			add "<em>No pull request or issue to review yet...</em>"
+			return
+		end
+		for issue in issues do
+			var user = issue.user
+			var uplay = user.player(game)
+			add """<div class="media">
+			        <a class="media-left" href="{{{uplay.url}}}">
+					 <img class=\"img-circle\" style="width:50px"
+					   src="{{{user.avatar_url}}}" alt="{{{uplay.name}}}">
+					</a>
+					<div class="media-body">
+					 <h4 class="media-heading">
+						{{{issue.link}}} {{{issue.title}}}
+					</h4>
+					 <span class="text-muted">opened by </span>
+					 {{{uplay.link}}}
+					</div>
+				   </div>"""
+		end
+	end
+end
+
+# A `Panel` that displays the work assigned or tagged.
+class PlayerWorkPanel
+	super Panel
+
+	# Repo to display.
+	var game: Game
+
+	# Player to display customized list for.
+	var player: Player
+
+	redef fun render_title do
+		add "<span class=\"glyphicon glyphicon-check\"></span>&nbsp;&nbsp;"
+		add "Do your tasks to gain nitcoins!"
+	end
+
+	redef fun render_body do
+		var q = "is:open label:need_work sort:updated-asc author:{player.name}"
+		var q2 = "is:open sort:updated-asc assignee:{player.name}"
+
+		var issues = new ArraySet[Issue]
+		issues.add_all game.repo.search_issues(q).as(not null)
+		issues.add_all game.repo.search_issues(q2).as(not null)
+		if issues.is_empty then
+			add "<em>No work to do yet...</em>"
 			return
 		end
 		for issue in issues do

@@ -31,6 +31,8 @@ redef class MMethod
 		if nit_name == "+" then return "_plus"
 		if nit_name == "-" then return "_minus"
 		if nit_name == "unary -" then return "_unary_minus"
+		if nit_name == "unary +" then return "_unary_plus"
+		if nit_name == "unary ~" then return "_unary_tilde"
 		if nit_name == "*" then return "_star"
 		if nit_name == "/" then return "_slash"
 		if nit_name == "%" then return "_percent"
@@ -38,13 +40,17 @@ redef class MMethod
 		if nit_name == "[]=" then return "_index_assign"
 		if nit_name == "==" then return "_equal"
 		if nit_name == "<" then return "_less"
-		if nit_name == ">" then return "_geater"
+		if nit_name == ">" then return "_greater"
 		if nit_name == "<=" then return "_less_or_equal"
 		if nit_name == ">=" then return "_greater_or_equal"
 		if nit_name == "!=" then return "_not_equal"
 		if nit_name == "<<" then return "_left"
 		if nit_name == ">>" then return "_right"
 		if nit_name == "<=>" then return "_starship"
+		if nit_name == "|" then return "_pipe"
+		if nit_name == "^" then return "_caret"
+		if nit_name == "&" then return "_amp"
+		if nit_name == "~" then return "_tilde"
 
 		if nit_name.chars.last == '=' then return "{nit_name.substring(0, nit_name.length-1)}__assign"
 		return nit_name
@@ -92,7 +98,7 @@ redef class MClassType
 			assert ctype != null
 			return ctype
 		end
-		return mangled_cname
+		return cname_normal_class
 	end
 
 	redef fun cname_blind do
@@ -105,6 +111,9 @@ redef class MClassType
 		if mclass.kind == extern_kind then return "void*"
 		return "struct nitni_instance *"
 	end
+
+	# Name of this type in C for normal classes (not extern and not primitive)
+	protected fun cname_normal_class: String do return mangled_cname
 
 	redef fun mangled_cname do return mclass.name
 

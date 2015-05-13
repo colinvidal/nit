@@ -43,11 +43,11 @@ interface GameEntity
 	# Date are stored under `self.key`.
 	fun save do game.store.store_object(key, to_json)
 
-	# Saves `self` state into `target` key data.
+	# Saves `self` state under `key` data.
 	#
-	# Data are stored under `target.key / self.key`.
-	fun save_in(target: GameEntity) do
-		game.store.store_object(target.key / key, to_json)
+	# Data are stored under `key / self.key`.
+	fun save_in(key: String) do
+		game.store.store_object(key / self.key, to_json)
 	end
 
 	# Json representation of `self`.
@@ -291,6 +291,19 @@ interface GameReactor
 end
 
 # utils
+
+# Sort games by descending number of players.
+#
+# The first in the list is the game with the more players.
+class GamePlayersComparator
+	super Comparator
+
+	redef type COMPARED: Game
+
+	redef fun compare(a, b) do
+		return b.load_players.length <=> a.load_players.length
+	end
+end
 
 # Sort players by descending number of nitcoins.
 #

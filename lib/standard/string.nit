@@ -849,6 +849,39 @@ abstract class Text
 		return hash_cache.as(not null)
 	end
 
+	# Gives the formatted string back as a Nit string with `args` in place
+	#
+	# 	assert "This %1 is a %2.".format("String", "formatted String") == "This String is a formatted String"
+	# 	assert "\\%1 This string".format("String") == "\\%1 This string"
+	fun format(args: Object...): String do
+		var s = new Array[Text]
+		var curr_st = 0
+		var i = 0
+		while i < length do
+			# Skip escaped characters
+			if self[i] == '\\' then
+				i += 1
+			# In case of format
+			else if self[i] == '%' then
+				var fmt_st = i
+				i += 1
+				var ciph_st = i
+				while i < length and self[i].is_numeric do
+					i += 1
+				end
+				i -= 1
+				var fmt_end = i
+				var ciph_len = fmt_end - ciph_st + 1
+				s.push substring(curr_st, fmt_st - curr_st)
+				s.push args[substring(ciph_st, ciph_len).to_i - 1].to_s
+				curr_st = i + 1
+			end
+			i += 1
+		end
+		s.push substring(curr_st, length - curr_st)
+		return s.to_s
+	end
+
 end
 
 # All kinds of array-based text representations.
@@ -976,30 +1009,50 @@ abstract class String
 	#
 	#     assert "randomMethodId".to_snake_case == "random_method_id"
 	#
-	# If `self` is upper, it is returned unchanged
+	# The rules are the following:
 	#
-	#     assert "RANDOM_METHOD_ID".to_snake_case == "RANDOM_METHOD_ID"
+	# An uppercase is always converted to a lowercase
 	#
-	# If the identifier is prefixed by an underscore, the underscore is ignored
+	#     assert "HELLO_WORLD".to_snake_case == "hello_world"
 	#
-	#     assert "_privateField".to_snake_case == "_private_field"
+	# An uppercase that follows a lowercase is prefixed with an underscore
+	#
+	#     assert "HelloTheWORLD".to_snake_case == "hello_the_world"
+	#
+	# An uppercase that follows an uppercase and is followed by a lowercase, is prefixed with an underscore
+	#
+	#     assert "HelloTHEWorld".to_snake_case == "hello_the_world"
+	#
+	# All other characters are kept as is; `self` does not need to be a proper CamelCased string.
+	#
+	#     assert "=-_H3ll0Th3W0rld_-=".to_snake_case == "=-_h3ll0th3w0rld_-="
 	fun to_snake_case: SELFTYPE
 	do
-		if self.is_upper then return self
+		if self.is_lower then return self
 
 		var new_str = new FlatBuffer.with_capacity(self.length)
-		var is_first_char = true
+		var prev_is_lower = false
+		var prev_is_upper = false
 
 		for i in [0..length[ do
 			var char = chars[i]
-			if is_first_char then 
-				new_str.add(char.to_lower)
-				is_first_char = false
+			if char.is_lower then
+				new_str.add(char)
+				prev_is_lower = true
+				prev_is_upper = false
 			else if char.is_upper then
-				new_str.add('_')
+				if prev_is_lower then
+					new_str.add('_')
+				else if prev_is_upper and i+1 < length and chars[i+1].is_lower then
+					new_str.add('_')
+				end
 				new_str.add(char.to_lower)
+				prev_is_lower = false
+				prev_is_upper = true
 			else
 				new_str.add(char)
+				prev_is_lower = false
+				prev_is_upper = false
 			end
 		end
 		

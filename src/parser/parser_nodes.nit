@@ -730,6 +730,51 @@ class TMinuseq
 	super TokenOperator
 end
 
+# The operator `*=`
+class TStareq
+	super TokenOperator
+end
+
+# The operator `/=`
+class TSlasheq
+	super TokenOperator
+end
+
+# The operator `%=`
+class TPercenteq
+	super TokenOperator
+end
+
+# The operator `**=`
+class TStarstareq
+	super TokenOperator
+end
+
+# The operator `|=`
+class TPipeeq
+	super TokenOperator
+end
+
+# The operator `^=`
+class TCareteq
+	super TokenOperator
+end
+
+# The operator `&=`
+class TAmpeq
+	super TokenOperator
+end
+
+# The operator `<<=`
+class TLleq
+	super TokenOperator
+end
+
+# The operator `>>=`
+class TGgeq
+	super TokenOperator
+end
+
 # The symbol `...`
 class TDotdotdot
 	super Token
@@ -770,8 +815,28 @@ class TSlash
 	super TokenOperator
 end
 
-# The operator `+%
+# The operator `%`
 class TPercent
+	super TokenOperator
+end
+
+# The operator `|`
+class TPipe
+	super TokenOperator
+end
+
+# The operator `^`
+class TCaret
+	super TokenOperator
+end
+
+# The operator `&`
+class TAmp
+	super TokenOperator
+end
+
+# The operator `~`
+class TTilde
 	super TokenOperator
 end
 
@@ -827,6 +892,11 @@ end
 
 # The symbol `@`
 class TAt
+	super Token
+end
+
+# The symbol `;`
+class TSemi
 	super Token
 end
 
@@ -1072,8 +1142,14 @@ class AStdClassdef
 	# The name of the class
 	var n_id: nullable TClassid = null is writable
 
+	# The `[` symbol
+	var n_obra: nullable TObra = null is writable
+
 	# The list of formal parameter types
 	var n_formaldefs = new ANodes[AFormaldef](self)
+
+	# The `]` symbol
+	var n_cbra: nullable TCbra = null is writable
 
 	# The extern block code
 	var n_extern_code_block: nullable AExternCodeBlock = null is writable
@@ -1170,20 +1246,29 @@ end
 class AAttrPropdef
 	super APropdef
 
-	# The identifier for a old-style attribute (null if new-style)
+	# The `var` keyword
 	var n_kwvar: TKwvar is writable, noinit
 
-	# The identifier for a new-style attribute (null if old-style)
+	# The identifier for a new-style attribute
 	var n_id2: TId is writable, noinit
 
 	# The declared type of the attribute
 	var n_type: nullable AType = null is writable
 
+	# The `=` symbol
+	var n_assign: nullable TAssign = null is writable
+
 	# The initial value, if any (set with `=`)
 	var n_expr: nullable AExpr = null is writable
 
+	# The `do` keyword
+	var n_kwdo: nullable TKwdo = null is writable
+
 	# The initial value, if any (set with `do return`)
 	var n_block: nullable AExpr = null is writable
+
+	# The `end` keyword
+	var n_kwend: nullable TKwend = null is writable
 
 	redef fun hot_location
 	do
@@ -1210,8 +1295,14 @@ class AMethPropdef
 	# The signature of the method, if any
 	var n_signature: nullable ASignature = null is writable
 
+	# The `do` keyword
+	var n_kwdo: nullable TKwdo = null is writable
+
 	# The body (in Nit) of the method, if any
 	var n_block: nullable AExpr = null is writable
+
+	# The `end` keyword
+	var n_kwend: nullable TKwend = null is writable
 
 	# The list of declared callbacks (for extern methods)
 	var n_extern_calls: nullable AExternCalls = null is writable
@@ -1395,116 +1486,106 @@ class AIdMethid
 	var n_id: TId is writable, noinit
 end
 
-# A method name `+`
-class APlusMethid
+# A method name for an operator
+class AOperatorMethid
 	super AMethid
 
-	# The `+` symbol
-	var n_plus: TPlus is writable, noinit
+	# The associated operator symbol
+	var n_op: Token is writable, noinit
+end
+# A method name `+`
+class APlusMethid
+	super AOperatorMethid
 end
 
 # A method name `-`
 class AMinusMethid
-	super AMethid
-
-	# The `-` symbol
-	var n_minus: TMinus is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `*`
 class AStarMethid
-	super AMethid
-
-	# The `*` symbol
-	var n_star: TStar is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `**`
 class AStarstarMethid
-	super AMethid
-
-	# The `**` symbol
-	var n_starstar: TStarstar is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `/`
 class ASlashMethid
-	super AMethid
-
-	# The `/` symbol
-	var n_slash: TSlash is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `%`
 class APercentMethid
-	super AMethid
+	super AOperatorMethid
+end
 
-	# The `%` symbol
-	var n_percent: TPercent is writable, noinit
+# A method name `|`
+class APipeMethid
+	super AOperatorMethid
+end
+
+# A method name `^`
+class ACaretMethid
+	super AOperatorMethid
+end
+
+# A method name `&`
+class AAmpMethid
+	super AOperatorMethid
+end
+
+# A method name `~`
+class ATildeMethid
+	super AOperatorMethid
 end
 
 # A method name `==`
 class AEqMethid
-	super AMethid
-
-	# The `==` symbol
-	var n_eq: TEq is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `!=`
 class ANeMethid
-	super AMethid
-
-	# The `!=` symbol
-	var n_ne: TNe is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `<=`
 class ALeMethid
-	super AMethid
-
-	# The `<=` symbol
-	var n_le: TLe is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `>=`
 class AGeMethid
-	super AMethid
-
-	# The `>=` symbol
-	var n_ge: TGe is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `<`
 class ALtMethid
-	super AMethid
-
-	# The `<` symbol
-	var n_lt: TLt is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `>`
 class AGtMethid
-	super AMethid
-
-	# The `>` symbol
-	var n_gt: TGt is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `<<`
 class ALlMethid
-	super AMethid
-
-	# The `<<` symbol
-	var n_ll: TLl is writable, noinit
+	super AOperatorMethid
 end
 
 # A method name `>>`
 class AGgMethid
-	super AMethid
+	super AOperatorMethid
+end
 
-	# The `>>` symbol
-	var n_gg: TGg is writable, noinit
+# A method name `<=>`
+class AStarshipMethid
+	super AOperatorMethid
 end
 
 # A method name `[]`
@@ -1516,14 +1597,6 @@ class ABraMethid
 
 	# The `]` symbol
 	var n_cbra: TCbra is writable, noinit
-end
-
-# A method name `<=>`
-class AStarshipMethid
-	super AMethid
-
-	# The `<=>` symbol
-	var n_starship: TStarship is writable, noinit
 end
 
 # A setter method name with a simple identifier (with a `=`)
@@ -1591,8 +1664,14 @@ class AType
 	# The name of the class or of the formal type
 	var n_id: TClassid is writable, noinit
 
+	# The opening bracket
+	var n_obra: nullable TObra = null is writable
+
 	# Type arguments for a generic type
 	var n_types = new ANodes[AType](self)
+
+	# The closing bracket
+	var n_cbra: nullable TCbra = null is writable
 end
 
 # A label at the end of a block or in a break/continue statement. eg `label x`
@@ -1719,8 +1798,14 @@ class AIfExpr
 	# The expression used as the condition of the `if`
 	var n_expr: AExpr is writable, noinit
 
+	# The `then` keyword
+	var n_kwthen: TKwthen is writable, noinit
+
 	# The body of the `then` part
 	var n_then: nullable AExpr = null is writable
+
+	# The `else` keyword
+	var n_kwelse: nullable TKwelse = null is writable
 
 	# The body of the `else` part
 	var n_else: nullable AExpr = null is writable
@@ -1790,6 +1875,9 @@ class AForExpr
 	# The list of name of the automatic variables
 	var n_ids = new ANodes[TId](self)
 
+	# The `in` keyword
+	var n_kwin: TKwin is writable, noinit
+
 	# The expression used as the collection to iterate on
 	var n_expr: AExpr is writable, noinit
 
@@ -1830,6 +1918,9 @@ class AAssertExpr
 
 	# The expression used as the condition of the `assert`
 	var n_expr: AExpr is writable, noinit
+
+	# The `else` keyword
+	var n_kwelse: nullable TKwelse = null is writable
 
 	# The body to execute when the assert fails
 	var n_else: nullable AExpr = null is writable
@@ -1879,9 +1970,16 @@ end
 # A binary operation on a method
 abstract class ABinopExpr
 	super ASendExpr
+
+	# The operator
+	var n_op: Token is writable, noinit
+
 	# The second operand of the operation
 	# Note: the receiver (`n_expr`) is the first operand
 	var n_expr2: AExpr is writable, noinit
+
+	# The name of the operator (eg '+')
+	fun operator: String is abstract
 end
 
 # Something that is boolean expression
@@ -1895,6 +1993,9 @@ abstract class ABinBoolExpr
 
 	# The first boolean operand
 	var n_expr: AExpr is writable, noinit
+
+	# The operator
+	var n_op: Token is writable, noinit
 
 	# The second boolean operand
 	var n_expr2: AExpr is writable, noinit
@@ -1913,6 +2014,9 @@ end
 # A `or else` expression
 class AOrElseExpr
 	super ABinBoolExpr
+
+	# The `else` keyword
+	var n_kwelse: TKwelse is writable, noinit
 end
 
 # A `implies` expression
@@ -1934,41 +2038,49 @@ end
 # A `==` expression
 class AEqExpr
 	super ABinopExpr
+	redef fun operator do return "=="
 end
 
 # A `!=` expression
 class ANeExpr
 	super ABinopExpr
+	redef fun operator do return "!="
 end
 
 # A `<` expression
 class ALtExpr
 	super ABinopExpr
+	redef fun operator do return "<"
 end
 
 # A `<=` expression
 class ALeExpr
 	super ABinopExpr
+	redef fun operator do return "<="
 end
 
 # A `<<` expression
 class ALlExpr
 	super ABinopExpr
+	redef fun operator do return "<<"
 end
 
 # A `>` expression
 class AGtExpr
 	super ABinopExpr
+	redef fun operator do return ">"
 end
 
 # A `>=` expression
 class AGeExpr
 	super ABinopExpr
+	redef fun operator do return ">="
 end
 
 # A `>>` expression
 class AGgExpr
 	super ABinopExpr
+	redef fun operator do return ">>"
 end
 
 # A type-ckeck expression. eg `x isa T`
@@ -1978,6 +2090,9 @@ class AIsaExpr
 	# The expression to check
 	var n_expr: AExpr is writable, noinit
 
+	# The `isa` keyword
+	var n_kwisa: TKwisa is writable, noinit
+
 	# The destination type to check to
 	var n_type: AType is writable, noinit
 end
@@ -1985,44 +2100,90 @@ end
 # A `+` expression
 class APlusExpr
 	super ABinopExpr
+	redef fun operator do return "+"
 end
 
 # A `-` expression
 class AMinusExpr
 	super ABinopExpr
+	redef fun operator do return "-"
 end
 
 # A `<=>` expression
 class AStarshipExpr
 	super ABinopExpr
+	redef fun operator do return "<=>"
 end
 
 # A `*` expression
 class AStarExpr
 	super ABinopExpr
+	redef fun operator do return "*"
 end
 
 # A `**` expression
 class AStarstarExpr
 	super ABinopExpr
+	redef fun operator do return "**"
 end
 
 # A `/` expression
 class ASlashExpr
 	super ABinopExpr
+	redef fun operator do return "/"
 end
 
 # A `%` expression
 class APercentExpr
 	super ABinopExpr
+	redef fun operator do return "%"
+end
+
+# A `|` expression
+class APipeExpr
+	super ABinopExpr
+	redef fun operator do return "|"
+end
+
+# A `^` expression
+class ACaretExpr
+	super ABinopExpr
+	redef fun operator do return "^"
+end
+
+# A `&` expression
+class AAmpExpr
+	super ABinopExpr
+	redef fun operator do return "&"
+end
+
+# A unary operation on a method
+class AUnaryopExpr
+	super ASendExpr
+
+	# The operator
+	var n_op: Token is writable, noinit
+
+	# The name of the operator (eg '+')
+	fun operator: String is abstract
 end
 
 # A unary minus expression. eg `-x`
 class AUminusExpr
-	super ASendExpr
+	super AUnaryopExpr
+	redef fun operator do return "-"
+end
 
-	# The `-` symbol
-	var n_minus: TMinus is writable, noinit
+# A unary plus expression. eg `+x`
+class AUplusExpr
+	super AUnaryopExpr
+	redef fun operator do return "+"
+end
+
+# A unary `~` expression
+class AUtildeExpr
+	super AUnaryopExpr
+	redef fun operator do return "~"
 end
 
 # An explicit instantiation. eg `new T`
@@ -2197,7 +2358,10 @@ abstract class ARangeExpr
 	# The left (lower) element of the range
 	var n_expr: AExpr is writable, noinit
 
-	# The right (uppr) element of the range
+	# The `..`
+	var n_dotdot: TDotdot is writable, noinit
+
+	# The right (upper) element of the range
 	var n_expr2: AExpr is writable, noinit
 end
 
@@ -2420,6 +2584,20 @@ class AVarargExpr
 	var n_dotdotdot: TDotdotdot is writable, noinit
 end
 
+# An named notation used to pass an expression by name in a parameter
+class ANamedargExpr
+	super AExpr
+
+	# The name of the argument
+	var n_id: TId is writable, noinit
+
+	# The `=` synbol
+	var n_assign: TAssign is writable, noinit
+
+	# The passed expression
+	var n_expr: AExpr is writable, noinit
+end
+
 # A list of expression separated with commas (arguments for instance)
 class AManyExpr
 	super AExpr
@@ -2512,22 +2690,89 @@ end
 # A complex assignment operator. (`+=` and `-=`)
 abstract class AAssignOp
 	super Prod
+
+	# The combined assignment operator
+	var n_op: Token is writable, noinit
+
+	# The name of the operator without the `=` (eg '+')
+	fun operator: String is abstract
 end
 
-# The `+=` assignment operation
+# A `+=` assignment operation
 class APlusAssignOp
 	super AAssignOp
 
-	# The `+=` operator
-	var n_pluseq: TPluseq is writable, noinit
+	redef fun operator do return "+"
 end
 
-# The `-=` assignment operator
+# A `-=` assignment operation
 class AMinusAssignOp
 	super AAssignOp
 
-	# The `-=` operator
-	var n_minuseq: TMinuseq is writable, noinit
+	redef fun operator do return "-"
+end
+
+# A `*=` assignment operation
+class AStarAssignOp
+	super AAssignOp
+
+	redef fun operator do return "*"
+end
+
+# A `/=` assignment operation
+class ASlashAssignOp
+	super AAssignOp
+
+	redef fun operator do return "/"
+end
+
+# A `%=` assignment operation
+class APercentAssignOp
+	super AAssignOp
+
+	redef fun operator do return "%"
+end
+
+# A `**=` assignment operation
+class AStarstarAssignOp
+	super AAssignOp
+
+	redef fun operator do return "**"
+end
+
+# A `|=` assignment operation
+class APipeAssignOp
+	super AAssignOp
+
+	redef fun operator do return "|"
+end
+
+# A `^=` assignment operation
+class ACaretAssignOp
+	super AAssignOp
+
+	redef fun operator do return "^"
+end
+
+# A `&=` assignment operation
+class AAmpAssignOp
+	super AAssignOp
+
+	redef fun operator do return "&"
+end
+
+# A `<<=` assignment operation
+class ALlAssignOp
+	super AAssignOp
+
+	redef fun operator do return "<<"
+end
+
+# A `>>=` assignment operation
+class AGgAssignOp
+	super AAssignOp
+
+	redef fun operator do return ">>"
 end
 
 # A possibly fully-qualified module identifier
@@ -2599,6 +2844,9 @@ end
 class AAnnotations
 	super Prod
 
+	# The `is` keyword, for *is* annotations
+	var n_kwis: nullable TKwis = null is writable
+
 	# The `@` symbol, for *at* annotations
 	var n_at: nullable TAt = null is writable
 
@@ -2610,6 +2858,9 @@ class AAnnotations
 
 	# The closing parenthesis in *at* annotations
 	var n_cpar: nullable TCpar = null is writable
+
+	# The `end` keyword, for *is* annotations
+	var n_kwend: nullable TKwend = null is writable
 end
 
 # A single annotation
