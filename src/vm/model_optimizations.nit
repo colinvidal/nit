@@ -628,18 +628,21 @@ redef class MClass
 		# For each class who know one of the redefs methods, tell the pattern there is a new branch
 		for lp in redefs do
 			for parent in ordering do
-				if parent != self then 
-					pstats.incr_loaded_classes_implicits
-				else if parent.kind == abstract_kind then
-					pstats.incr_loaded_classes_abstracts
-				end
-
 				for p in parent.sites_patterns do
 					if p.gp == lp.mproperty then 
 						if not sites_patterns.has(p) then sites_patterns.add(p)
 						p.add_lp(lp)
 					end
 				end
+			end
+		end
+
+		# TODO: rewrite it
+		for parent in ordering do
+			if parent != self then 
+				pstats.incr_loaded_classes_implicits
+			else if parent.kind == abstract_kind then
+				pstats.incr_loaded_classes_abstracts
 			end
 		end
 	end
@@ -829,6 +832,7 @@ class MOStats
 		ret += "\tunloaded_new: {unloaded_new}\n"
 		ret += "\tloaded_classes_explicits: {loaded_classes_explicits}\n"
 		ret += "\tloaded_classes_implicits: {loaded_classes_implicits}\n"
+		ret += "\tloaded_classes_abstracts: {loaded_classes_abstracts}\n"
 		ret += "\tast_new_no_primitives: {ast_new_no_primitives}\n"
 		ret += "\n"
 		ret += "\tcall_site: {call_site}\n"
