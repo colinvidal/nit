@@ -22,29 +22,21 @@ import ssa
 import model_optimizations
 
 redef class VirtualMachine
-	redef fun create_class(mclass)
+	redef fun load_class(mclass)
 	do
-		# Get all superclasses loaded implicitly by mclass (mclass included)
-		var implicit_loaded = new List[MClass]
-		for cls in mclass.superclasses_ordering(self) do
-			if not cls.loaded then implicit_loaded.add(cls)
-		end
+		if mclass.loaded then return
 
 		super(mclass)
 
-		for cls in implicit_loaded do 
-			if mclass == cls and not cls.mclass_type.is_primitive_type then
-				pstats.inc("loaded_classes_explicits")
-			else if cls.kind == abstract_kind and not cls.mclass_type.is_primitive_type then
-				pstats.inc("loaded_classes_abstracts")
-			else if not cls.mclass_type.is_primitive_type then
-				pstats.inc("loaded_classes_implicits")
-			end
-
-			cls.handle_new_class
+		if mclass.kind == abstract_kind and not mclass.mclass_type.is_primitive_type then
+			pstats.inc("loaded_classes_abstracts")
+		else
+			pstats.inc("loaded_classes_explicits")
 		end
+
+		mclass.handle_new_class
 	end
-	
+
 	redef fun new_frame(node, mpropdef, args)
 	do
 		next_receivers.push(args.first.mtype)
