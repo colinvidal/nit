@@ -163,6 +163,7 @@ abstract class MOPropSitePattern
 	redef fun compute_impl(vm)
 	do
 		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
+		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
@@ -223,93 +224,6 @@ class MOWriteSitePattern
 
 	redef type S: MOWriteSite
 end
-
-################################################################
-## Pattern of objets sites
-#abstract class MOSitePattern
-#	# Static type of the receiver
-#	var rst: MType
-#
-#	# Global property called
-#	var gp: MMethod
-#
-#	# Local properties candidates (a subset of gp.loaded_lps)
-#	var lps = new List[MMethodDef]
-#
-#	# Implementation of the callsite determined by rst/pic
-#	private var impl: nullable Implementation is noinit
-#
-#	# Exprsites using this pattern
-#	var exprsites = new List[MOExprSite]
-#
-#	# Add a new exprsite on the pattern
-#	fun add_exprsite(exprsite: MOExprSite)
-#	do
-#		exprsites.add(exprsite)
-#		exprsite.pattern = self
-#
-#		# Get all lps of the gp of the pattern if there are defined on a subclass of the rst
-#		# Tell to each added lps that this pattern can be a caller
-#		for lp in gp.loaded_lps do
-#			add_lp(lp)
-#		end
-#	end
-#
-#	# Determine an implementation with pic/rst only
-#	private fun compute_impl(vm: VirtualMachine)
-#	do
-#		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-#			impl = new SSTImpl(false, gp.absolute_offset)
-#		else if lps.length == 1 then
-#			# The method is an intro or a redef
-#			impl = new StaticImpl(true, lps.first)
-#		else if gp_pos_unique(vm) then
-#			impl = new SSTImpl(true, gp.absolute_offset)
-#		else
-#			impl = new PHImpl(false, gp.offset) 
-#		end
-#	end
-#
-#	private fun gp_pos_unique(vm: VirtualMachine): Bool
-#	do
-#		for expr in exprsites do
-#			if rst.get_mclass(vm) == null then
-#				return false
-#			else
-#				var cls = rst.get_mclass(vm) 
-#				if not cls.has_unique_method_pos(gp) then return false
-#			end
-#		end
-#
-#		return true
-#	end
-#
-#	# Add a new callee
-#	fun add_lp(lp: MMethodDef)
-#	do
-##		trace("add lp {lp} in pattern {self}")
-#		if not lps.has(lp) then
-#			lps.add(lp)
-#			lp.callers.add(self)
-#			if impl != null and impl.is_mutable then impl = null
-#			for expr in exprsites do expr.init_impl
-#		end
-#	end
-#
-#	# Get implementation, compute it if not exists
-#	fun get_impl(vm: VirtualMachine): Implementation
-#	do
-#		if impl == null then compute_impl(vm)
-#		return impl.as(not null)
-#	end
-#
-#	# Add a new branch on the pattern
-#	fun handle_new_branch(lp: MMethodDef)
-#	do
-##		trace("pattern handle_new_branch")
-#		add_lp(lp)
-#	end
-#end
 
 redef class MProperty
 	# Type of owning local properties
@@ -515,6 +429,7 @@ abstract class MOPropSite
 	do
 		var gp = pattern.gp
 		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
+		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
