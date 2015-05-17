@@ -1107,22 +1107,39 @@ redef class MONewPattern
 	end
 end
 
-redef class MOStats
-	redef init
-	do
-		super
-		map["preexist"] = 0
-		map["npreexist"] = 0
-		map["preexist_static"] = 0
-		map["preexist_attr"] = 0
-	end
-end
-
 # Change preexistence state of new sites compiled before loading
 redef class MClass
 	redef fun handle_new_class
 	do
 		super
 		new_pattern.set_preexist_newsite
+	end
+end
+
+redef class ModelBuilder
+	redef fun check_counters(mainmodule)
+	do
+		super
+
+		# Check if number of static callsites who preexists matches with the counter
+		var preexist_static = 0
+		for prop in mainmodule.model.mproperties do
+			for propdef in prop.mpropdefs do
+				if propdef isa MMethodDef and propdef.compiled then
+					for site in propdef.mosites do
+						# Actually, we MUST use get_impl, but it needs to have vm as argument
+						if site.impl isa StaticImpl and site.expr_recv.is_pre then
+							preexist_static += 1
+						else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
+							preexist_static += 1
+						end
+					end
+				end
+			end
+		end
+
+		if preexist_static != pstats.get("preexist_static") then
+			print("WARNING: preexist_static {pstats.get("preexist_static")} is actually {preexist_static }")
+		end
 	end
 end
