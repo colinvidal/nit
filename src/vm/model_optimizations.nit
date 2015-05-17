@@ -56,6 +56,7 @@ redef class ModelBuilder
 		var loaded_cls = 0
 		for cls in mainmodule.model.mclasses do if cls.loaded then loaded_cls += 1
 
+		# Check if number of loaded classes by the VM matches with the counter
 		var analysed_cls = pstats.get("loaded_classes_implicits")
 		analysed_cls += pstats.get("loaded_classes_explicits")
 		analysed_cls += pstats.get("loaded_classes_abstracts")
@@ -64,7 +65,6 @@ redef class ModelBuilder
 		end
 	end
 end
-
 
 # Pattern of instantiation sites
 class MONewPattern
@@ -170,6 +170,7 @@ abstract class MOPropSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
+			pstats.inc("preexist_static")
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
@@ -248,9 +249,9 @@ end
 redef class MMethodDef
 	redef type P: MOCallSitePattern
 
-	# Tell if the method has been compiled at least one time
+	# Tell if the method has been compiled at least one time (not in MMethodDef because attribute can have blocks)
 	var compiled = false is writable
-
+	
 	# Return expression of the method (null if procedure)
 	var return_expr: nullable MOExpr is writable
 
@@ -351,7 +352,7 @@ abstract class MOSite
 	var pattern: P is writable, noinit
 
 	# Implementation of the site (null if can't determine concretes receivers)
-	private var impl: nullable Implementation is noinit
+	var impl: nullable Implementation is noinit
 
 	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
 	private var concretes_receivers: nullable List[MClass] is noinit
@@ -441,6 +442,7 @@ abstract class MOPropSite
 				cls.vtable.mask,
 				gp.intro_mclassdef.mclass.vtable.id, 
 				gp.offset))
+				pstats.inc("preexist_static")
 			else
 				# The PHImpl here is mutable because it can be switch to a 
 				# lightweight implementation when the class will be loaded
@@ -746,6 +748,10 @@ class MOStats
 		map["nyi"] = 0
 		map["concretes_receivers_sites"] = 0
 		map["lits"] = 0
+		map["preexist"] = 0
+		map["npreexist"] = 0
+		map["preexist_static"] = 0
+		map["preexist_attr"] = 0
 	end
 end
 
