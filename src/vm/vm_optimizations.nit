@@ -722,6 +722,7 @@ redef class MMethodDef
 
 			if site.expr_recv.is_pre then
 				pstats.inc("preexist")
+				if site.get_impl(vm) isa StaticImpl then pstats.inc("preexist_static")
 			else
 				pstats.inc("npreexist")
 			end
@@ -734,8 +735,6 @@ redef class MMethodDef
 
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
 		
-			if site.expr_recv.is_pre and site.get_impl(vm) isa StaticImpl then pstats.inc("preexist_static")
-
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
 			trace("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
