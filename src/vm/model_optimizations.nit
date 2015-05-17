@@ -381,11 +381,18 @@ abstract class MOSite
 	fun get_impl(vm: VirtualMachine): Implementation
 	do
 		if get_concretes.length == 0 then
-			return pattern.get_impl(vm)
-		else
-			if impl == null then compute_impl(vm)
-			return impl.as(not null)
+			impl = pattern.get_impl(vm)
+		else if impl == null then
+			compute_impl(vm)
 		end
+
+		return impl.as(not null)
+#		if get_concretes.length == 0 then
+#			return pattern.get_impl(vm)
+#		else
+#			if impl == null then compute_impl(vm)
+#			return impl.as(not null)
+#		end
 	end
 
 	# Initialise the implementation decision
