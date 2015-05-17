@@ -170,7 +170,6 @@ abstract class MOPropSitePattern
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImpl(true, lps.first)
-			pstats.inc("preexist_static")
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
@@ -442,7 +441,6 @@ abstract class MOPropSite
 				cls.vtable.mask,
 				gp.intro_mclassdef.mclass.vtable.id, 
 				gp.offset))
-				pstats.inc("preexist_static")
 			else
 				# The PHImpl here is mutable because it can be switch to a 
 				# lightweight implementation when the class will be loaded
