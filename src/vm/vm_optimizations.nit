@@ -671,23 +671,23 @@ redef class MMethodDef
 		compiled = true
 
 		trace("\npreexist_all of {self}")
-		var debug_preexist: Int
+		var preexist: Int
 
 		if not disable_preexistence_extensions then
 			if return_expr != null then
 				return_expr.preexist_expr
 				if return_expr.is_rec then return_expr.set_pval_nper
 				fill_nper(return_expr.as(not null))
-				debug_preexist = return_expr.preexist_expr_value
-				trace("\tpreexist of return : {return_expr.as(not null)} {debug_preexist} {debug_preexist.preexists_bits}")
+				preexist = return_expr.preexist_expr_value
+				trace("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
 			end
 
 			for newexpr in monews do
 				assert not newexpr.pattern.cls.mclass_type.is_primitive_type
 
-				debug_preexist = newexpr.preexist_expr
+				preexist = newexpr.preexist_expr
 				fill_nper(newexpr)
-				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {debug_preexist} {debug_preexist.preexists_bits}")
+				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {preexist} {preexist.preexists_bits}")
 				if newexpr.pattern.is_loaded then
 					pstats.inc("loaded_new")
 				else
@@ -699,7 +699,7 @@ redef class MMethodDef
 		for site in mosites do
 			assert not site.pattern.rst.is_primitive_type
 
-			debug_preexist = site.preexist_site
+			preexist = site.preexist_site
 			var buff = "\tpreexist of "
 
 			if site isa MOSubtypeSite then
@@ -708,7 +708,7 @@ redef class MMethodDef
 				buff += "site {site.pattern.rst}.{site.as(MOPropSite).pattern.gp}" 
 			end
 
-			buff += " {site.expr_recv}.{site} {debug_preexist} {debug_preexist.preexists_bits}"
+			buff += " {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}"
 			trace(buff)
 
 			fill_nper(site.expr_recv)
@@ -726,7 +726,9 @@ redef class MMethodDef
 			end
 
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
-			
+		
+			if site.expr_recv.is_pre and site.get_impl(vm) isa StaticImpl then pstats.inc("preexist_static")
+
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
 			trace("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
 		end
