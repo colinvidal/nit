@@ -257,7 +257,7 @@ redef class AAttrAssignExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var ret = super(vm, old_block)
-#		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
 		return ret
 	end
 end
@@ -793,6 +793,10 @@ redef class MMethodDef
 				pstats.inc("cast_sites")
 			else if site isa MOReadSite then
 				pstats.inc("attr_read_sites")
+				if site.expr_recv.is_pre then pstats.inc("preexist_attr")
+			else if site isa MOWriteSite then
+				pstats.inc("attr_write_sites")
+				if site.expr_recv.is_pre then pstats.inc("preexist_attr")
 			else
 				abort
 			end
