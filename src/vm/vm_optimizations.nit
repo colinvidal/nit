@@ -135,13 +135,6 @@ redef class AAttrFormExpr
 			status = 2
 		end
 	end
-	
-	redef fun generate_basicBlocks(vm, old_block)
-	do
-		var ret = super(vm, old_block)
-		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
-		return ret
-	end
 
 	# Compile this attribute access from ast to mo
 	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
@@ -205,10 +198,7 @@ redef class AAttrExpr
 		return i
 	end
 
-	redef fun ast2mo
-	do
-		return moattrsite.as(nullable MOReadSite)
-	end
+	redef fun ast2mo do return moattrsite.as(nullable MOReadSite)
 
 	redef fun make_mo(vm, recv, lp)
 	do
@@ -216,6 +206,13 @@ redef class AAttrExpr
 		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
 		return moattr
+	end
+
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		var ret = super(vm, old_block)
+		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		return ret
 	end
 end
 
@@ -255,6 +252,13 @@ redef class AAttrAssignExpr
 		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
 		return moattr
+	end
+
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		var ret = super(vm, old_block)
+#		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		return ret
 	end
 end
 
