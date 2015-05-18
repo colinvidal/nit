@@ -135,6 +135,9 @@ redef class AAttrFormExpr
 end
 
 redef class AAttrExpr
+	# Link to the attribute access in MO
+	var moreadsite: nullable MOReadSite
+
 	redef fun expr(v)
 	do
 		# TODO : a workaround for now
@@ -168,6 +171,45 @@ redef class AAttrExpr
 
 		return i
 	end
+
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		var ret = super(vm, old_block)
+		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		return ret
+	end
+
+	redef fun ast2mo
+	do
+		return moreadsite
+	end
+
+	# Compile this attribute access from ast to mo
+	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	do
+		var ignore = false
+		
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			# Ignore litterals cases of the analysis
+			ignore = true
+			pstats.inc("lits")
+		else if n_expr.mtype.is_primitive_type then
+			# Ignore primitives cases of the analysis
+			ignore = true
+			pstats.inc("primitive_sites")
+		end
+
+		var recv = n_expr.ast2mo
+
+		if recv != null and not ignore then
+			moreadsite = new MOReadSite(recv, lp)
+			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+			recv_class.set_site_pattern(moreadsite.as(not null), recv_class.mclass_type, mproperty.as(not null))
+			lp.mosites.add(moreadsite.as(not null))
+			
+		end
+	end
+
 end
 
 redef class AAttrAssignExpr
@@ -480,8 +522,11 @@ redef class AMethPropdef
 	# Null if this fuction is a procedure
 	var mo_dep_exprs: nullable MOVar = null
 
-	# List of callsite inside the methode to compile from ast to momodel
+	# List of callsite inside the method to compile from ast to momodel
 	var callsites_to_compile = new List[ASendExpr]
+
+	# List of attr site inside the method to compile from ast to momodel
+	var attr_to_compile = new List[AAttrExpr]
 
 	redef fun generate_basicBlocks(vm)
 	do
@@ -509,6 +554,7 @@ redef class AMethPropdef
 
 		# Generate MO for sites inside the propdef
 		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
+		for attrexpr in attr_to_compile do attrexpr.compile_ast(vm, mpropdef.as(not null))
 	end
 end
 
@@ -724,8 +770,12 @@ redef class MMethodDef
 
 			if site isa MOCallSite then
 				pstats.inc("call_sites")
-			else # A read site
+			else if site isa MOSubtypeSite then
+				pstats.inc("cast_sites")
+			else if site isa MOReadSite then
 				pstats.inc("attr_read_sites")
+			else
+				abort
 			end
 
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
