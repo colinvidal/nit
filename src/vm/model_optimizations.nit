@@ -498,7 +498,7 @@ class MOWriteSite
 	redef type P: MOWriteSitePattern
 
 	# Value to assign to the attribute
-	var arg: MOExpr
+#	var arg: MOExpr
 end
 
 # Root of type implementation (sst, ph, static)
