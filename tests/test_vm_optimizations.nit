@@ -27,7 +27,7 @@ do
 	end
 end
 
-fun retA(p: A, branch: Bool): A
+fun retA(p: A, branch: Bool): A # fixit
 do
 	if branch then
 		return p
@@ -35,6 +35,16 @@ do
 		return new A
 	end
 end
+
+fun retAbis(branch: Bool, p: A): A # fixit
+do
+	if branch then
+		return p
+	else
+		return new A
+	end
+end
+
 
 fun foo do 2.faz
 fun bar(i: Int) do i.faz
@@ -83,3 +93,4 @@ var b = new B
 b.foo
 
 retA(a,true)
+retAbis(true,a)
