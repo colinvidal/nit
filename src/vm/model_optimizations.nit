@@ -612,6 +612,14 @@ redef class MClass
 		var pattern: nullable MOPropSitePattern = null
 
 		for p in sites_patterns do
+			if p isa MOCallSitePattern and not site isa MOCallSite then
+				continue
+			else if p isa MOReadSitePattern and not site isa MOReadSite then
+				continue
+			else if p isa MOWriteSitePattern and not site isa MOWriteSite then
+				continue
+			end
+
 			if p.gp == gp and p.rst == rst then
 				pattern = p
 				break
