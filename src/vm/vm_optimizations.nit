@@ -393,11 +393,11 @@ redef class Variable
 			else if node isa AVarExpr then
 				# A variable read
 				if node.variable.parameter then
-					movar = new MOParam(node.variable.position + 1)
+					movar = new MOParam(node.variable.position)
 				else if node.variable.dep_exprs.length == 1 then
 					var mo = node.variable.dep_exprs.first.ast2mo
-					if mo != null then movar = new MOSSAVar(node.variable.position + 1, mo)
-				else
+					if mo != null then movar = new MOSSAVar(node.variable.position, mo)
+				else if node.variable.dep_exprs.length > 1 then
 					var phi = new List[MOExpr]
 					for a_expr in node.variable.dep_exprs do 
 						var mo = a_expr.ast2mo
@@ -405,9 +405,9 @@ redef class Variable
 					end
 
 					if phi.length == 1 then
-						movar = new MOSSAVar(node.variable.position + 1, phi.first)
-					else
-						movar = new MOPhiVar(node.variable.position + 1, phi)
+						movar = new MOSSAVar(node.variable.position, phi.first)
+					else if phi.length > 1 then
+						movar = new MOPhiVar(node.variable.position, phi)
 						trace("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
 					end
 				end
@@ -494,6 +494,7 @@ redef class AMethPropdef
 	do
 		super(vm)
 
+		# Generate MO for return of the propdef
 		if returnvar.dep_exprs.length == 1 then
 			var moexpr = returnvar.dep_exprs.first.ast2mo
 			if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
@@ -506,13 +507,14 @@ redef class AMethPropdef
 
 			if deps.length == 1 then
 				mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
-			else
+			else if deps.length > 1 then
 				mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
 			end
 		end
 
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
+		# Generate MO for sites inside the propdef
 		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
 	end
 end
@@ -929,6 +931,7 @@ redef class MOPhiVar
 		if is_pre_unknown then
 			preexist_expr_value = pmask_PVAL_PER
 			for dep in dependencies do
+				dep.preexist_expr
 				merge_preexistence(dep)
 				if is_npre_per then
 					break

@@ -162,7 +162,7 @@ abstract class MOPropSitePattern
 	# Determine an implementation with pic/rst
 	redef fun compute_impl(vm)
 	do
-		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
+		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
@@ -428,7 +428,7 @@ abstract class MOPropSite
 	redef fun compute_impl(vm)
 	do
 		var gp = pattern.gp
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
@@ -658,6 +658,7 @@ redef class MType
 		if self.to_s == "nullable String" then return true
 		if self.to_s == "Char" then return true
 		if self.to_s == "nullable Char" then return true
+		if self.to_s == "Bool" then return true
 		return false
 	end
 
