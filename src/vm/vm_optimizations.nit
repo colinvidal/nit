@@ -778,6 +778,16 @@ redef class MMethodDef
 				abort
 			end
 
+			if site.get_impl(vm) isa StaticImpl then
+				pstats.inc("impl_static")
+			else if site.get_impl(vm) isa SSTImpl then
+				pstats.inc("impl_sst")
+			else if site.get_impl(vm) isa PHImpl then
+				pstats.inc("impl_ph")
+			else
+				abort
+			end
+
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
 		
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
@@ -1181,6 +1191,9 @@ redef class ModelBuilder
 			for propdef in prop.mpropdefs do
 				if propdef isa MMethodDef and propdef.compiled then
 					for site in propdef.mosites do
+						# Force to recompile the site (set the better allowed optimization)
+						site.expr_recv.preexist_expr
+
 						# Actually, we MUST use get_impl, but it needs to have vm as argument
 						if site.impl isa StaticImpl and site.expr_recv.is_pre then
 							preexist_static += 1
