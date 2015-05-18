@@ -739,6 +739,9 @@ class MOStats
 		map["loaded_new"] = 0
 		map["unloaded_new"] = 0
 		map["ast_new"] = 0
+		map["impl_static"] = 0
+		map["impl_sst"] = 0
+		map["impl_ph"] = 0
 		map["call_sites"] = 0
 		map["cast_sites"] = 0
 		map["attr_read_sites"] = 0

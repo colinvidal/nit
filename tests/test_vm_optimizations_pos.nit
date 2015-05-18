@@ -47,9 +47,14 @@ do
 	end
 
 	x.foo
+
+	var y = new Y
+	y.foo
 end
 
+test_pos
 var baz = new Y
 baz.foo
 
-test_pos
+var x = new X
+x.foo
