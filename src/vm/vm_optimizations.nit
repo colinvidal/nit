@@ -375,6 +375,7 @@ redef class AIsaExpr
 	
 	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
+		print("AIsaExpr compile_ast")
 		var ignore = false
 		
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
@@ -389,7 +390,6 @@ redef class AIsaExpr
 
 		var recv = n_expr.ast2mo
 
-		print("AIsaExpr compile_ast")
 		if recv != null and not ignore then
 			var moattr = new MOSubtypeSite(recv, lp, cast_type.as(not null))
 			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
