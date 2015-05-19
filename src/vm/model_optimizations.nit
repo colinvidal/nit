@@ -762,6 +762,7 @@ class MOStats
 		map["preexist_static"] = 0
 
 		map["attr"] = 0
+		map["attr_self"] = 0
 		map["attr_read"] = 0
 		map["attr_write"] = 0
 		map["attr_preexist"] = 0

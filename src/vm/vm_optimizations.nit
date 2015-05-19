@@ -42,7 +42,7 @@ redef class VirtualMachine
 		next_receivers.push(args.first.mtype)
 #		trace("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
-		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
+		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self, args.first)
 		next_receivers.pop
 		return ret
 	end
@@ -811,7 +811,7 @@ redef class MMethodDef
 	# The VM can't interpret FFI code, so intern/extern methods are not analysed,
 	# and a expression using a receiver from intern/extern method is preexistent.
 	#
-	fun preexist_all(vm: VirtualMachine)
+	fun preexist_all(vm: VirtualMachine, recv: Instance)
 	do
 		if compiled or is_intern or is_extern then return
 		compiled = true
@@ -866,6 +866,8 @@ redef class MMethodDef
 
 			# attr_*
 			if site isa MOAttrSite then
+				if site.expr_recv == recv then pstats.inc("attr_self")
+
 				if impl isa SSTImpl then
 					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
 					pstats.inc("impl_sst")
