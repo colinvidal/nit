@@ -859,7 +859,7 @@ redef class MMethodDef
 
 			# attr_*
 			if site isa MOAttrSite then
-				if site.expr_recv == recv then pstats.inc("attr_self")
+#				if site.expr_recv.pattern.rst == recv then pstats.inc("attr_self")
 
 				if impl isa SSTImpl then
 					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
