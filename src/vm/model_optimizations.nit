@@ -115,6 +115,9 @@ class MOSubtypeSitePattern
 
 	redef type S: MOSubtypeSite
 
+	# Static type of the target
+	var target: MType
+
 	redef fun add_site(site) do sites.add(site)
 
 	# For now, subtype test are not optimized at all
@@ -602,8 +605,7 @@ redef class MClass
 	# Create (if not exists) and set a pattern for object subtype sites
 	fun set_subtype_pattern(site: MOSubtypeSite, rst: MType)
 	do
-		# TODO
-		abort
+		print("set_subtype_pattern {site} rst:{rst} to:{site.target}")
 	end
 
 	# Create (if not exists) and set a pattern for objet prop sites
@@ -744,24 +746,47 @@ class MOStats
 		map["loaded_classes_explicits"] = 0
 		map["loaded_classes_implicits"] = 0
 		map["loaded_classes_abstracts"] = 0
-		map["loaded_new"] = 0
-		map["unloaded_new"] = 0
 		map["ast_new"] = 0
+		
 		map["impl_static"] = 0
 		map["impl_sst"] = 0
 		map["impl_ph"] = 0
-		map["call_sites"] = 0
-		map["cast_sites"] = 0
-		map["attr_read_sites"] = 0
-		map["attr_write_sites"] = 0
+		map["concretes_receivers_sites"] = 0
+		
 		map["primitive_sites"] = 0
 		map["nyi"] = 0
-		map["concretes_receivers_sites"] = 0
 		map["lits"] = 0
+
 		map["preexist"] = 0
 		map["npreexist"] = 0
 		map["preexist_static"] = 0
-		map["preexist_attr"] = 0
+
+		map["attr"] = 0
+		map["attr_read"] = 0
+		map["attr_write"] = 0
+		map["attr_preexist"] = 0
+		map["attr_npreexist"] = 0
+		map["attr_preexist_sst"] = 0
+		map["attr_npreexist_sst"] = 0
+		map["attr_ph"] = 0
+
+		map["cast"] = 0
+		map["cast_preexist"] = 0
+		map["cast_npreexist"] = 0
+		map["cast_preexist_static"] = 0
+		map["cast_npreexist_static"] = 0
+		map["cast_preexist_sst"] = 0
+		map["cast_npreexist_sst"] = 0
+		map["cast_ph"] = 0
+
+		map["meth"] = 0
+		map["meth_preexist"] = 0
+		map["meth_npreexist"] = 0
+		map["meth_preexist_static"] = 0
+		map["meth_npreexist_static"] = 0
+		map["meth_preexist_sst"] = 0
+		map["meth_npreexist_sst"] = 0
+		map["meth_ph"] = 0
 	end
 end
 
