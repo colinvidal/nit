@@ -99,6 +99,8 @@ redef class VirtualMachine
 end
 
 redef class AAttrFormExpr
+	super AToCompile
+
 	# Position of the attribute in attribute table
 	#
 	# The relative position of this attribute if perfect hashing is used,
@@ -137,7 +139,7 @@ redef class AAttrFormExpr
 	end
 
 	# Compile this attribute access from ast to mo
-	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
 		var ignore = false
 		
@@ -211,7 +213,7 @@ redef class AAttrExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var ret = super(vm, old_block)
-		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
 		return ret
 	end
 end
@@ -257,7 +259,7 @@ redef class AAttrAssignExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var ret = super(vm, old_block)
-		vm.current_propdef.as(AMethPropdef).attr_to_compile.add(self)
+		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
 		return ret
 	end
 end
@@ -299,6 +301,8 @@ redef class CallSite
 end
 
 redef class AIsaExpr
+	super AToCompile
+
 	# Identifier of the target class type
 	var id: Int
 
@@ -364,9 +368,43 @@ redef class AIsaExpr
 		# end
 		id = target.mclass.vtable.id
 	end
+
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		var ret = super(vm, old_block)
+		print("AIsaExpr generate_basicBlocks")
+		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
+		return ret
+	end
+	
+	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	do
+		var ignore = false
+		
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			# Ignore litterals cases of the analysis
+			ignore = true
+			pstats.inc("lits")
+		else if n_expr.mtype.is_primitive_type then
+			# Ignore primitives cases of the analysis
+			ignore = true
+			pstats.inc("primitive_sites")
+		end
+
+		var recv = n_expr.ast2mo
+
+		print("AIsaExpr compile_ast")
+		if recv != null and not ignore then
+			var moattr = new MOSubtypeSite(recv, lp, cast_type.as(not null))
+			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
+		end
+	end
 end
 
 redef class AAsCastExpr
+#	super AToCompile
+
 	# Identifier of the target class type
 	var id: Int
 
@@ -439,6 +477,36 @@ redef class AAsCastExpr
 		# end
 		id = target.mclass.vtable.id
 	end
+	
+#	redef fun generate_basicBlocks(vm, old_block)
+#	do
+#		var ret = super(vm, old_block)
+#		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
+#		return ret
+#	end
+#
+#	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+#	do
+#		var ignore = false
+#		
+#		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+#			# Ignore litterals cases of the analysis
+#			ignore = true
+#			pstats.inc("lits")
+#		else if n_expr.mtype.is_primitive_type then
+#			# Ignore primitives cases of the analysis
+#			ignore = true
+#			pstats.inc("primitive_sites")
+#		end
+#
+#		var recv = n_expr.ast2mo
+#
+#		if recv != null and not ignore then
+#			var moattr = new MOSubtypeSite(recv, lp, n_type.mtype.as(not null))
+#			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+#			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
+#		end
+#	end
 end
 
 redef class Variable
@@ -543,16 +611,19 @@ redef class AVarExpr
 	end
 end
 
+# Common call to all AST node that must be compiled into MO node
+class AToCompile
+	# Compile the AST to into a MO node
+	fun compile_ast(vm: VirtualMachine, lp: MMethodDef) is abstract
+end
+
 redef class AMethPropdef
 	# list of return expression of the optimizing model
 	# Null if this fuction is a procedure
 	var mo_dep_exprs: nullable MOVar = null
 
-	# List of callsite inside the method to compile from ast to momodel
-	var callsites_to_compile = new List[ASendExpr]
-
-	# List of attr site inside the method to compile from ast to momodel
-	var attr_to_compile = new List[AAttrFormExpr]
+	# List of ast node to compile
+	var to_compile = new List[AToCompile]
 
 	redef fun generate_basicBlocks(vm)
 	do
@@ -579,19 +650,20 @@ redef class AMethPropdef
 		mpropdef.as(not null).return_expr = mo_dep_exprs
 
 		# Generate MO for sites inside the propdef
-		for sendexpr in callsites_to_compile do	sendexpr.compile_ast(vm, mpropdef.as(not null))
-		for attrexpr in attr_to_compile do attrexpr.compile_ast(vm, mpropdef.as(not null))
+		for expr in to_compile do expr.compile_ast(vm, mpropdef.as(not null))
 	end
 end
 
 redef class ASendExpr
+	super AToCompile
+
 	# Site invocation associated with this node
 	var mocallsite: nullable MOCallSite
 	
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		vm.current_propdef.as(AMethPropdef).callsites_to_compile.add(self)
+		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
 		return sup
 	end
 
@@ -601,7 +673,7 @@ redef class ASendExpr
 	end
 
 	# Compile this ast node in MOCallSite after SSA
-	fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
 		var ignore = false
 		
@@ -762,11 +834,6 @@ redef class MMethodDef
 				preexist = newexpr.preexist_expr
 				fill_nper(newexpr)
 				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {preexist} {preexist.preexists_bits}")
-				if newexpr.pattern.is_loaded then
-					pstats.inc("loaded_new")
-				else
-					pstats.inc("unloaded_new")
-				end
 			end
 		end
 
@@ -774,6 +841,9 @@ redef class MMethodDef
 			assert not site.pattern.rst.is_primitive_type
 
 			preexist = site.preexist_site
+			var is_pre = site.expr_recv.is_pre
+			var impl = site.get_impl(vm)
+
 			var buff = "\tpreexist of "
 
 			if site isa MOSubtypeSite then
@@ -794,38 +864,81 @@ redef class MMethodDef
 				pstats.inc("npreexist")
 			end
 
+			# attr_*
+			if site isa MOAttrSite then
+				if impl isa SSTImpl then
+					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
+					pstats.inc("impl_sst")
+				else if impl isa PHImpl then 
+					pstats.inc("attr_ph")
+					pstats.inc("impl_ph")
+				else
+					abort
+				end
+
+				if site isa MOReadSite then
+					pstats.inc("attr_read")
+				else
+					pstats.inc("attr_write")
+				end
+
+				pstats.inc("attr")
+				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
+			end
+
+			# cast_*
+			if site isa MOSubtypeSite then
+				if impl isa StaticImpl then
+					incr_specific_counters(is_pre, "cast_preexist_static", "cast_npreexist_static")
+					pstats.inc("impl_static")
+				else if impl isa SSTImpl then
+					incr_specific_counters(is_pre, "cast_preexist_sst", "cast_npreexist_sst")
+					pstats.inc("impl_sst")
+				else
+					pstats.inc("cast_ph")
+					pstats.inc("impl_ph")
+				end
+
+				pstats.inc("cast")
+				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
+			end
+
+			# meth_*
 			if site isa MOCallSite then
-				pstats.inc("call_sites")
-			else if site isa MOSubtypeSite then
-				pstats.inc("cast_sites")
-			else if site isa MOReadSite then
-				pstats.inc("attr_read_sites")
-				if site.expr_recv.is_pre then pstats.inc("preexist_attr")
-			else if site isa MOWriteSite then
-				pstats.inc("attr_write_sites")
-				if site.expr_recv.is_pre then pstats.inc("preexist_attr")
-			else
-				abort
+				if impl isa StaticImpl then
+					incr_specific_counters(is_pre, "meth_preexist_static", "meth_npreexist_static")
+					pstats.inc("impl_static")
+				else if impl isa SSTImpl then
+					incr_specific_counters(is_pre, "meth_preexist_sst", "meth_npreexist_sst")
+					pstats.inc("impl_sst")
+				else
+					pstats.inc("meth_ph")
+					pstats.inc("impl_ph")
+				end
+
+				pstats.inc("meth")
+				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
 			end
 
-			if site.get_impl(vm) isa StaticImpl then
-				pstats.inc("impl_static")
-			else if site.get_impl(vm) isa SSTImpl then
-				pstats.inc("impl_sst")
-			else if site.get_impl(vm) isa PHImpl then
-				pstats.inc("impl_ph")
-			else
-				abort
-			end
-
+			# concretes_receivers_sites
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
 		
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
-			trace("\t\t{site.get_impl(vm)} {site.get_impl(vm).is_mutable}")
+			trace("\t\t{impl} {impl.is_mutable}")
 		end
 
 		if exprs_preexist_mut.length > 0 then trace("\tmutables pre: {exprs_preexist_mut}")
 		if exprs_npreexist_mut.length > 0 then trace("\tmutables nper: {exprs_npreexist_mut}")
+	end
+
+	# Avoid to write same thing everytimes in the previous function
+	private fun incr_specific_counters(is_pre: Bool, yes: String, no: String)
+	do
+		if is_pre then
+			pstats.inc(yes)
+		else
+			pstats.inc(no)
+		end
 	end
 end
 

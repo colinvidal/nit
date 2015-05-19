@@ -94,3 +94,15 @@ b.foo
 
 retA(a,true)
 retAbis(true,a)
+
+var ac: A
+if 1 == 2 then
+	ac = new A
+else
+	ac = new C
+end
+
+if ac isa C then
+	var aaaa = new A
+	aaaa.foo
+end
