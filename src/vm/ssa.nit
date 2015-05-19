@@ -916,6 +916,9 @@ redef class AIfExpr
 		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
 
+		# Visit the test of the if
+		self.n_expr.generate_basicBlocks(vm, old_block)
+
 		# Launch the recursion in two successors if they exist
 		if self.n_then != null then
 			old_block.link(block_then)
@@ -960,6 +963,9 @@ redef class AIfexprExpr
 
 		# We start two new blocks if the if has two branches
 		var block_then = new BasicBlock
+
+		# Visit the test of the if
+		self.n_expr.generate_basicBlocks(vm, old_block)
 
 		# Launch the recursion in two successors if they exist
 		old_block.link(block_then)
@@ -1080,6 +1086,9 @@ redef class AForExpr
 		var block = new BasicBlock
 		block.first = self.n_expr
 		block.last = self.n_block.as(not null)
+
+		# Visit the test of the if
+		self.n_expr.generate_basicBlocks(vm, block)
 
 		# Collect the variables declared in the for
 		for v in variables do
