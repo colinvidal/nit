@@ -402,7 +402,7 @@ redef class AIsaExpr
 end
 
 redef class AAsCastExpr
-#	super AToCompile
+	super AToCompile
 
 	# Identifier of the target class type
 	var id: Int
@@ -477,35 +477,35 @@ redef class AAsCastExpr
 		id = target.mclass.vtable.id
 	end
 	
-#	redef fun generate_basicBlocks(vm, old_block)
-#	do
-#		var ret = super(vm, old_block)
-#		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
-#		return ret
-#	end
-#
-#	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
-#	do
-#		var ignore = false
-#		
-#		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-#			# Ignore litterals cases of the analysis
-#			ignore = true
-#			pstats.inc("lits")
-#		else if n_expr.mtype.is_primitive_type then
-#			# Ignore primitives cases of the analysis
-#			ignore = true
-#			pstats.inc("primitive_sites")
-#		end
-#
-#		var recv = n_expr.ast2mo
-#
-#		if recv != null and not ignore then
-#			var moattr = new MOSubtypeSite(recv, lp, n_type.mtype.as(not null))
-#			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-#			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
-#		end
-#	end
+	redef fun generate_basicBlocks(vm, old_block)
+	do
+		var ret = super(vm, old_block)
+		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
+		return ret
+	end
+
+	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	do
+		var ignore = false
+		
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			# Ignore litterals cases of the analysis
+			ignore = true
+			pstats.inc("lits")
+		else if n_expr.mtype.is_primitive_type then
+			# Ignore primitives cases of the analysis
+			ignore = true
+			pstats.inc("primitive_sites")
+		end
+
+		var recv = n_expr.ast2mo
+
+		if recv != null and not ignore then
+			var moattr = new MOSubtypeSite(recv, lp, n_type.mtype.as(not null))
+			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
+		end
+	end
 end
 
 redef class Variable
