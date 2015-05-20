@@ -368,14 +368,12 @@ redef class AIsaExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var ret = super(vm, old_block)
-		print("AIsaExpr generate_basicBlocks")
 		vm.current_propdef.as(AMethPropdef).to_compile.add(self)
 		return ret
 	end
 	
 	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
-		print("AIsaExpr compile_ast")
 		var ignore = false
 		
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
@@ -391,9 +389,10 @@ redef class AIsaExpr
 		var recv = n_expr.ast2mo
 
 		if recv != null and not ignore then
-			var moattr = new MOSubtypeSite(recv, lp, cast_type.as(not null))
+			var most = new MOSubtypeSite(recv, lp, cast_type.as(not null))
 			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
+			recv_class.set_subtype_pattern(most, recv_class.mclass_type)
+			lp.mosites.add(most)
 		end
 	end
 end

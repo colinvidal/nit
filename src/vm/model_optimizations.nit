@@ -118,10 +118,26 @@ class MOSubtypeSitePattern
 	# Static type of the target
 	var target: MType
 
-	redef fun add_site(site) do sites.add(site)
+	redef fun add_site(site) do
+		assert not sites.has(site)
+
+		sites.add(site)
+		site.pattern = self
+	end
 
 	# For now, subtype test are not optimized at all
-	redef fun compute_impl(vm) do impl = new PHImpl(false, rst.get_mclass(vm).color)
+	# WARNING: must be checked
+	redef fun compute_impl(vm)
+	do 
+		var pos_cls = rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
+		
+		if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls)
+		else
+			impl = new PHImpl(false, rst.get_mclass(vm).color)
+		end
+	end
+
 end
 
 # Pattern of properties sites (method call / attribute access)
@@ -165,6 +181,11 @@ abstract class MOPropSitePattern
 	# Determine an implementation with pic/rst
 	redef fun compute_impl(vm)
 	do
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
 		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
@@ -172,7 +193,7 @@ abstract class MOPropSitePattern
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
-			impl = new StaticImpl(true, lps.first)
+			impl = new StaticImplProp(true, lps.first)
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
@@ -447,8 +468,27 @@ class MOSubtypeSite
 	# Static type on which the test is applied
 	var target: MType
 
-	# We don't optimize at all the subtype test for now
-	redef fun get_impl(vm) do return pattern.get_impl(vm)
+	# WARNING: must be checked
+	redef fun compute_impl(vm)
+	do
+		impl = new StaticImplSubtype(true,
+		vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
+		pattern.rst.get_mclass(vm).vtable.mask,
+		pattern.rst.get_mclass(vm).vtable.internal_vtable))
+	end
+
+	redef fun get_impl(vm)
+	do
+		# We must be sure that the target class is loaded to make a static impl
+		var target_cls = target.get_mclass(vm)
+
+		if get_concretes.length == 0 and target_cls != null and target_cls.loaded then
+			compute_impl(vm)
+			return impl.as(not null)
+		else
+			return pattern.get_impl(vm)
+		end
+	end
 end
 
 # MO of global properties sites
@@ -460,6 +500,14 @@ abstract class MOPropSite
 	redef fun compute_impl(vm)
 	do
 		var gp = pattern.gp
+
+		if not pattern.rst.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
 		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
@@ -467,17 +515,11 @@ abstract class MOPropSite
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
-			if cls.loaded then
-				impl = new StaticImpl(true,
-				vm.method_dispatch_ph(cls.vtable.internal_vtable,
-				cls.vtable.mask,
-				gp.intro_mclassdef.mclass.vtable.id, 
-				gp.offset))
-			else
-				# The PHImpl here is mutable because it can be switch to a 
-				# lightweight implementation when the class will be loaded
-				impl = new PHImpl(true, gp.offset)
-			end
+			impl = new StaticImplProp(true,
+			vm.method_dispatch_ph(cls.vtable.internal_vtable,
+			cls.vtable.mask,
+			gp.intro_mclassdef.mclass.vtable.id, 
+			gp.offset))
 		else if unique_meth_pos_concrete then
 			# SST immutable because it can't be more than these concretes receiver statically
 			impl = new SSTImpl(false, pos_cls + gp.offset)
@@ -557,12 +599,25 @@ class PHImpl
 	super ObjectImpl
 end
 
-# Static implementation (used only for method call)
-class StaticImpl
+# Common class for static implementation between subtypes, attr, meth.
+abstract class StaticImpl
 	super Implementation
+end
+
+# Static implementation (used only for method call)
+class StaticImplProp
+	super StaticImpl
 
 	# The called lp
 	var lp: MPropDef
+end
+
+# Static implementation (used only for subtype tests)
+class StaticImplSubtype
+	super StaticImpl
+
+	# Is subtype ?
+	var is_subtype: Bool
 end
 
 redef class MClass
@@ -636,7 +691,21 @@ redef class MClass
 	# Create (if not exists) and set a pattern for object subtype sites
 	fun set_subtype_pattern(site: MOSubtypeSite, rst: MType)
 	do
-		print("set_subtype_pattern {site} rst:{rst} to:{site.target}")
+		var pattern: nullable MOSubtypeSitePattern = null
+
+		for p in subtype_pattern do
+			if p.rst == rst and p.target == site.target then
+				pattern = p
+				break
+			end
+		end
+
+		if pattern == null then
+			pattern = new MOSubtypeSitePattern(rst, site.target)
+			subtype_pattern.add(pattern)
+		end
+
+		pattern.add_site(site)
 	end
 
 	# Create (if not exists) and set a pattern for objet prop sites
