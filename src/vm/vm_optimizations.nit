@@ -700,19 +700,20 @@ redef class ASendExpr
 			var impl_node = vm.modelbuilder.mpropdef2node(cs.mpropdef)
 			if impl_node isa AAttrPropdef then
 				var params_len = cs.msignature.mparameters.length
+				var moattr: MOAttrSite
 
 				if params_len == 0 then
 					# The node is a MOReadSite
-					var moattr = new MOReadSite(recv, lp)
-					var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-					recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+					moattr = new MOReadSite(recv, lp)
 				else
 					# The node is a MOWriteSite
 					assert params_len == 1
-					var moattr = new MOWriteSite(recv, lp)
-					var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-					recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+					moattr = new MOWriteSite(recv, lp)
 				end
+
+				var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+				recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+				lp.mosites.add(moattr)	
 			else
 				# Here, we are sure that the property of the callsite is a real method call
 
@@ -902,8 +903,10 @@ redef class MMethodDef
 				else if impl isa PHImpl then 
 					pstats.inc("attr_ph")
 					pstats.inc("impl_ph")
-				else
-					abort
+				else 
+					# Specific case of the accessors statics
+					pstats.inc("attr_accessors")
+					incr_specific_counters(is_pre, "attr_preexist_accessors", "attr_npreexist_accessors")
 				end
 
 				if site isa MOReadSite then
