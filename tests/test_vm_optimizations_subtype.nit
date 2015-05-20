@@ -23,3 +23,6 @@ if a isa C then a.foo
 if a isa C then
 	a.foo
 end
+
+
+a.as(C).foo

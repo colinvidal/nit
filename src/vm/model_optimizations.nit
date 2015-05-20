@@ -693,6 +693,8 @@ redef class MClass
 	do
 		var pattern: nullable MOSubtypeSitePattern = null
 
+		print("set_subtype_pattern {rst} {site.target}")
+
 		for p in subtype_pattern do
 			if p.rst == rst and p.target == site.target then
 				pattern = p
