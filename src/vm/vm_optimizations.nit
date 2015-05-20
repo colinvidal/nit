@@ -384,7 +384,7 @@ redef class AIsaExpr
 			# Ignore litterals cases of the analysis
 			ignore = true
 			pstats.inc("lits")
-		else if n_expr.mtype.is_primitive_type then
+		else if n_expr.mtype.get_mclass(vm).mclass_type.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
 			pstats.inc("primitive_sites")
@@ -496,6 +496,11 @@ redef class AAsCastExpr
 			# Ignore primitives cases of the analysis
 			ignore = true
 			pstats.inc("primitive_sites")
+		else if n_type.mtype.get_mclass(vm).mclass_type.is_primitive_type then
+			ignore = true
+			pstats.inc("primitive_sites")
+			# Sometimes, the cast come from a generic RST that is not resolve,
+			# so, if the model allow a cast to a primitive type, the receiver have a primitive type
 		end
 
 		var recv = n_expr.ast2mo
