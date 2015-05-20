@@ -187,13 +187,20 @@ abstract class MOPropSitePattern
 		end
 
 		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
+#		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImplProp(true, lps.first)
+			
+			var node = vm.modelbuilder.mpropdef2node(impl.as(StaticImplProp).lp)
+#			print("NODE MODEL MPROP {impl.as(StaticImplProp).lp.mproperty} {impl.as(StaticImplProp).lp.mproperty.class_name}")
+#			print("NODE MODEL MPROPDEF {impl.as(StaticImplProp).lp} {impl.as(StaticImplProp).lp.class_name}")
+#			print("NODE AST MPROPDEF {node.as(APropdef).mpropdef.name} : {node.as(not null)}")
+#			node.as(not null).dump_tree
+
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
@@ -509,7 +516,7 @@ abstract class MOPropSite
 		end
 
 		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
+#		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
