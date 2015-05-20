@@ -195,12 +195,11 @@ abstract class MOPropSitePattern
 			# The method is an intro or a redef
 			impl = new StaticImplProp(true, lps.first)
 			
-			var node = vm.modelbuilder.mpropdef2node(impl.as(StaticImplProp).lp)
+#			var node = vm.modelbuilder.mpropdef2node(impl.as(StaticImplProp).lp)
 #			print("NODE MODEL MPROP {impl.as(StaticImplProp).lp.mproperty} {impl.as(StaticImplProp).lp.mproperty.class_name}")
 #			print("NODE MODEL MPROPDEF {impl.as(StaticImplProp).lp} {impl.as(StaticImplProp).lp.class_name}")
 #			print("NODE AST MPROPDEF {node.as(APropdef).mpropdef.name} : {node.as(not null)}")
 #			node.as(not null).dump_tree
-
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
@@ -236,9 +235,12 @@ end
 abstract class MOAttrPattern
 	super MOPropSitePattern
 
-	redef type GP: MAttribute
+	# Because the AST gives callsites with MMethod and MMethodDef for accessors,
+	# we can't down the bound to MAttribute/MAttributeDef...
 
-	redef type LP: MAttributeDef
+#	redef type GP: MAttribute
+
+#	redef type LP: MAttributeDef
 end
 
 # Pattern of read attribute
@@ -277,7 +279,8 @@ redef class MMethod
 end
 
 redef class MMethodDef
-	redef type P: MOCallSitePattern
+	# See MOAttrPattern, same problem...
+#	redef type P: MOCallSitePattern
 
 	# Tell if the method has been compiled at least one time (not in MMethodDef because attribute can have blocks)
 	var compiled = false is writable
@@ -739,9 +742,9 @@ redef class MClass
 			if site isa MOCallSite then
 				pattern = new MOCallSitePattern(rst, gp.as(MMethod))
 			else if site isa MOReadSite then
-				pattern = new MOReadSitePattern(rst, gp.as(MAttribute))
+				pattern = new MOReadSitePattern(rst, gp)
 			else if site isa MOWriteSite then
-				pattern = new MOWriteSitePattern(rst, gp.as(MAttribute))
+				pattern = new MOWriteSitePattern(rst, gp)
 			else
 				abort
 			end
@@ -880,7 +883,10 @@ class MOStats
 		map["attr_npreexist"] = 0
 		map["attr_preexist_sst"] = 0
 		map["attr_npreexist_sst"] = 0
-		map["attr_ph"] = 0
+		map["attr_ph"] = 0 
+		map["attr_accessors"] = 0
+		map["attr_preexist_accessors"] = 0
+		map["attr_npreexist_accessors"] = 0
 
 		map["cast"] = 0
 		map["cast_preexist"] = 0
