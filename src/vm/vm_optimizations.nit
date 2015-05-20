@@ -689,21 +689,42 @@ redef class ASendExpr
 		if recv != null and not ignore then
 			var cs = callsite.as(not null)
 
-			# Null cases are already eliminated, to get_mclass can't return null
-			var recv_class = cs.recv.get_mclass(vm).as(not null)
+			# Static dispatch to know if the local property is an accessor
+			var impl_node = vm.modelbuilder.mpropdef2node(cs.mpropdef)
+			if impl_node isa AAttrPropdef then
+				var params_len = cs.msignature.mparameters.length
 
-			# If recv_class was a formal type, and now resolved as in primitive, we ignore it
-			if not recv_class.mclass_type.is_primitive_type  then
-				mocallsite = new MOCallSite(recv, lp)
-				var mocs = mocallsite.as(not null)
-				
-				lp.mosites.add(mocs)
-				recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
+				if params_len == 0 then
+					# The node is a MOReadSite
+					var moattr = new MOReadSite(recv, lp)
+					var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+					recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+				else
+					# The node is a MOWriteSite
+					assert params_len == 1
+					var moattr = new MOWriteSite(recv, lp)
+					var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
+					recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+				end
+			else
+				# Here, we are sure that the property of the callsite is a real method call
 
-				# Expressions arguments given to the method called
-				for arg in raw_arguments do
-					var moexpr = arg.ast2mo
-					if moexpr != null then mocallsite.given_args.add(moexpr)
+				# Null cases are already eliminated, to get_mclass can't return null
+				var recv_class = cs.recv.get_mclass(vm).as(not null)
+
+				# If recv_class was a formal type, and now resolved as in primitive, we ignore it
+				if not recv_class.mclass_type.is_primitive_type  then
+					mocallsite = new MOCallSite(recv, lp)
+					var mocs = mocallsite.as(not null)
+
+					lp.mosites.add(mocs)
+					recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
+
+					# Expressions arguments given to the method called
+					for arg in raw_arguments do
+						var moexpr = arg.ast2mo
+						if moexpr != null then mocallsite.given_args.add(moexpr)
+					end
 				end
 			end
 		end
@@ -848,13 +869,8 @@ redef class MMethodDef
 			var buff = "\tpreexist of "
 
 			if site isa MOSubtypeSite then
-				buff += "cast {site.pattern.rst} isa {site.target}"
 			else
-				buff += "site {site.pattern.rst}.{site.as(MOPropSite).pattern.gp}" 
 			end
-
-			buff += " {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}"
-			trace(buff)
 
 			fill_nper(site.expr_recv)
 
@@ -867,7 +883,11 @@ redef class MMethodDef
 
 			# attr_*
 			if site isa MOAttrSite then
-#				if site.given_args.first == ??
+				buff += "attr {site.pattern.rst}.{site.pattern.gp}" 
+
+				if site.expr_recv isa MOParam then 
+					if site.expr_recv.as(MOParam).offset == 0 then pstats.inc("attr_self")
+				end
 
 				if impl isa SSTImpl then
 					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
@@ -891,6 +911,8 @@ redef class MMethodDef
 
 			# cast_*
 			if site isa MOSubtypeSite then
+				buff += "cast {site.pattern.rst} isa {site.target}"
+				
 				if impl isa StaticImpl then
 					incr_specific_counters(is_pre, "cast_preexist_static", "cast_npreexist_static")
 					pstats.inc("impl_static")
@@ -908,6 +930,8 @@ redef class MMethodDef
 
 			# meth_*
 			if site isa MOCallSite then
+				buff += "meth {site.pattern.rst}.{site.pattern.gp}" 
+				
 				if impl isa StaticImpl then
 					incr_specific_counters(is_pre, "meth_preexist_static", "meth_npreexist_static")
 					pstats.inc("impl_static")
@@ -922,6 +946,9 @@ redef class MMethodDef
 				pstats.inc("meth")
 				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
 			end
+
+			buff += " {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}"
+			trace(buff)
 
 			# concretes_receivers_sites
 			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
