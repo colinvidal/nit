@@ -42,7 +42,7 @@ redef class VirtualMachine
 		next_receivers.push(args.first.mtype)
 #		trace("NEXT_RECEIVERS: {next_receivers}")
 		var ret = super(node, mpropdef, args)
-		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self, args.first)
+		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
 		next_receivers.pop
 		return ret
 	end
@@ -811,7 +811,7 @@ redef class MMethodDef
 	# The VM can't interpret FFI code, so intern/extern methods are not analysed,
 	# and a expression using a receiver from intern/extern method is preexistent.
 	#
-	fun preexist_all(vm: VirtualMachine, recv: Instance)
+	fun preexist_all(vm: VirtualMachine)
 	do
 		if compiled or is_intern or is_extern then return
 		compiled = true
@@ -840,6 +840,10 @@ redef class MMethodDef
 		for site in mosites do
 			assert not site.pattern.rst.is_primitive_type
 
+			if site.expr_recv.is_from_monew then pstats.inc("sites_from_new")
+			if site.expr_recv.is_from_mocallsite then pstats.inc("sites_from_meth_return")
+			if site.expr_recv.is_from_monew or site.expr_recv.is_from_mocallsite then pstats.inc("sites_handle_by_extend_preexist")
+
 			preexist = site.preexist_site
 			var is_pre = site.expr_recv.is_pre
 			var impl = site.get_impl(vm)
@@ -866,7 +870,7 @@ redef class MMethodDef
 
 			# attr_*
 			if site isa MOAttrSite then
-#				if site.expr_recv.pattern.rst == recv then pstats.inc("attr_self")
+#				if site.given_args.first == ??
 
 				if impl isa SSTImpl then
 					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")

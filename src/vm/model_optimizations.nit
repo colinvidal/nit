@@ -266,6 +266,11 @@ end
 
 # Root hierarchy of expressions
 abstract class MOExpr
+	# Tell if the expression comes from MONew
+	fun is_from_monew: Bool do return false
+
+	# Tell if the expression comes from MOCallSite (return of method)
+	fun is_from_mocallsite: Bool do return false
 end
 
 # MO of variables
@@ -298,6 +303,10 @@ class MOSSAVar
 	var dependency: MOExpr
 
 	redef fun compute_concretes(concretes) do return valid_and_add_dep(dependency, concretes)
+
+	redef fun is_from_monew do return dependency.is_from_monew
+
+	redef fun is_from_mocallsite do return dependency.is_from_mocallsite
 end
 
 # MO of variable with multiples dependencies
@@ -313,6 +322,24 @@ class MOPhiVar
 			if not valid_and_add_dep(dep, concretes) then return false
 		end
 		return true
+	end
+
+	redef fun is_from_monew
+	do
+		for dep in dependencies do
+			if dep.is_from_monew then return true
+		end
+
+		return false
+	end
+
+	redef fun is_from_mocallsite
+	do
+		for dep in dependencies do
+			if dep.is_from_mocallsite then return true
+		end
+
+		return false
 	end
 end
 
@@ -332,6 +359,8 @@ class MONew
 
 	# The pattern of this site
 	var pattern: MONewPattern is writable, noinit
+
+	redef fun is_from_monew do return true
 end
 
 # MO of literals
@@ -481,6 +510,8 @@ class MOCallSite
 
 	# Values of each arguments
 	var given_args = new List[MOExpr]
+
+	redef fun is_from_mocallsite do return true
 end
 
 # MO of read attribute
@@ -752,6 +783,10 @@ class MOStats
 		map["impl_sst"] = 0
 		map["impl_ph"] = 0
 		map["concretes_receivers_sites"] = 0
+		map["sites_from_meth_return"] = 0
+		map["sites_from_new"] = 0
+		map["sites_handle_by_extend_preexist"] = 0
+		map["sites_final"] = 0
 		
 		map["primitive_sites"] = 0
 		map["nyi"] = 0
