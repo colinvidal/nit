@@ -49,7 +49,10 @@ redef class ModelBuilder
 
 		if toolcontext.stats_on.value then 
 			print(pstats.pretty)
+			pstats.overview
 			post_exec(mainmodule)
+			pstats.overview
+			# Meh...
 		end
 	end	
 
@@ -844,6 +847,32 @@ class MOStats
 		for key, val in map do ret += "{prefix}{key}: {val}\n"
 
 		return ret
+	end
+
+	# Make text csv file contains overview statistics
+	fun overview
+	do
+		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
+
+		file.write(", meth, attr, cast, global\n")
+		
+		file.write("self, , {map["attr_self"]}, , \n")
+		file.write("pre, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}\n")
+		file.write("npre, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}\n")
+		file.write("concretes, , , , {map["concretes_receivers_sites"]}\n")
+
+		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
+		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
+		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]}\n")
+
+		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
+		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
+		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
+		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}\n")
+	
+		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}\n")
+
+		file.close
 	end
 
 	# Pretty format

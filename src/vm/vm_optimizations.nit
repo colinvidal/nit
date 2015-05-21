@@ -846,13 +846,13 @@ redef class MMethodDef
 		var preexist: Int
 
 		if not disable_preexistence_extensions then
-			if return_expr != null then
-				return_expr.preexist_expr
-				if return_expr.is_rec then return_expr.set_pval_nper
-				fill_nper(return_expr.as(not null))
-				preexist = return_expr.preexist_expr_value
-				trace("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
-			end
+#			if return_expr != null then
+#				return_expr.preexist_expr
+#				if return_expr.is_rec then return_expr.set_pval_nper
+#				fill_nper(return_expr.as(not null))
+#				preexist = return_expr.preexist_expr_value
+#				trace("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
+#			end
 
 			for newexpr in monews do
 				assert not newexpr.pattern.cls.mclass_type.is_primitive_type
@@ -1372,21 +1372,20 @@ redef class ModelBuilder
 
 		# Check if number of static callsites who preexists matches with the counter
 		var preexist_static = 0
-		for prop in mainmodule.model.mproperties do
-			for propdef in prop.mpropdefs do
-				if propdef isa MMethodDef and propdef.compiled then
-					compiled_methods.add(propdef)
 
-					for site in propdef.mosites do
-						# Force to recompile the site (set the better allowed optimization)
-						site.expr_recv.preexist_expr
+		for mprop in mainmodule.model.mproperties do
+			if not mprop isa MMethod then continue
+			for meth in mprop.mpropdefs do
+				compiled_methods.add(meth)
+				for site in meth.mosites do
+					# Force to recompile the site (set the better allowed optimization)
+					site.expr_recv.preexist_expr
 
-						# Actually, we MUST use get_impl, but it needs to have vm as argument
-						if site.impl isa StaticImpl and site.expr_recv.is_pre then
-							preexist_static += 1
-						else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
-							preexist_static += 1
-						end
+					# Actually, we MUST use get_impl, but it needs to have vm as argument
+					if site.impl isa StaticImpl and site.expr_recv.is_pre then
+						preexist_static += 1
+					else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
+						preexist_static += 1
 					end
 				end
 			end
@@ -1398,10 +1397,13 @@ redef class ModelBuilder
 
 		# Recompile all active methods to get the upper bound of the preexistance
 		# We don't need pstats counters with lower bound anymore
-		pstats = new MOStats("UPPER")
-		
-		for mmethoddef in compiled_methods do mmethoddef.preexist_all(interpreter)
+		sys.pstats = new MOStats("UPPER")
 
+		while compiled_methods.length != 0 do
+			var m = compiled_methods.pop
+			m.compiled = false
+			m.preexist_all(interpreter)
+		end
 		print(pstats.pretty)
 	end
 end
