@@ -1357,15 +1357,19 @@ redef class MClass
 end
 
 redef class ModelBuilder
-	redef fun check_counters(mainmodule)
+	redef fun post_exec(mainmodule)
 	do
-		super
+		super(mainmodule)
+
+		var compiled_methods = new List[MMethodDef]
 
 		# Check if number of static callsites who preexists matches with the counter
 		var preexist_static = 0
 		for prop in mainmodule.model.mproperties do
 			for propdef in prop.mpropdefs do
 				if propdef isa MMethodDef and propdef.compiled then
+					compiled_methods.add(propdef)
+
 					for site in propdef.mosites do
 						# Force to recompile the site (set the better allowed optimization)
 						site.expr_recv.preexist_expr
@@ -1384,5 +1388,13 @@ redef class ModelBuilder
 		if preexist_static != pstats.get("preexist_static") then
 			print("WARNING: preexist_static {pstats.get("preexist_static")} is actually {preexist_static }")
 		end
+
+		# Recompile all active methods to get the upper bound of the preexistance
+		# We don't need pstats counters with lower bound anymore
+		pstats = new MOStats("UPPER")
+		
+		for mmethoddef in compiled_methods do mmethoddef.preexist_all(interpreter)
+
+		print(pstats.pretty)
 	end
 end

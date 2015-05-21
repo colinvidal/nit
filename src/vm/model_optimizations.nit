@@ -32,8 +32,11 @@ redef class Sys
 	# Tell if preexistence extensions are disabled
 	var disable_preexistence_extensions: Bool
 
-	# Access to preexistence stats from everywhere
-	var pstats = new MOStats
+	# Preexist counters
+	var pstats = new MOStats("LOWER") is writable
+
+	# Preexist counters (withs transitions)
+	var pstats_trans = new MOStats("REGULAR")
 end
 
 redef class ModelBuilder
@@ -46,12 +49,13 @@ redef class ModelBuilder
 
 		if toolcontext.stats_on.value then 
 			print(pstats.pretty)
-			check_counters(mainmodule)
+			post_exec(mainmodule)
 		end
 	end	
 
-	# At the end of execution, check if counters are rights
-	fun check_counters(mainmodule: MModule)
+	# At the end of execution, check if counters are rights, recompile all methods to get upper bound
+	# of preexistence (see redef in vm_optimizations)
+	fun post_exec(mainmodule: MModule)
 	do
 		var loaded_cls = 0
 		for cls in mainmodule.model.mclasses do if cls.loaded then loaded_cls += 1
@@ -813,6 +817,9 @@ end
 
 # Stats of the optimizing model
 class MOStats
+	# Label to display on dump
+	var lbl: String
+
 	# Internal encoding of counters
 	var map = new HashMap[String, Int]
 
@@ -844,9 +851,9 @@ class MOStats
 	do
 		var ret = "" 
 
-		ret += "\n------------------ MO STATS ------------------\n"
+		ret += "\n------------------ MO STATS {lbl} ------------------\n"
 		ret += dump("\t")
-		ret += "------------------------------------------------\n"
+		ret += "--------------------------------------------------------\n"
 
 		return ret
 	end

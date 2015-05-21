@@ -21,12 +21,15 @@ import interpreter::naive_interpreter
 import perfect_hashing
 
 redef class ModelBuilder
+	# The virtual machine (used for recompilation after execution, to remove when remove counters)
+	var interpreter: VirtualMachine is noinit
+
 	fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
 	do
 		var time0 = get_time
 		self.toolcontext.info("*** NITVM STARTING ***", 1)
 
-		var interpreter = new VirtualMachine(self, mainmodule, arguments)
+		interpreter = new VirtualMachine(self, mainmodule, arguments)
 		interpreter.start(mainmodule)
 
 		var time1 = get_time
