@@ -889,26 +889,58 @@ class MOStats
 
 	init
 	do
+		# inrc when a class is explicitly (with a "new" keyword) loaded
 		map["loaded_classes_explicits"] = 0
+
+		# inrc when a class is loaded as super-class (abstract excluded) of a loaded class (implicit or explicit)
 		map["loaded_classes_implicits"] = 0
+
+		# incr when a class is abstract and loaded as super-class
 		map["loaded_classes_abstracts"] = 0
+
+		# incr when compile a instantiation site
 		map["ast_new"] = 0
 		
+		# incr when compute an implementation
+		# decr (on regular counters) when implementation is reset
 		map["impl_static"] = 0
 		map["impl_sst"] = 0
 		map["impl_ph"] = 0
+		
+		# incr when a object site has all it receivers staticly
 		map["concretes_receivers_sites"] = 0
+
+		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
+
+		# incr when the site depends at least of one new expression
 		map["sites_from_new"] = 0
+		
+		# incr when the site depends of at least of one return expression or one new expression
 		map["sites_handle_by_extend_preexist"] = 0
+		
+		# incr when the site is on leaf gp on global model
 		map["sites_final"] = 0
 		
+		# incr when site is on integer, char, string (not added into the MO)
 		map["primitive_sites"] = 0
+
+		# incr when the ast site is an unkown case (not added into the MO)
 		map["nyi"] = 0
+
+		# never use. Maybe usefull for enum if Nit add it (this cass should not be added into the MO)
 		map["lits"] = 0
 
+		# incr if a site is preexist
+		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["preexist"] = 0
+
+		# incr if a site isn't preexist
+		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["npreexist"] = 0
+
+		# incr if a site is preexist and it implementation is static
+		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["preexist_static"] = 0
 
 		map["attr"] = 0
