@@ -141,7 +141,7 @@ class MOSubtypeSitePattern
 		if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls)
 		else
-			impl = new PHImpl(false, rst.get_mclass(vm).color)
+			impl = new PHImpl(false, target.get_mclass(vm).color)
 		end
 	end
 
@@ -236,6 +236,25 @@ abstract class MOAttrPattern
 	# redef type GP: MAttribute
 
 	# redef type LP: MAttributeDef
+	
+	redef fun compute_impl(vm)
+	do
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
+		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if pos_cls > 0 then
+			# Like the MOSiteAttr::compute_impl, we don't make static dispatch as it's an attribute access
+			impl = new SSTImpl(true, pos_cls + gp.offset)
+		else
+			impl = new PHImpl(false, gp.offset) 
+		end
+	end
 end
 
 # Pattern of read attribute
@@ -465,10 +484,25 @@ class MOSubtypeSite
 	# Call this method ONLY if we are sure that target is loaded
 	redef fun compute_impl(vm)
 	do
-		impl = new StaticImplSubtype(true,
-		vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
-		pattern.rst.get_mclass(vm).vtable.mask,
-		pattern.rst.get_mclass(vm).vtable.internal_vtable))
+		if not target.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, pattern.rst.get_mclass(vm).color)
+			return
+		end
+
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
+
+		if get_concretes.length == 1 then
+			impl = new StaticImplSubtype(true,
+			vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
+			pattern.rst.get_mclass(vm).vtable.mask,
+			pattern.rst.get_mclass(vm).vtable.internal_vtable))		
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls)
+		else
+			impl = new PHImpl(false, target.get_mclass(vm).color) 
+		end
 	end
 
 	redef fun get_impl(vm)
@@ -512,7 +546,7 @@ abstract class MOPropSite
 			vm.method_dispatch_ph(cls.vtable.internal_vtable,
 			cls.vtable.mask,
 			gp.intro_mclassdef.mclass.vtable.id, 
-			pos_cls + gp.offset))
+			gp.offset))
 		else if unique_meth_pos_concrete then
 			# SST immutable because it can't be more than these concretes receiver statically
 			impl = new SSTImpl(false, pos_cls + gp.offset)
@@ -548,6 +582,31 @@ abstract class MOAttrSite
 	super MOPropSite
 
 	redef type P: MOAttrPattern
+
+	redef fun compute_impl(vm)
+	do
+		var gp = pattern.gp
+
+		if not pattern.rst.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if unique_meth_pos_concrete then
+			# SST immutable because it can't be more than these concretes receiver statically
+			# We don't check if there is one or more concrete type, because we can't make a static dispatch
+			# on attribute
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else
+			impl = new PHImpl(false, gp.offset) 
+		end
+	end
 end
 
 # MO of method call
@@ -569,7 +628,7 @@ class MOReadSite
 
 	redef type P: MOReadSitePattern
 
-	# Tell if the attribute is immutable
+	# Tell if the attribute is immutable, useless at the moment
 	var immutable = false
 end
 
@@ -826,11 +885,20 @@ class MOStats
 		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
 
 		file.write(", meth, attr, cast, global\n")
-		
-		file.write("self, , {map["attr_self"]}, , \n")
+	
+		var self_meth = map["meth_self"]
+		var self_attr = map["attr_self"]
+		var self_cast = map["cast_self"]
+		var self_sum = self_meth + self_attr + self_cast
+		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}\n")
 		file.write("pre, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}\n")
 		file.write("npre, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}\n")
-		file.write("concretes, , , , {map["concretes_receivers_sites"]}\n")
+
+		var concretes_meth = map["meth_concretes_receivers"]
+		var concretes_attr = map["attr_concretes_receivers"]
+		var concretes_cast = map["cast_concretes_receivers"]
+		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
+		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}\n")
 
 		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
 		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
@@ -858,6 +926,20 @@ class MOStats
 		return ret
 	end
 
+	# Copy all values that are counted statically (eg. when we do ast -> mo)
+	fun copy_static_data(counters: MOStats)
+	do
+		map["loaded_classes_explicits"] = counters.get("loaded_classes_explicits")
+		map["loaded_classes_implicits"] = counters.get("loaded_classes_implicits")
+		map["loaded_classes_abstracts"] = counters.get("loaded_classes_abstracts")
+		map["primitive_sites"] = counters.get("primitive_sites")
+		map["nyi"] = counters.get("nyi")
+		map["lits"] = counters.get("lits")
+		map["ast_new"] = counters.get("ast_new")
+		map["attr_redef"] = counters.get("attr_redef")
+		map["sites_final"] = counters.get("sites_final")
+	end
+
 	init
 	do
 		# inrc when a class is explicitly (with a "new" keyword) loaded
@@ -877,10 +959,7 @@ class MOStats
 		map["impl_static"] = 0
 		map["impl_sst"] = 0
 		map["impl_ph"] = 0
-		
-		# incr when a object site has all it receivers staticly
-		map["concretes_receivers_sites"] = 0
-
+	
 		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
 
@@ -916,6 +995,7 @@ class MOStats
 
 		map["attr"] = 0
 		map["attr_self"] = 0
+		map["attr_concretes_receivers"] = 0
 		map["attr_read"] = 0
 		map["attr_write"] = 0
 		map["attr_preexist"] = 0
@@ -923,11 +1003,14 @@ class MOStats
 		map["attr_preexist_sst"] = 0
 		map["attr_npreexist_sst"] = 0
 		map["attr_ph"] = 0 
-		map["attr_accessors"] = 0
-		map["attr_preexist_accessors"] = 0
-		map["attr_npreexist_accessors"] = 0
+		# incr if construct MO node to access on attribute as MOCallSite
+		# because it's an accessors with redefinitions
+		# If it's incr, some meth_* counters will be incr too, as regular method call
+		map["attr_redef"] = 0
 
 		map["cast"] = 0
+		map["cast_self"] = 0
+		map["cast_concretes_receivers"] = 0
 		map["cast_preexist"] = 0
 		map["cast_npreexist"] = 0
 		map["cast_preexist_static"] = 0
@@ -937,6 +1020,8 @@ class MOStats
 		map["cast_ph"] = 0
 
 		map["meth"] = 0
+		map["meth_self"] = 0
+		map["meth_concretes_receivers"] = 0
 		map["meth_preexist"] = 0
 		map["meth_npreexist"] = 0
 		map["meth_preexist_static"] = 0

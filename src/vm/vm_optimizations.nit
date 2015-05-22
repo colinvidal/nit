@@ -658,6 +658,11 @@ redef class AMethPropdef
 	end
 end
 
+redef class AAttrPropdef
+	# When the node encode accessors who are redefined, tell if it's already count as "attr_redef"
+	var attr_redef_counted = false
+end
+
 redef class ASendExpr
 	super AToCompile
 
@@ -696,11 +701,16 @@ redef class ASendExpr
 		if recv != null and not ignore then
 			var cs = callsite.as(not null)
 
-			# Static dispatch to know if the local property is an accessor
-			var impl_node = vm.modelbuilder.mpropdef2node(cs.mpropdef)
-			if impl_node isa AAttrPropdef then
-				var params_len = cs.msignature.mparameters.length
+			# Static dispatch of global model to known if we handle method call of attribute access
+			var has_redef = cs.mproperty.mpropdefs.length > 1
+			var node_ast = vm.modelbuilder.mpropdef2node(cs.mpropdef)
+			var is_attribute = node_ast isa AAttrPropdef
+
+			if is_attribute and not has_redef then
+				# Unique LP, simple attr access, make it as a real attribute access (eg. _attr)
+				
 				var moattr: MOAttrSite
+				var params_len = cs.msignature.mparameters.length
 
 				if params_len == 0 then
 					# The node is a MOReadSite
@@ -712,10 +722,19 @@ redef class ASendExpr
 				end
 
 				var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-				recv_class.set_site_pattern(moattr, recv_class.mclass_type, cs.mproperty)
+
+				var gp = node_ast.as(AAttrPropdef).mpropdef.mproperty
+
+				recv_class.set_site_pattern(moattr, recv_class.mclass_type, gp)
 				lp.mosites.add(moattr)	
 			else
-				# Here, we are sure that the property of the callsite is a real method call
+				# Here, we are sure that the property of the callsite is a real method call (of accessors with redefs)
+
+				# It's an accessors (with redefs) dispatch
+				if is_attribute and not node_ast.as(AAttrPropdef).attr_redef_counted then 
+					pstats.inc("attr_redef")
+					node_ast.as(AAttrPropdef).attr_redef_counted = true
+				end
 
 				# Null cases are already eliminated, to get_mclass can't return null
 				var recv_class = cs.recv.get_mclass(vm).as(not null)
@@ -873,6 +892,13 @@ redef class MMethodDef
 			preexist = site.preexist_site
 			var is_pre = site.expr_recv.is_pre
 			var impl = site.get_impl(vm)
+			var is_concretes = site.get_concretes.length > 0
+			var is_self_recv = false
+
+			if site.expr_recv isa MOParam then 
+				if site.expr_recv.as(MOParam).offset == 0 then is_self_recv = true
+			end
+
 
 			var buff = "\tpreexist of "
 
@@ -893,9 +919,7 @@ redef class MMethodDef
 			if site isa MOAttrSite then
 				buff += "attr {site.pattern.rst}.{site.pattern.gp}" 
 
-				if site.expr_recv isa MOParam then 
-					if site.expr_recv.as(MOParam).offset == 0 then pstats.inc("attr_self")
-				end
+				if is_self_recv then pstats.inc("attr_self")
 
 				if impl isa SSTImpl then
 					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
@@ -904,9 +928,7 @@ redef class MMethodDef
 					pstats.inc("attr_ph")
 					pstats.inc("impl_ph")
 				else 
-					# Specific case of the accessors statics
-					pstats.inc("attr_accessors")
-					incr_specific_counters(is_pre, "attr_preexist_accessors", "attr_npreexist_accessors")
+					abort
 				end
 
 				if site isa MOReadSite then
@@ -917,12 +939,15 @@ redef class MMethodDef
 
 				pstats.inc("attr")
 				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
+				if is_concretes then pstats.inc("attr_concretes_receivers")
 			end
 
 			# cast_*
 			if site isa MOSubtypeSite then
 				buff += "cast {site.pattern.rst} isa {site.target}"
 				
+				if is_self_recv then pstats.inc("cast_self")
+
 				if impl isa StaticImpl then
 					incr_specific_counters(is_pre, "cast_preexist_static", "cast_npreexist_static")
 					pstats.inc("impl_static")
@@ -936,11 +961,14 @@ redef class MMethodDef
 
 				pstats.inc("cast")
 				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
+				if is_concretes then pstats.inc("cast_concretes_receivers")
 			end
 
 			# meth_*
 			if site isa MOCallSite then
 				buff += "meth {site.pattern.rst}.{site.pattern.gp}" 
+				
+				if is_self_recv then pstats.inc("meth_self")
 				
 				if impl isa StaticImpl then
 					incr_specific_counters(is_pre, "meth_preexist_static", "meth_npreexist_static")
@@ -955,14 +983,11 @@ redef class MMethodDef
 
 				pstats.inc("meth")
 				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
+				if is_concretes then pstats.inc("meth_concretes_receivers")
 			end
 
 			buff += " {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}"
 			trace(buff)
-
-			# concretes_receivers_sites
-			if site.get_concretes.length > 0 then pstats.inc("concretes_receivers_sites")
-		
 			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
 			trace("\t\t{impl} {impl.is_mutable}")
 		end
@@ -1397,7 +1422,10 @@ redef class ModelBuilder
 
 		# Recompile all active methods to get the upper bound of the preexistance
 		# We don't need pstats counters with lower bound anymore
-		sys.pstats = new MOStats("UPPER")
+
+		var old_counters = sys.pstats
+		pstats = new MOStats("UPPER")
+		pstats.copy_static_data(old_counters)
 
 		while compiled_methods.length != 0 do
 			var m = compiled_methods.pop
