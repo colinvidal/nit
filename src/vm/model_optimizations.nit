@@ -884,7 +884,7 @@ class MOStats
 	do
 		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
 
-		file.write(", meth, attr, cast, global\n")
+		file.write(", meth, attr, cast, total\n")
 	
 		var self_meth = map["meth_self"]
 		var self_attr = map["attr_self"]
@@ -904,13 +904,24 @@ class MOStats
 		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
 		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]}\n")
 
+		file.write("static-pre, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}\n")
+
+		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
+		file.write("static-npre, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}\n")
+
 		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
 		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
 		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
 		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}\n")
 	
-		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}\n")
+		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
+		file.write("sst-pre, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}\n")
 
+		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
+		file.write("sst-npre, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}\n")
+
+		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}\n")
+		
 		file.close
 	end
 
