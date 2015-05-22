@@ -194,29 +194,17 @@ abstract class MOPropSitePattern
 		end
 
 		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-#		trace("PATTERN:COMPUTE_IMPL rst:{rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if lps.length == 1 then
 			# The method is an intro or a redef
 			impl = new StaticImplProp(true, lps.first)
-			
-#			var node = vm.modelbuilder.mpropdef2node(impl.as(StaticImplProp).lp)
-#			print("NODE MODEL MPROP {impl.as(StaticImplProp).lp.mproperty} {impl.as(StaticImplProp).lp.mproperty.class_name}")
-#			print("NODE MODEL MPROPDEF {impl.as(StaticImplProp).lp} {impl.as(StaticImplProp).lp.class_name}")
-#			print("NODE AST MPROPDEF {node.as(APropdef).mpropdef.name} : {node.as(not null)}")
-#			node.as(not null).dump_tree
 		else if pos_cls > 0 then
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
-	end
-
-	private fun gp_pos_unique(vm: VirtualMachine): Bool
-	do
-		return rst.get_mclass(vm).unique_gp_pos(gp)
 	end
 end
 
@@ -245,9 +233,9 @@ abstract class MOAttrPattern
 	# Because the AST gives callsites with MMethod and MMethodDef for accessors,
 	# we can't down the bound to MAttribute/MAttributeDef...
 
-#	redef type GP: MAttribute
+	# redef type GP: MAttribute
 
-#	redef type LP: MAttributeDef
+	# redef type LP: MAttributeDef
 end
 
 # Pattern of read attribute
@@ -287,7 +275,7 @@ end
 
 redef class MMethodDef
 	# See MOAttrPattern, same problem...
-#	redef type P: MOCallSitePattern
+	# redef type P: MOCallSitePattern
 
 	# Tell if the method has been compiled at least one time (not in MMethodDef because attribute can have blocks)
 	var compiled = false is writable
@@ -463,17 +451,6 @@ abstract class MOSite
 
 	# Compute the implementation with rst/pic
 	private fun compute_impl(vm: VirtualMachine) is abstract
-
-	# Each concrete receiver has unique method position
-	private fun unique_meth_pos_concrete: Bool
-	do
-		for recv in get_concretes do
-			if not recv.loaded then return false
-			if not recv.unique_gp_pos(lp.mproperty) then return false
-		end
-		return true
-	end
-
 end
 
 # MO of a subtype test site
@@ -485,7 +462,7 @@ class MOSubtypeSite
 	# Static type on which the test is applied
 	var target: MType
 
-	# WARNING: must be checked
+	# Call this method ONLY if we are sure that target is loaded
 	redef fun compute_impl(vm)
 	do
 		impl = new StaticImplSubtype(true,
@@ -513,7 +490,7 @@ abstract class MOPropSite
 	super MOSite
 
 	redef type P: MOPropSitePattern
-	
+
 	redef fun compute_impl(vm)
 	do
 		var gp = pattern.gp
@@ -526,7 +503,6 @@ abstract class MOPropSite
 		end
 
 		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-#		trace("MOPROPSITE:COMPUTE_IMPL rst:{pattern.rst} pic:{gp.intro.mclassdef.mclass} pos_cls:{pos_cls}")
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
@@ -536,13 +512,26 @@ abstract class MOPropSite
 			vm.method_dispatch_ph(cls.vtable.internal_vtable,
 			cls.vtable.mask,
 			gp.intro_mclassdef.mclass.vtable.id, 
-			gp.offset))
+			pos_cls + gp.offset))
 		else if unique_meth_pos_concrete then
 			# SST immutable because it can't be more than these concretes receiver statically
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
+	end
+	
+	# Each concrete receiver has unique method position
+	private fun unique_meth_pos_concrete: Bool
+	do
+		var gp = pattern.gp
+
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return false
+		end
+
+		return true
 	end
 end
 
@@ -646,24 +635,6 @@ redef class MClass
 
 	# List of patterns of subtypes test
 	var subtype_pattern = new List[MOSubtypeSitePattern]
-
-	# Tell if in all loaded subclasses, this class has a method group on unique position
-	# WARNING : this test is totaly broken, and the sub-layer implementation will change
-	fun unique_gp_pos(gp: MProperty): Bool
-	do
-		var pic = gp.intro_mclassdef.mclass
-
-		if not pic.loaded then return false
-
-		# Actually, we don't need to do that, but sometimes, it's happends that
-		# the pic and self are not compatibles...
-		if not pic.positions_methods.keys.has(self) then return false
-
-		if pic.positions_methods[self] == -1 then return false
-		for cls, pos in positions_methods do if pos == -1 then return false
-	
-		return true
-	end
 
 	# Detect new branches added by a loading class
 	# Add introduces and redifines local properties
