@@ -12,7 +12,7 @@ end
 class A
 	var attrx: X is noinit
 	var attry = new Y
-#	var attr = 0
+	var attr = 0
 #
 #	fun attr: Int
 #	do
@@ -32,6 +32,14 @@ class A
 #		print(attr)
 		attry._attr.bar
 		print("{attrx}")
+	end
+end
+
+class B
+	super A
+
+	redef var attrx do
+		return new X
 	end
 end
 
