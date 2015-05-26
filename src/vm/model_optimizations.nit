@@ -884,15 +884,15 @@ class MOStats
 	do
 		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
 
-		file.write(", meth, attr, cast, total\n")
+		file.write(", method, attribute, cast, total\n")
 	
 		var self_meth = map["meth_self"]
 		var self_attr = map["attr_self"]
 		var self_cast = map["cast_self"]
 		var self_sum = self_meth + self_attr + self_cast
 		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}\n")
-		file.write("pre, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}\n")
-		file.write("npre, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}\n")
+		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}\n")
+		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}\n")
 
 		var concretes_meth = map["meth_concretes_receivers"]
 		var concretes_attr = map["attr_concretes_receivers"]
@@ -900,14 +900,26 @@ class MOStats
 		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
 		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}\n")
 
+		var concretes_pre_meth = map["meth_concretes_preexist"]
+		var concretes_pre_attr = map["attr_concretes_preexist"]
+		var concretes_pre_cast = map["cast_concretes_preexist"]
+		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
+		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}\n")
+
+		var concretes_npre_meth = map["meth_concretes_npreexist"]
+		var concretes_npre_attr = map["attr_concretes_npreexist"]
+		var concretes_npre_cast = map["cast_concretes_npreexist"]
+		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
+		file.write("preexist nconcretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}\n")
+
 		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
 		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
 		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]}\n")
 
-		file.write("static-pre, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}\n")
+		file.write("static preexist, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}\n")
 
 		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
-		file.write("static-npre, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}\n")
+		file.write("static npreexist, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}\n")
 
 		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
 		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
@@ -915,12 +927,19 @@ class MOStats
 		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}\n")
 	
 		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
-		file.write("sst-pre, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}\n")
+		file.write("sst preexist, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}\n")
 
 		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
-		file.write("sst-npre, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}\n")
+		file.write("sst npreexist, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}\n")
 
 		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}\n")
+
+		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
+		file.write(",,,,,\n")
+		file.write("optimisable inline,,,,{optimization_inline}\n")
+
+		var cant_optimize = map["impl_ph"] + sum_npre_sst + map["meth_preexist_sst"] + sum_npre_static
+		file.write("non optimisable,,,,{cant_optimize}")
 		
 		file.close
 	end
@@ -1007,6 +1026,8 @@ class MOStats
 		map["attr"] = 0
 		map["attr_self"] = 0
 		map["attr_concretes_receivers"] = 0
+		map["attr_concretes_preexist"] = 0
+		map["attr_concretes_npreexist"] = 0
 		map["attr_read"] = 0
 		map["attr_write"] = 0
 		map["attr_preexist"] = 0
@@ -1022,6 +1043,8 @@ class MOStats
 		map["cast"] = 0
 		map["cast_self"] = 0
 		map["cast_concretes_receivers"] = 0
+		map["cast_concretes_preexist"] = 0
+		map["cast_concretes_npreexist"] = 0
 		map["cast_preexist"] = 0
 		map["cast_npreexist"] = 0
 		map["cast_preexist_static"] = 0
@@ -1033,6 +1056,8 @@ class MOStats
 		map["meth"] = 0
 		map["meth_self"] = 0
 		map["meth_concretes_receivers"] = 0
+		map["meth_concretes_preexist"] = 0
+		map["meth_concretes_npreexist"] = 0
 		map["meth_preexist"] = 0
 		map["meth_npreexist"] = 0
 		map["meth_preexist_static"] = 0
