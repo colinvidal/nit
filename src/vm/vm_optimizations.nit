@@ -858,14 +858,6 @@ redef class MMethodDef
 		var preexist: Int
 
 		if not disable_preexistence_extensions then
-#			if return_expr != null then
-#				return_expr.preexist_expr
-#				if return_expr.is_rec then return_expr.set_pval_nper
-#				fill_nper(return_expr.as(not null))
-#				preexist = return_expr.preexist_expr_value
-#				trace("\tpreexist of return : {return_expr.as(not null)} {preexist} {preexist.preexists_bits}")
-#			end
-
 			for newexpr in monews do
 				assert not newexpr.pattern.cls.mclass_type.is_primitive_type
 
@@ -932,6 +924,7 @@ redef class MMethodDef
 
 				pstats.inc("attr")
 				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
+				incr_specific_counters(is_pre, "attr_concretes_preexist", "attr_concretes_npreexist")
 				if is_concretes then pstats.inc("attr_concretes_receivers")
 			end
 
@@ -954,6 +947,7 @@ redef class MMethodDef
 
 				pstats.inc("cast")
 				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
+				incr_specific_counters(is_pre, "cast_concretes_preexist", "cast_concretes_npreexist")
 				if is_concretes then pstats.inc("cast_concretes_receivers")
 			end
 
@@ -976,6 +970,7 @@ redef class MMethodDef
 
 				pstats.inc("meth")
 				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
+				incr_specific_counters(is_pre, "meth_concretes_preexist", "meth_concretes_npreexist")
 				if is_concretes then pstats.inc("meth_concretes_receivers")
 			end
 
