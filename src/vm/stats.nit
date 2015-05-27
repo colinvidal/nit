@@ -259,6 +259,47 @@ redef class ASendExpr
 	end
 end
 
+redef class AAsCastExpr
+	redef fun compile_ast(vm, lp)
+	do
+		super(vm, lp)
+
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			pstats.inc("lits")
+		else if n_expr.mtype.is_primitive_type then
+			pstats.inc("primitive_sites")
+		else if n_type.mtype.get_mclass(vm).mclass_type.is_primitive_type then
+			pstats.inc("primitive_sites")
+		end
+	end
+end
+
+redef class AAttrFormExpr
+	redef fun compile_ast(vm, lp)
+	do
+		super(vm, lp)
+
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			pstats.inc("lits")
+		else if n_expr.mtype.is_primitive_type then
+			pstats.inc("primitive_sites")
+		end
+	end
+end
+
+redef class AIsaExpr
+	redef fun compile_ast(vm, lp)
+	do
+		super(vm, lp)
+		
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then
+			pstats.inc("lits")
+		else if n_expr.mtype.get_mclass(vm).mclass_type.is_primitive_type then
+			pstats.inc("primitive_sites")
+		end
+	end
+end
+
 # Stats of the optimizing model
 class MOStats
 	# Label to display on dump

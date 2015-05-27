@@ -17,9 +17,6 @@
 # Optimization of the nitvm, compute implementations
 module vm_optimizations
 
-import virtual_machine
-import ssa
-import model_optimizations
 import preexistence
 
 redef class VirtualMachine
@@ -122,11 +119,9 @@ redef class AAttrFormExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			pstats.inc("lits")
 		else if n_expr.mtype.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			pstats.inc("primitive_sites")
 		end
 
 		var recv = n_expr.ast2mo
@@ -359,11 +354,9 @@ redef class AIsaExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			pstats.inc("lits")
 		else if n_expr.mtype.get_mclass(vm).mclass_type.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			pstats.inc("primitive_sites")
 		end
 
 		var recv = n_expr.ast2mo
@@ -467,14 +460,11 @@ redef class AAsCastExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			pstats.inc("lits")
 		else if n_expr.mtype.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			pstats.inc("primitive_sites")
 		else if n_type.mtype.get_mclass(vm).mclass_type.is_primitive_type then
 			ignore = true
-			pstats.inc("primitive_sites")
 			# Sometimes, the cast come from a generic RST that is not resolve,
 			# so, if the model allow a cast to a primitive type, the receiver have a primitive type
 		end
@@ -677,7 +667,7 @@ redef class ASendExpr
 	end
 
 	# Unique LP, simple attr access, make it as a real attribute access (eg. _attr)
-	private fun compile_ast_accessor(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode)
+	fun compile_ast_accessor(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode)
 	do	
 		var moattr: MOAttrSite
 		var params_len = callsite.as(not null).msignature.mparameters.length
@@ -700,7 +690,7 @@ redef class ASendExpr
 	end
 
 	# Real methods calls, and accessors with multiples LPs
-	private fun compile_ast_method(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode, is_attribute: Bool)
+	fun compile_ast_method(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode, is_attribute: Bool)
 	do
 		var cs = callsite.as(not null)
 
@@ -773,7 +763,9 @@ redef abstract class MOPropSitePattern
 		super(lp)
 		if reset then 
 			if impl != null and impl.is_mutable then impl = null
-			for site in sites do if site.impl.is_mutable then site.init_impl
+			for site in sites do 
+				if site.impl != null and site.impl.is_mutable then site.init_impl
+			end
 		end
 	end
 end

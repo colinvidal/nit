@@ -19,6 +19,14 @@ redef class Sys
 	var disable_preexistence_extensions: Bool
 end
 
+redef class ModelBuilder	
+	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	do
+		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
+		super(mainmodule, arguments)
+	end
+end
+
 redef class VirtualMachine
 	redef fun load_class(mclass)
 	do
