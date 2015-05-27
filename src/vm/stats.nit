@@ -410,8 +410,11 @@ class MOStats
 		file.write(",,,,,\n")
 		file.write("optimisable inline,,,,{optimization_inline}\n")
 
-		var cant_optimize = map["impl_ph"] + sum_npre_sst + map["meth_preexist_sst"] + sum_npre_static
-		file.write("non optimisable,,,,{cant_optimize}")
+		var cant_optimize = map["meth_npreexist_static"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
+		file.write("non optimisable inline,,,,{cant_optimize}")
+
+		var not_inline_subject = map["impl_ph"] + map["meth_sst"]
+		file.write("non inline,,,,{not_inline_subject}")
 		
 		file.close
 	end
