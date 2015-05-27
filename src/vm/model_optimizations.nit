@@ -132,9 +132,13 @@ class MOSubtypeSitePattern
 		site.pattern = self
 	end
 
-	# WARNING: must be checked
 	redef fun compute_impl(vm)
 	do 
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, target.get_mclass(vm).color)
+			return
+		end
+
 		var pos_cls = rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
 		
 		if pos_cls > 0 then
@@ -184,6 +188,25 @@ abstract class MOPropSitePattern
 		end
 	end
 
+	end
+
+# Pattern of expression sites (method call / read attribute)
+abstract class MOExprSitePattern
+	super MOPropSitePattern
+
+	redef type S: MOExprSite
+end
+
+# Pattern of method call
+class MOCallSitePattern
+	super MOExprSitePattern
+
+	redef type GP: MMethod
+
+	redef type LP: MMethodDef
+
+	redef type S: MOCallSite
+
 	# Determine an implementation with pic/rst
 	redef fun compute_impl(vm)
 	do
@@ -207,24 +230,6 @@ abstract class MOPropSitePattern
 	end
 end
 
-# Pattern of expression sites (method call / read attribute)
-abstract class MOExprSitePattern
-	super MOPropSitePattern
-
-	redef type S: MOExprSite
-end
-
-# Pattern of method call
-class MOCallSitePattern
-	super MOExprSitePattern
-
-	redef type GP: MMethod
-
-	redef type LP: MMethodDef
-
-	redef type S: MOCallSite
-end
-
 # Common subpattern of all attributes (read/write)
 abstract class MOAttrPattern
 	super MOPropSitePattern
@@ -243,7 +248,7 @@ abstract class MOAttrPattern
 			return
 		end
 
-		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
@@ -479,7 +484,6 @@ class MOSubtypeSite
 	# Static type on which the test is applied
 	var target: MType
 
-	# Call this method ONLY if we are sure that target is loaded
 	redef fun compute_impl(vm)
 	do
 		if not target.get_mclass(vm).loaded then
@@ -505,11 +509,7 @@ class MOSubtypeSite
 
 	redef fun get_impl(vm)
 	do
-		# We must be sure that the target class is loaded to make a static impl
-		# Check if target_cls is null because the target class can be nullable
-		var target_cls = target.get_mclass(vm)
-
-		if get_concretes.length == 0 and target_cls != null and target_cls.loaded then
+		if get_concretes.length > 0 then
 			compute_impl(vm)
 			return impl.as(not null)
 		else
@@ -524,48 +524,7 @@ abstract class MOPropSite
 
 	redef type P: MOPropSitePattern
 
-	redef fun compute_impl(vm)
-	do
-		var gp = pattern.gp
 
-		if not pattern.rst.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(false, gp.offset)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if get_concretes.length == 1 then
-			var cls = get_concretes.first
-			impl = new StaticImplProp(true,
-			vm.method_dispatch_ph(cls.vtable.internal_vtable,
-			cls.vtable.mask,
-			gp.intro_mclassdef.mclass.vtable.id, 
-			gp.offset))
-		else if unique_meth_pos_concrete then
-			# SST immutable because it can't be more than these concretes receivers statically
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-	
-	# Each concrete receiver has unique method position
-	private fun unique_meth_pos_concrete: Bool
-	do
-		var gp = pattern.gp
-
-		for recv in get_concretes do
-			if not recv.loaded then return false
-			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return false
-		end
-
-		return true
-	end
 end
 
 # MO of object expression
@@ -593,11 +552,11 @@ abstract class MOAttrSite
 			return
 		end
 
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
 
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if unique_meth_pos_concrete then
+		else if unique_pos_concrete_recv then
 			# SST immutable because it can't be more than these concretes receivers statically
 			# We don't check if there is one or more concrete type, because we can't make a static dispatch
 			# on attribute
@@ -605,6 +564,19 @@ abstract class MOAttrSite
 		else
 			impl = new PHImpl(false, gp.offset) 
 		end
+	end
+
+	# Each concrete receiver has unique attribute position
+	private fun unique_pos_concrete_recv: Bool
+	do
+		var gp = pattern.gp
+
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if recv.get_position_attributes(gp.intro_mclassdef.mclass) < 0 then return false
+		end
+
+		return true
 	end
 end
 
@@ -618,6 +590,49 @@ class MOCallSite
 	var given_args = new List[MOExpr]
 
 	redef fun is_from_mocallsite do return true
+
+	redef fun compute_impl(vm)
+	do
+		var gp = pattern.gp
+
+		if not pattern.rst.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if get_concretes.length == 1 then
+			var cls = get_concretes.first
+			impl = new StaticImplProp(true,
+			vm.method_dispatch_ph(cls.vtable.internal_vtable,
+			cls.vtable.mask,
+			gp.intro_mclassdef.mclass.vtable.id, 
+			gp.offset))
+		else if unique_pos_concrete_recv then
+			# SST immutable because it can't be more than these concretes receivers statically
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else
+			impl = new PHImpl(false, gp.offset) 
+		end
+	end
+	
+	# Each concrete receiver has unique method position
+	private fun unique_pos_concrete_recv: Bool
+	do
+		var gp = pattern.gp
+
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return false
+		end
+
+		return true
+	end
 end
 
 # MO of read attribute
