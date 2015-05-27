@@ -97,7 +97,8 @@ end
 redef class MMethodDef
 	redef fun preexist_all(vm: VirtualMachine)
 	do
-		super(vm)
+		var valid = super(vm)
+		if not valid then return false
 
 		for site in mosites do
 			var recv = site.expr_recv
@@ -119,6 +120,7 @@ redef class MMethodDef
 			else
 				pstats.inc("npreexist")
 			end
+
 			# attr_*
 			if site isa MOAttrSite then
 				if is_self_recv then pstats.inc("attr_self")
@@ -183,6 +185,7 @@ redef class MMethodDef
 				if is_concretes then pstats.inc("meth_concretes_receivers")
 			end
 		end
+		return true
 	end
 
 	# Avoid to write same thing everytimes in the previous function
@@ -199,6 +202,8 @@ end
 redef class VirtualMachine
 	redef fun load_class(mclass)
 	do
+		if mclass.loaded then return
+
 		super(mclass)
 
 		if mclass.kind == abstract_kind and not mclass.mclass_type.is_primitive_type then
@@ -222,9 +227,9 @@ redef class ANode
 	redef fun ast2mo: nullable MOExpr
 	do
 		if is_primitive_node then
-			sys.pstats.inc("primitive_sites")
+			pstats.inc("primitive_sites")
 		else
-			sys.pstats.inc("nyi")
+			pstats.inc("nyi")
 		end
 
 		return super
@@ -299,6 +304,16 @@ redef class AIsaExpr
 		end
 	end
 end
+
+redef class ABinopExpr
+	# If a binary operation on primitives types return something (or test of equality), it's primitive
+	# TODO: what about obj1 + obj2 ?
+	redef fun ast2mo do
+		pstats.inc("primitive_sites")
+		return super
+	end
+end
+
 
 # Stats of the optimizing model
 class MOStats

@@ -756,8 +756,8 @@ redef abstract class MOPropSitePattern
 		super(lp)
 		if reset then 
 			if impl != null and impl.is_mutable then impl = null
-			for site in sites do 
-				if site.impl != null and site.impl.is_mutable then site.init_impl
+			for site in sites do
+				if site.impl != null and site.impl.is_mutable then site.impl = null
 			end
 		end
 	end
@@ -822,9 +822,6 @@ redef abstract class MOSite
 			return impl.as(not null)
 		end
 	end
-
-	# Initialise the implementation decision
-	fun init_impl do impl = null
 
 	# Compute the implementation with rst/pic
 	private fun compute_impl(vm: VirtualMachine) is abstract
@@ -923,7 +920,7 @@ redef class MOCallSite
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if get_concretes.length == 1 then
 			var cls = get_concretes.first
-			impl = new StaticImplProp(true,
+			impl = new StaticImplProp(false,
 			vm.method_dispatch_ph(cls.vtable.internal_vtable,
 			cls.vtable.mask,
 			gp.intro_mclassdef.mclass.vtable.id, 
