@@ -121,15 +121,16 @@ redef class MMethodDef
 		end
 	end
 
-	# Compute the preexistence of all invocation sites and return site of the method
+	# Compute the preexistence of all invocation sites of the method
+	# Return true if the method is analysed, false otherwise (already compiled, extern or extern method)
 	#
 	# WARNING!
 	# The VM can't interpret FFI code, so intern/extern methods are not analysed,
 	# and a expression using a receiver from intern/extern method is preexistent.
 	#
-	fun preexist_all(vm: VirtualMachine)
+	fun preexist_all(vm: VirtualMachine): Bool
 	do
-		if compiled or is_intern or is_extern then return
+		if compiled or is_intern or is_extern then return false
 		compiled = true
 
 		trace("\npreexist_all of {self}")
@@ -170,6 +171,8 @@ redef class MMethodDef
 
 		if exprs_preexist_mut.length > 0 then trace("\tmutables pre: {exprs_preexist_mut}")
 		if exprs_npreexist_mut.length > 0 then trace("\tmutables nper: {exprs_npreexist_mut}")
+
+		return true
 	end
 end
 
