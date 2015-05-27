@@ -461,8 +461,10 @@ abstract class MOSite
 	fun get_impl(vm: VirtualMachine): Implementation
 	do
 		if get_concretes.length == 0 then
+			# TODO: Test preexistence before return here
 			return pattern.get_impl(vm)
 		else
+			# We don't care the preeeixstence of the site here
 			if impl == null then compute_impl(vm)
 			return impl.as(not null)
 		end
