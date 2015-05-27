@@ -132,7 +132,6 @@ class MOSubtypeSitePattern
 		site.pattern = self
 	end
 
-	# For now, subtype test are not optimized at all
 	# WARNING: must be checked
 	redef fun compute_impl(vm)
 	do 
@@ -249,7 +248,6 @@ abstract class MOAttrPattern
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if pos_cls > 0 then
-			# Like the MOSiteAttr::compute_impl, we don't make static dispatch as it's an attribute access
 			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
@@ -508,6 +506,7 @@ class MOSubtypeSite
 	redef fun get_impl(vm)
 	do
 		# We must be sure that the target class is loaded to make a static impl
+		# Check if target_cls is null because the target class can be nullable
 		var target_cls = target.get_mclass(vm)
 
 		if get_concretes.length == 0 and target_cls != null and target_cls.loaded then
@@ -548,7 +547,7 @@ abstract class MOPropSite
 			gp.intro_mclassdef.mclass.vtable.id, 
 			gp.offset))
 		else if unique_meth_pos_concrete then
-			# SST immutable because it can't be more than these concretes receiver statically
+			# SST immutable because it can't be more than these concretes receivers statically
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else
 			impl = new PHImpl(false, gp.offset) 
@@ -599,7 +598,7 @@ abstract class MOAttrSite
 		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else if unique_meth_pos_concrete then
-			# SST immutable because it can't be more than these concretes receiver statically
+			# SST immutable because it can't be more than these concretes receivers statically
 			# We don't check if there is one or more concrete type, because we can't make a static dispatch
 			# on attribute
 			impl = new SSTImpl(false, pos_cls + gp.offset)
