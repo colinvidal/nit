@@ -18,6 +18,9 @@
 module vm
 
 import virtual_machine
-import vm_optimizations
 import variables_numbering
 import ssa
+import model_optimizations
+import preexistence
+import vm_optimizations
+import stats

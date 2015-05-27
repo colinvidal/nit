@@ -4,21 +4,13 @@ module model_optimizations
 import ssa
 
 redef class ToolContext
-	# Disable inter-procedural analysis and 'new' cases
-	var disable_preexistence_extensions = new OptionBool("Disable preexistence extensions", "--no-preexist-ext")
-
 	# Enable traces of analysis
 	var trace_on = new OptionBool("Display the trace of model optimizing / preexistence analysis", "--mo-trace")
-
-	# Enable print stats
-	var stats_on = new OptionBool("Display statistics of model optimizing / preexistence after execution", "--mo-stats")
-
+	
 	redef init
 	do
 		super
-		option_context.add_option(disable_preexistence_extensions)
 		option_context.add_option(trace_on)
-		option_context.add_option(stats_on)
 	end
 end
 
@@ -28,49 +20,6 @@ redef class Sys
 
 	# Tell if trace is enabled
 	var trace_on: Bool
-
-	# Tell if preexistence extensions are disabled
-	var disable_preexistence_extensions: Bool
-
-	# Preexist counters
-	var pstats = new MOStats("LOWER") is writable
-
-	# Preexist counters (withs transitions)
-	var pstats_trans = new MOStats("REGULAR")
-end
-
-redef class ModelBuilder
-	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
-	do
-		sys.trace_on = toolcontext.trace_on.value
-		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
-
-		super(mainmodule, arguments)
-
-		if toolcontext.stats_on.value then 
-			print(pstats.pretty)
-			pstats.overview
-			post_exec(mainmodule)
-			pstats.overview
-			# Meh...
-		end
-	end	
-
-	# At the end of execution, check if counters are rights, recompile all methods to get upper bound
-	# of preexistence (see redef in vm_optimizations)
-	fun post_exec(mainmodule: MModule)
-	do
-		var loaded_cls = 0
-		for cls in mainmodule.model.mclasses do if cls.loaded then loaded_cls += 1
-
-		# Check if number of loaded classes by the VM matches with the counter
-		var analysed_cls = pstats.get("loaded_classes_implicits")
-		analysed_cls += pstats.get("loaded_classes_explicits")
-		analysed_cls += pstats.get("loaded_classes_abstracts")
-		if loaded_cls != analysed_cls then
-			print("WARNING: numbers of loaded classes in [model: {loaded_cls}] [vm: {analysed_cls}]")
-		end
-	end
 end
 
 # Pattern of instantiation sites
@@ -99,21 +48,8 @@ abstract class MOSitePattern
 	# List of expressions that refers to this pattern
 	var sites = new List[S]
 
-	# Implementation of the pattern (used if site as not concerte receivers list)
-	var impl: nullable Implementation is noinit
-
 	# Add a site
 	fun add_site(site: S) is abstract
-
-	# Get implementation, compute it if not exists
-	fun get_impl(vm: VirtualMachine): Implementation
-	do
-		if impl == null then compute_impl(vm)
-		return impl.as(not null)
-	end
-
-	# Compute the implementation
-	private fun compute_impl(vm: VirtualMachine) is abstract
 end
 
 # Pattern of subtype test sites
@@ -131,23 +67,6 @@ class MOSubtypeSitePattern
 		sites.add(site)
 		site.pattern = self
 	end
-
-	redef fun compute_impl(vm)
-	do 
-		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(false, target.get_mclass(vm).color)
-			return
-		end
-
-		var pos_cls = rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
-		
-		if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls)
-		else
-			impl = new PHImpl(false, target.get_mclass(vm).color)
-		end
-	end
-
 end
 
 # Pattern of properties sites (method call / attribute access)
@@ -183,8 +102,6 @@ abstract class MOPropSitePattern
 		if not lps.has(lp) then
 			lps.add(lp)
 			lp.callers.add(self)
-			if impl != null and impl.is_mutable then impl = null
-			for site in sites do site.init_impl
 		end
 	end
 
@@ -206,58 +123,15 @@ class MOCallSitePattern
 	redef type LP: MMethodDef
 
 	redef type S: MOCallSite
-
-	# Determine an implementation with pic/rst
-	redef fun compute_impl(vm)
-	do
-		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(false, gp.offset)
-			return
-		end
-
-		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if lps.length == 1 then
-			# The method is an intro or a redef
-			impl = new StaticImplProp(true, lps.first)
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
 end
 
 # Common subpattern of all attributes (read/write)
 abstract class MOAttrPattern
 	super MOPropSitePattern
 
-	# Because the AST gives callsites with MMethod and MMethodDef for accessors,
-	# we can't down the bound to MAttribute/MAttributeDef...
+	redef type GP: MAttribute
 
-	# redef type GP: MAttribute
-
-	# redef type LP: MAttributeDef
-	
-	redef fun compute_impl(vm)
-	do
-		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(false, gp.offset)
-			return
-		end
-
-		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
+	redef type LP: MAttributeDef
 end
 
 # Pattern of read attribute
@@ -296,8 +170,7 @@ redef class MMethod
 end
 
 redef class MMethodDef
-	# See MOAttrPattern, same problem...
-	# redef type P: MOCallSitePattern
+	redef type P: MOCallSitePattern
 
 	# Tell if the method has been compiled at least one time (not in MMethodDef because attribute can have blocks)
 	var compiled = false is writable
@@ -430,9 +303,6 @@ abstract class MOSite
 	# The pattern using by this expression site
 	var pattern: P is writable, noinit
 
-	# Implementation of the site (null if can't determine concretes receivers)
-	var impl: nullable Implementation is noinit
-
 	# List of concretes receivers if ALL receivers can be statically and with intra-procedural analysis determined
 	private var concretes_receivers: nullable List[MClass] is noinit
 
@@ -456,25 +326,6 @@ abstract class MOSite
 		end
 		return concretes_receivers.as(not null)
 	end
-
-	# Get the implementation of the site
-	fun get_impl(vm: VirtualMachine): Implementation
-	do
-		if get_concretes.length == 0 then
-			# TODO: Test preexistence before return here
-			return pattern.get_impl(vm)
-		else
-			# We don't care the preeeixstence of the site here
-			if impl == null then compute_impl(vm)
-			return impl.as(not null)
-		end
-	end
-
-	# Initialise the implementation decision
-	fun init_impl do impl = null
-
-	# Compute the implementation with rst/pic
-	private fun compute_impl(vm: VirtualMachine) is abstract
 end
 
 # MO of a subtype test site
@@ -485,39 +336,6 @@ class MOSubtypeSite
 
 	# Static type on which the test is applied
 	var target: MType
-
-	redef fun compute_impl(vm)
-	do
-		if not target.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(false, pattern.rst.get_mclass(vm).color)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
-
-		if get_concretes.length == 1 then
-			impl = new StaticImplSubtype(true,
-			vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
-			pattern.rst.get_mclass(vm).vtable.mask,
-			pattern.rst.get_mclass(vm).vtable.internal_vtable))		
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls)
-		else
-			impl = new PHImpl(false, target.get_mclass(vm).color) 
-		end
-	end
-
-	redef fun get_impl(vm)
-	do
-		if get_concretes.length > 0 then
-			compute_impl(vm)
-			return impl.as(not null)
-		else
-			return pattern.get_impl(vm)
-		end
-	end
 end
 
 # MO of global properties sites
@@ -525,8 +343,6 @@ abstract class MOPropSite
 	super MOSite
 
 	redef type P: MOPropSitePattern
-
-
 end
 
 # MO of object expression
@@ -542,44 +358,6 @@ abstract class MOAttrSite
 	super MOPropSite
 
 	redef type P: MOAttrPattern
-
-	redef fun compute_impl(vm)
-	do
-		var gp = pattern.gp
-
-		if not pattern.rst.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(false, gp.offset)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if unique_pos_concrete_recv then
-			# SST immutable because it can't be more than these concretes receivers statically
-			# We don't check if there is one or more concrete type, because we can't make a static dispatch
-			# on attribute
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-
-	# Each concrete receiver has unique attribute position
-	private fun unique_pos_concrete_recv: Bool
-	do
-		var gp = pattern.gp
-
-		for recv in get_concretes do
-			if not recv.loaded then return false
-			if recv.get_position_attributes(gp.intro_mclassdef.mclass) < 0 then return false
-		end
-
-		return true
-	end
 end
 
 # MO of method call
@@ -592,49 +370,6 @@ class MOCallSite
 	var given_args = new List[MOExpr]
 
 	redef fun is_from_mocallsite do return true
-
-	redef fun compute_impl(vm)
-	do
-		var gp = pattern.gp
-
-		if not pattern.rst.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(false, gp.offset)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if get_concretes.length == 1 then
-			var cls = get_concretes.first
-			impl = new StaticImplProp(true,
-			vm.method_dispatch_ph(cls.vtable.internal_vtable,
-			cls.vtable.mask,
-			gp.intro_mclassdef.mclass.vtable.id, 
-			gp.offset))
-		else if unique_pos_concrete_recv then
-			# SST immutable because it can't be more than these concretes receivers statically
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-	
-	# Each concrete receiver has unique method position
-	private fun unique_pos_concrete_recv: Bool
-	do
-		var gp = pattern.gp
-
-		for recv in get_concretes do
-			if not recv.loaded then return false
-			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return false
-		end
-
-		return true
-	end
 end
 
 # MO of read attribute
@@ -656,49 +391,6 @@ class MOWriteSite
 
 	# Value to assign to the attribute
 #	var arg: MOExpr
-end
-
-# Root of type implementation (sst, ph, static)
-abstract class Implementation
-	# Is is a mutable implementation ?
-	var is_mutable: Bool
-end
-
-# Commons properties on object mecanism implementations (sst, ph)
-abstract class ObjectImpl
-	super Implementation
-
-	# The (global if SST, relative if PH) offset of the property
-	var offset: Int
-end
-
-# SST implementation
-class SSTImpl super ObjectImpl end
-
-# Perfect hashing implementation
-class PHImpl
-	super ObjectImpl
-end
-
-# Common class for static implementation between subtypes, attr, meth.
-abstract class StaticImpl
-	super Implementation
-end
-
-# Static implementation (used only for method call)
-class StaticImplProp
-	super StaticImpl
-
-	# The called lp
-	var lp: MPropDef
-end
-
-# Static implementation (used only for subtype tests)
-class StaticImplSubtype
-	super StaticImpl
-
-	# Is subtype ?
-	var is_subtype: Bool
 end
 
 redef class MClass
@@ -795,9 +487,9 @@ redef class MClass
 			if site isa MOCallSite then
 				pattern = new MOCallSitePattern(rst, gp.as(MMethod))
 			else if site isa MOReadSite then
-				pattern = new MOReadSitePattern(rst, gp)
+				pattern = new MOReadSitePattern(rst, gp.as(MAttribute))
 			else if site isa MOWriteSite then
-				pattern = new MOWriteSitePattern(rst, gp)
+				pattern = new MOWriteSitePattern(rst, gp.as(MAttribute))
 			else
 				abort
 			end
@@ -863,225 +555,3 @@ redef class MType
 		end
 	end
 end
-
-# Stats of the optimizing model
-class MOStats
-	# Label to display on dump
-	var lbl: String
-
-	# Internal encoding of counters
-	var map = new HashMap[String, Int]
-
-	# Increment a counter
-	fun inc(el: String) do map[el] += 1
-
-	# Decrement a counter
-	fun dec(el: String)
-	do
-		map[el] -= 1
-		assert map[el] >= 0
-	end
-       
-	# Get a value
-	fun get(el: String): Int do return map[el]
-
-	# Dump and format all values
-	fun dump(prefix: String): String
-	do
-		var ret = ""
-
-		for key, val in map do ret += "{prefix}{key}: {val}\n"
-
-		return ret
-	end
-
-	# Make text csv file contains overview statistics
-	fun overview
-	do
-		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
-
-		file.write(", method, attribute, cast, total\n")
-	
-		var self_meth = map["meth_self"]
-		var self_attr = map["attr_self"]
-		var self_cast = map["cast_self"]
-		var self_sum = self_meth + self_attr + self_cast
-		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}\n")
-		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}\n")
-		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}\n")
-
-		var concretes_meth = map["meth_concretes_receivers"]
-		var concretes_attr = map["attr_concretes_receivers"]
-		var concretes_cast = map["cast_concretes_receivers"]
-		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
-		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}\n")
-
-		var concretes_pre_meth = map["meth_concretes_preexist"]
-		var concretes_pre_attr = map["attr_concretes_preexist"]
-		var concretes_pre_cast = map["cast_concretes_preexist"]
-		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
-		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}\n")
-
-		var concretes_npre_meth = map["meth_concretes_npreexist"]
-		var concretes_npre_attr = map["attr_concretes_npreexist"]
-		var concretes_npre_cast = map["cast_concretes_npreexist"]
-		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
-		file.write("preexist nconcretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}\n")
-
-		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
-		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
-		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]}\n")
-
-		file.write("static preexist, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}\n")
-
-		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
-		file.write("static npreexist, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}\n")
-
-		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
-		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
-		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
-		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}\n")
-	
-		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
-		file.write("sst preexist, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}\n")
-
-		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
-		file.write("sst npreexist, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}\n")
-
-		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}\n")
-
-		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
-		file.write(",,,,,\n")
-		file.write("optimisable inline,,,,{optimization_inline}\n")
-
-		var cant_optimize = map["impl_ph"] + sum_npre_sst + map["meth_preexist_sst"] + sum_npre_static
-		file.write("non optimisable,,,,{cant_optimize}")
-		
-		file.close
-	end
-
-	# Pretty format
-	fun pretty: String
-	do
-		var ret = "" 
-
-		ret += "\n------------------ MO STATS {lbl} ------------------\n"
-		ret += dump("\t")
-		ret += "--------------------------------------------------------\n"
-
-		return ret
-	end
-
-	# Copy all values that are counted statically (eg. when we do ast -> mo)
-	fun copy_static_data(counters: MOStats)
-	do
-		map["loaded_classes_explicits"] = counters.get("loaded_classes_explicits")
-		map["loaded_classes_implicits"] = counters.get("loaded_classes_implicits")
-		map["loaded_classes_abstracts"] = counters.get("loaded_classes_abstracts")
-		map["primitive_sites"] = counters.get("primitive_sites")
-		map["nyi"] = counters.get("nyi")
-		map["lits"] = counters.get("lits")
-		map["ast_new"] = counters.get("ast_new")
-		map["attr_redef"] = counters.get("attr_redef")
-		map["sites_final"] = counters.get("sites_final")
-	end
-
-	init
-	do
-		# inrc when a class is explicitly (with a "new" keyword) loaded
-		map["loaded_classes_explicits"] = 0
-
-		# inrc when a class is loaded as super-class (abstract excluded) of a loaded class (implicit or explicit)
-		map["loaded_classes_implicits"] = 0
-
-		# incr when a class is abstract and loaded as super-class
-		map["loaded_classes_abstracts"] = 0
-
-		# incr when compile a instantiation site
-		map["ast_new"] = 0
-		
-		# incr when compute an implementation
-		# decr (on regular counters) when implementation is reset
-		map["impl_static"] = 0
-		map["impl_sst"] = 0
-		map["impl_ph"] = 0
-	
-		# incr when the site depends at least of one return expression
-		map["sites_from_meth_return"] = 0
-
-		# incr when the site depends at least of one new expression
-		map["sites_from_new"] = 0
-		
-		# incr when the site depends of at least of one return expression or one new expression
-		map["sites_handle_by_extend_preexist"] = 0
-		
-		# incr when the site is on leaf gp on global model
-		map["sites_final"] = 0
-		
-		# incr when site is on integer, char, string (not added into the MO)
-		map["primitive_sites"] = 0
-
-		# incr when the ast site is an unkown case (not added into the MO)
-		map["nyi"] = 0
-
-		# never use. Maybe usefull for enum if Nit add it (this cass should not be added into the MO)
-		map["lits"] = 0
-
-		# incr if a site is preexist
-		# decr (on regular counters) if the preexistance of the receiver is reset
-		map["preexist"] = 0
-
-		# incr if a site isn't preexist
-		# decr (on regular counters) if the preexistance of the receiver is reset
-		map["npreexist"] = 0
-
-		# incr if a site is preexist and it implementation is static
-		# decr (on regular counters) if the preexistance of the receiver is reset
-		map["preexist_static"] = 0
-
-		map["attr"] = 0
-		map["attr_self"] = 0
-		map["attr_concretes_receivers"] = 0
-		map["attr_concretes_preexist"] = 0
-		map["attr_concretes_npreexist"] = 0
-		map["attr_read"] = 0
-		map["attr_write"] = 0
-		map["attr_preexist"] = 0
-		map["attr_npreexist"] = 0
-		map["attr_preexist_sst"] = 0
-		map["attr_npreexist_sst"] = 0
-		map["attr_ph"] = 0 
-		# incr if construct MO node to access on attribute as MOCallSite
-		# because it's an accessors with redefinitions
-		# If it's incr, some meth_* counters will be incr too, as regular method call
-		map["attr_redef"] = 0
-
-		map["cast"] = 0
-		map["cast_self"] = 0
-		map["cast_concretes_receivers"] = 0
-		map["cast_concretes_preexist"] = 0
-		map["cast_concretes_npreexist"] = 0
-		map["cast_preexist"] = 0
-		map["cast_npreexist"] = 0
-		map["cast_preexist_static"] = 0
-		map["cast_npreexist_static"] = 0
-		map["cast_preexist_sst"] = 0
-		map["cast_npreexist_sst"] = 0
-		map["cast_ph"] = 0
-
-		map["meth"] = 0
-		map["meth_self"] = 0
-		map["meth_concretes_receivers"] = 0
-		map["meth_concretes_preexist"] = 0
-		map["meth_concretes_npreexist"] = 0
-		map["meth_preexist"] = 0
-		map["meth_npreexist"] = 0
-		map["meth_preexist_static"] = 0
-		map["meth_npreexist_static"] = 0
-		map["meth_preexist_sst"] = 0
-		map["meth_npreexist_sst"] = 0
-		map["meth_ph"] = 0
-	end
-end
-
-
