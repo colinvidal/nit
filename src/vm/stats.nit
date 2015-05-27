@@ -97,8 +97,7 @@ end
 redef class MMethodDef
 	redef fun preexist_all(vm: VirtualMachine)
 	do
-		var valid = super(vm)
-		if not valid then return false
+		if not super(vm) then return false
 
 		for site in mosites do
 			var recv = site.expr_recv
@@ -141,8 +140,10 @@ redef class MMethodDef
 
 				pstats.inc("attr")
 				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
-				incr_specific_counters(is_pre, "attr_concretes_preexist", "attr_concretes_npreexist")
-				if is_concretes then pstats.inc("attr_concretes_receivers")
+				if is_concretes then
+					pstats.inc("attr_concretes_receivers")
+					incr_specific_counters(is_pre, "attr_concretes_preexist", "attr_concretes_npreexist")
+				end
 
 			# cast_*
 			else if site isa MOSubtypeSite then
@@ -161,8 +162,10 @@ redef class MMethodDef
 
 				pstats.inc("cast")
 				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
-				incr_specific_counters(is_pre, "cast_concretes_preexist", "cast_concretes_npreexist")
-				if is_concretes then pstats.inc("cast_concretes_receivers")
+				if is_concretes then
+					pstats.inc("cast_concretes_receivers")
+					incr_specific_counters(is_pre, "cast_concretes_preexist", "cast_concretes_npreexist")
+				end
 
 			# meth_*
 			else if site isa MOCallSite then
@@ -181,8 +184,10 @@ redef class MMethodDef
 
 				pstats.inc("meth")
 				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
-				incr_specific_counters(is_pre, "meth_concretes_preexist", "meth_concretes_npreexist")
-				if is_concretes then pstats.inc("meth_concretes_receivers")
+				if is_concretes then 
+					pstats.inc("meth_concretes_receivers")
+					incr_specific_counters(is_pre, "meth_concretes_preexist", "meth_concretes_npreexist")
+				end
 			end
 		end
 		return true
@@ -377,7 +382,7 @@ class MOStats
 		var concretes_npre_attr = map["attr_concretes_npreexist"]
 		var concretes_npre_cast = map["cast_concretes_npreexist"]
 		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
-		file.write("preexist nconcretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}\n")
+		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}\n")
 
 		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
 		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
