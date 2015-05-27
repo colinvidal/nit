@@ -14,39 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Optimization of the nitvm
+# Optimization of the nitvm, compute implementations
 module vm_optimizations
 
 import virtual_machine
 import ssa
 import model_optimizations
+import preexistence
 
 redef class VirtualMachine
-	redef fun load_class(mclass)
-	do
-		if mclass.loaded then return
-
-		super(mclass)
-
-		if mclass.kind == abstract_kind and not mclass.mclass_type.is_primitive_type then
-			pstats.inc("loaded_classes_abstracts")
-		else
-			pstats.inc("loaded_classes_explicits")
-		end
-
-		mclass.handle_new_class
-	end
-
-	redef fun new_frame(node, mpropdef, args)
-	do
-		next_receivers.push(args.first.mtype)
-#		trace("NEXT_RECEIVERS: {next_receivers}")
-		var ret = super(node, mpropdef, args)
-		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
-		next_receivers.pop
-		return ret
-	end
-
 	# Add optimization of the method dispatch
 	redef fun callsite(callsite: nullable CallSite, arguments: Array[Instance]): nullable Instance
 	do
@@ -557,7 +533,6 @@ redef class ANewExpr
 			monew = new MONew(vm.current_propdef.mpropdef.as(MMethodDef))
 			vm.current_propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
 			recvtype.mclass.set_new_pattern(monew.as(not null))
-			pstats.inc("ast_new")
 		end
 
 		return sup
@@ -583,13 +558,7 @@ redef class ANode
 	# Convert AST node into MOExpression
 	fun ast2mo: nullable MOExpr
 	do
-		if is_primitive_node then
-			sys.pstats.inc("primitive_sites")
-		else
-			sys.pstats.inc("nyi")
-			trace("WARN: NYI {self}")
-		end
-
+		if not is_primitive_node then trace("WARN: NYI {self}")
 		return null
 	end
 end
@@ -651,11 +620,6 @@ redef class AMethPropdef
 	end
 end
 
-redef class AAttrPropdef
-	# When the node encode accessors who are redefined, tell if it's already count as "attr_redef"
-	var attr_redef_counted = false
-end
-
 redef class ASendExpr
 	super AToCompile
 
@@ -682,11 +646,9 @@ redef class ASendExpr
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			# Ignore litterals cases of the analysis
 			ignore = true
-			pstats.inc("lits")
 		else if n_expr.mtype.is_primitive_type then
 			# Ignore primitives cases of the analysis
 			ignore = true
-			pstats.inc("primitive_sites")
 		end
 
 		var recv = n_expr.ast2mo
@@ -700,52 +662,56 @@ redef class ASendExpr
 			var is_attribute = node_ast isa AAttrPropdef
 
 			if is_attribute and not has_redef then
-				# Unique LP, simple attr access, make it as a real attribute access (eg. _attr)
-				
-				var moattr: MOAttrSite
-				var params_len = cs.msignature.mparameters.length
-
-				if params_len == 0 then
-					# The node is a MOReadSite
-					moattr = new MOReadSite(recv, lp)
-				else
-					# The node is a MOWriteSite
-					assert params_len == 1
-					moattr = new MOWriteSite(recv, lp)
-				end
-
-				var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-
-				var gp = node_ast.as(AAttrPropdef).mpropdef.mproperty
-
-				recv_class.set_site_pattern(moattr, recv_class.mclass_type, gp)
-				lp.mosites.add(moattr)	
+				compile_ast_accessor(vm, lp, recv, node_ast.as(not null))
 			else
-				# Here, we are sure that the property of the callsite is a real method call (of accessors with redefs)
+				compile_ast_method(vm, lp, recv, node_ast.as(not null), is_attribute)
+			end
+		end
+	end
 
-				# It's an accessors (with redefs) dispatch
-				if is_attribute and not node_ast.as(AAttrPropdef).attr_redef_counted then 
-					pstats.inc("attr_redef")
-					node_ast.as(AAttrPropdef).attr_redef_counted = true
-				end
+	# Unique LP, simple attr access, make it as a real attribute access (eg. _attr)
+	private fun compile_ast_accessor(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode)
+	do	
+		var moattr: MOAttrSite
+		var params_len = callsite.as(not null).msignature.mparameters.length
 
-				# Null cases are already eliminated, to get_mclass can't return null
-				var recv_class = cs.recv.get_mclass(vm).as(not null)
+		if params_len == 0 then
+			# The node is a MOReadSite
+			moattr = new MOReadSite(recv, lp)
+		else
+			# The node is a MOWriteSite
+			assert params_len == 1
+			moattr = new MOWriteSite(recv, lp)
+		end
 
-				# If recv_class was a formal type, and now resolved as in primitive, we ignore it
-				if not recv_class.mclass_type.is_primitive_type  then
-					mocallsite = new MOCallSite(recv, lp)
-					var mocs = mocallsite.as(not null)
+		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 
-					lp.mosites.add(mocs)
-					recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
+		var gp = node_ast.as(AAttrPropdef).mpropdef.mproperty
 
-					# Expressions arguments given to the method called
-					for arg in raw_arguments do
-						var moexpr = arg.ast2mo
-						if moexpr != null then mocallsite.given_args.add(moexpr)
-					end
-				end
+		recv_class.set_site_pattern(moattr, recv_class.mclass_type, gp)
+		lp.mosites.add(moattr)	
+	end
+
+	# Real methods calls, and accessors with multiples LPs
+	private fun compile_ast_method(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode, is_attribute: Bool)
+	do
+		var cs = callsite.as(not null)
+
+		# Null cases are already eliminated, to get_mclass can't return null
+		var recv_class = cs.recv.get_mclass(vm).as(not null)
+
+		# If recv_class was a formal type, and now resolved as in primitive, we ignore it
+		if not recv_class.mclass_type.is_primitive_type  then
+			mocallsite = new MOCallSite(recv, lp)
+			var mocs = mocallsite.as(not null)
+
+			lp.mosites.add(mocs)
+			recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
+
+			# Expressions arguments given to the method called
+			for arg in raw_arguments do
+				var moexpr = arg.ast2mo
+				if moexpr != null then mocallsite.given_args.add(moexpr)
 			end
 		end
 	end
@@ -759,667 +725,278 @@ redef class ANotExpr
 	redef fun ast2mo do return n_expr.ast2mo
 end
 
-redef class ABinopExpr
-	# If a binary operation on primitives types return something (or test of equality), it's primitive
-	# TODO: what about obj1 + obj2 ?
-	redef fun ast2mo do
-		pstats.inc("primitive_sites")
-		return null
+redef abstract class MOSitePattern
+	# Implementation of the pattern (used if site as not concerte receivers list)
+	var impl: nullable Implementation is noinit
+
+	# Get implementation, compute it if not exists
+	fun get_impl(vm: VirtualMachine): Implementation
+	do
+		if impl == null then compute_impl(vm)
+		return impl.as(not null)
 	end
+
+	# Compute the implementation
+	private fun compute_impl(vm: VirtualMachine) is abstract
 end
 
-redef class Int
-	# Display 8 lower bits of preexitence value
-	fun preexists_bits: Array[Int]
-	do
-		var bs = bits.reversed
-		for i in [0..23] do bs.shift
-		return bs
-	end
-end
-
-redef class MPropDef
-	# List of mutable preexists expressions
-	var exprs_preexist_mut = new List[MOExpr]
-
-	# List of mutable non preexists expressions
-	var exprs_npreexist_mut = new List[MOExpr]
-
-	# Drop exprs_preesit_mut and set unknown state to all expression inside
-	# If the return_expr is in it, recurse on callers
-	fun propage_preexist
-	do
-		var flag = false
-		if self isa MMethodDef then
-			if return_expr != null then flag = return_expr.is_pre_nper
+redef class MOSubtypeSitePattern
+	redef fun compute_impl(vm)
+	do 
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, target.get_mclass(vm).color)
+			return
 		end
 
-		for expr in exprs_preexist_mut do expr.init_preexist
-		exprs_preexist_mut.clear
-
-		if flag then for p in callers do p.as(MOExprSitePattern).propage_preexist
-	end
-
-	# Drop exprs_npreesit_mut and set unknown state to all expression inside
-	# If the return_expr is in it, recurse on callers
-	fun propage_npreexist
-	do
-		var flag = false
-		if self isa MMethodDef then
-			if return_expr != null then flag = return_expr.is_npre_nper
-		end
-
-		for expr in exprs_npreexist_mut do expr.init_preexist
-		exprs_npreexist_mut.clear
-
-		if flag then for p in callers do p.as(MOExprSitePattern).propage_npreexist
-	end
-
-	# Fill the correct list if the analysed preexistence if unperennial
-	fun fill_nper(expr: MOExpr)
-	do
-		if expr.is_nper then
-			if expr.is_pre then
-				if not exprs_preexist_mut.has(expr) then exprs_preexist_mut.add(expr)
-			else
-				if not exprs_npreexist_mut.has(expr) then exprs_npreexist_mut.add(expr)
-			end
-		end
-	end
-end
-
-redef class MMethodDef
-	# Compute the preexistence of the return of the method expression
-	fun preexist_return: Int
-	do
-		if not compiled then
-			return_expr.set_npre_nper
-			return return_expr.preexist_expr_value
-		else if not return_expr.is_pre_unknown then
-			return return_expr.preexist_expr_value
+		var pos_cls = rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
+		
+		if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls)
 		else
-			return_expr.set_recursive
-			return return_expr.preexist_expr_value
+			impl = new PHImpl(false, target.get_mclass(vm).color)
 		end
 	end
+end
 
-	# Compute the preexistence of all invocation sites and return site of the method
-	#
-	# WARNING!
-	# The VM can't interpret FFI code, so intern/extern methods are not analysed,
-	# and a expression using a receiver from intern/extern method is preexistent.
-	#
-	fun preexist_all(vm: VirtualMachine)
+redef abstract class MOPropSitePattern
+	redef fun add_lp(lp: LP)
 	do
-		if compiled or is_intern or is_extern then return
-		compiled = true
+		var reset = not lps.has(lp)
 
-		trace("\npreexist_all of {self}")
-		var preexist: Int
-
-		if not disable_preexistence_extensions then
-			for newexpr in monews do
-				assert not newexpr.pattern.cls.mclass_type.is_primitive_type
-
-				preexist = newexpr.preexist_expr
-				fill_nper(newexpr)
-				trace("\tpreexist of new {newexpr} loaded:{newexpr.pattern.is_loaded} {preexist} {preexist.preexists_bits}")
-			end
+		super(lp)
+		if reset then 
+			if impl != null and impl.is_mutable then impl = null
+			for site in sites do if site.impl.is_mutable then site.init_impl
 		end
-
-		for site in mosites do
-			assert not site.pattern.rst.is_primitive_type
-
-			if site.expr_recv.is_from_monew then pstats.inc("sites_from_new")
-			if site.expr_recv.is_from_mocallsite then pstats.inc("sites_from_meth_return")
-			if site.expr_recv.is_from_monew or site.expr_recv.is_from_mocallsite then pstats.inc("sites_handle_by_extend_preexist")
-
-			preexist = site.preexist_site
-			var is_pre = site.expr_recv.is_pre
-			var impl = site.get_impl(vm)
-			var is_concretes = site.get_concretes.length > 0
-			var is_self_recv = false
-
-			if site.expr_recv isa MOParam then 
-				if site.expr_recv.as(MOParam).offset == 0 then is_self_recv = true
-			end
-
-
-			var buff = "\tpreexist of "
-
-			if site isa MOSubtypeSite then
-			else
-			end
-
-			fill_nper(site.expr_recv)
-
-			if site.expr_recv.is_pre then
-				pstats.inc("preexist")
-				if site.get_impl(vm) isa StaticImpl then pstats.inc("preexist_static")
-			else
-				pstats.inc("npreexist")
-			end
-
-			# attr_*
-			if site isa MOAttrSite then
-				buff += "attr {site.pattern.rst}.{site.pattern.gp}" 
-
-				if is_self_recv then pstats.inc("attr_self")
-
-				if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
-					pstats.inc("impl_sst")
-				else if impl isa PHImpl then 
-					pstats.inc("attr_ph")
-					pstats.inc("impl_ph")
-				else 
-					abort
-				end
-
-				if site isa MOReadSite then
-					pstats.inc("attr_read")
-				else
-					pstats.inc("attr_write")
-				end
-
-				pstats.inc("attr")
-				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
-				incr_specific_counters(is_pre, "attr_concretes_preexist", "attr_concretes_npreexist")
-				if is_concretes then pstats.inc("attr_concretes_receivers")
-			end
-
-			# cast_*
-			if site isa MOSubtypeSite then
-				buff += "cast {site.pattern.rst} isa {site.target}"
-				
-				if is_self_recv then pstats.inc("cast_self")
-
-				if impl isa StaticImpl then
-					incr_specific_counters(is_pre, "cast_preexist_static", "cast_npreexist_static")
-					pstats.inc("impl_static")
-				else if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "cast_preexist_sst", "cast_npreexist_sst")
-					pstats.inc("impl_sst")
-				else
-					pstats.inc("cast_ph")
-					pstats.inc("impl_ph")
-				end
-
-				pstats.inc("cast")
-				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
-				incr_specific_counters(is_pre, "cast_concretes_preexist", "cast_concretes_npreexist")
-				if is_concretes then pstats.inc("cast_concretes_receivers")
-			end
-
-			# meth_*
-			if site isa MOCallSite then
-				buff += "meth {site.pattern.rst}.{site.pattern.gp}" 
-				
-				if is_self_recv then pstats.inc("meth_self")
-				
-				if impl isa StaticImpl then
-					incr_specific_counters(is_pre, "meth_preexist_static", "meth_npreexist_static")
-					pstats.inc("impl_static")
-				else if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "meth_preexist_sst", "meth_npreexist_sst")
-					pstats.inc("impl_sst")
-				else
-					pstats.inc("meth_ph")
-					pstats.inc("impl_ph")
-				end
-
-				pstats.inc("meth")
-				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
-				incr_specific_counters(is_pre, "meth_concretes_preexist", "meth_concretes_npreexist")
-				if is_concretes then pstats.inc("meth_concretes_receivers")
-			end
-
-			buff += " {site.expr_recv}.{site} {preexist} {preexist.preexists_bits}"
-			trace(buff)
-			trace("\t\tconcretes receivers? {(site.get_concretes.length > 0)}")
-			trace("\t\t{impl} {impl.is_mutable}")
-		end
-
-		if exprs_preexist_mut.length > 0 then trace("\tmutables pre: {exprs_preexist_mut}")
-		if exprs_npreexist_mut.length > 0 then trace("\tmutables nper: {exprs_npreexist_mut}")
 	end
+end
 
-	# Avoid to write same thing everytimes in the previous function
-	private fun incr_specific_counters(is_pre: Bool, yes: String, no: String)
+redef class MOCallSitePattern
+	redef fun compute_impl(vm)
 	do
-		if is_pre then
-			pstats.inc(yes)
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
+
+		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if lps.length == 1 then
+			# The method is an intro or a redef
+			impl = new StaticImplProp(true, lps.first)
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
-			pstats.inc(no)
+			impl = new PHImpl(false, gp.offset) 
 		end
 	end
 end
 
-# Preexistence masks
-# PVAL_PER:	0...1111
-# PTYPE_PER:	0...1101
-# PVAL_NPER:	0...1011
-# PTYPE_NPER:	0...1001
-# NPRE_PER:	0...1100
-# NPRE_NPER:	0...1000
-# RECURSIV:	0...0000
-# PRE_PER:	0...0101
-# PRE_NPER:	0...0001
-# UNKNOWN:	1...
-
-# Preexistence mask of perennial value preexistence
-fun pmask_PVAL_PER: Int do return 15
-
-# Preexistence mask of perennial type preexistence
-fun pmask_PTYPE_PER: Int do return 13
-
-# Preexistence mask of no perennial value preexistence
-fun pmask_PVAL_NPER: Int do return 11
-
-# Preexistence mask of no perennial type preexistence
-fun pmask_PTYPE_NPER: Int do return 9
-
-# Preexistence mask of perennial no preexistence
-fun pmask_NPRE_PER: Int do return 12
-
-# Preexistence mask of no perennial no preexistence
-fun pmask_NPRE_NPER: Int do return 8
-
-# Preexistence mask of recursive calls
-fun pmask_RECURSIV: Int do return 0
-
-# Preexistence mask of unknown preexistence
-fun pmask_UNKNOWN: Int do return -1
-
-redef class MOExpr
-	# The cached preexistence of the expression (the return of the expression)
-	var preexist_expr_value: Int = pmask_UNKNOWN
-
-	# Compute the preexistence of the expression
-	fun preexist_expr: Int is abstract
-
-	# Set a bit in a dependency range on the given offset to a preexistence state
-	# Shift 4 bits (preexistence status) + the offset of dependency, and set bit to 1
-	fun set_dependency_flag(offset: Int): Int
+redef abstract class MOAttrPattern
+	redef fun compute_impl(vm)
 	do
-		preexist_expr_value = preexist_expr_value.bin_or(1.lshift(4 + offset))
-		return preexist_expr_value
-	end
+		if not rst.get_mclass(vm).loaded then
+			impl = new PHImpl(false, gp.offset)
+			return
+		end
 
-	# True if the expression depends of the preexistence of a dependencie at `index`
-	fun is_dependency_flag(index: Int): Bool
-	do
-		# It must concern a dependency bit
-		index += 5
+		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
 
-		return 1.lshift(index).bin_and(preexist_expr_value) != 0
-	end
-
-	# Affect status mask
-	private fun set_status_mask(mask: Int)
-	do
-		if is_pre_unknown or is_rec then preexist_expr_value = 0
-		preexist_expr_value = preexist_expr_value.rshift(4).lshift(4).bin_or(mask)
-	end
-
-	# Set type preexist perennial
-	fun set_ptype_per do set_status_mask(pmask_PTYPE_PER)
-
-	# Set value preexist perennial
-	fun set_pval_per do set_status_mask(pmask_PVAL_PER)
-
-	# Set non preexist non perennial
-	fun set_npre_nper do set_status_mask(pmask_NPRE_NPER)
-
-	# Set non preexist perennial
-	fun set_npre_per do preexist_expr_value = pmask_NPRE_PER
-
-	# Set val preexist non perennial
-	fun set_pval_nper do set_status_mask(pmask_PVAL_NPER)
-
-	# Set recursive flag
-	fun set_recursive do preexist_expr_value = pmask_RECURSIV
-
-	# Return true if the preexistence of the expression isn't known
-	fun is_pre_unknown: Bool do return preexist_expr_value == pmask_UNKNOWN
-
-	# Return true if the expression is recursive
-	fun is_rec: Bool do return preexist_expr_value == 0
-
-	# Return true if the expression preexists (recursive case is interpreted as preexistent)
-	fun is_pre: Bool do return preexist_expr_value.bin_and(1) == 1 or preexist_expr_value == 0
-
-	# True true if the expression non preexists
-	fun is_npre: Bool do return not is_pre
-
-	# Return true if the preexistence state of the expression is perennial
-	fun is_per: Bool do return preexist_expr_value.bin_and(4) == 4
-
-	# Return true if the preexistence state if not perennial
-	fun is_nper: Bool do return not is_per
-
-	# Return true if the prexistence state is preexist and no perennial
-	fun is_pre_nper: Bool do return is_pre and is_nper
-
-	# Return true if the preexistence state is no preexist and no perennial
-	fun is_npre_nper: Bool do return is_npre and is_nper
-
-	# Return true if the preexistence state is no preexist and perennial
-	fun is_npre_per: Bool do return is_npre and is_per
-
-	# Initialize preexist_cache to UNKNOWN
-	fun init_preexist do preexist_expr_value = pmask_UNKNOWN
-
-	# Merge dependecies and preexistence state
-	fun merge_preexistence(expr: MOExpr): Int
-	do
-		if expr.is_npre_per then
-			set_npre_per
-		else if expr.is_rec then
-			set_recursive
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls + gp.offset)
 		else
-			var pre = preexist_expr_value.bin_and(15)
-			var deps = preexist_expr_value.rshift(4).lshift(4)
-
-			pre = pre.bin_and(expr.preexist_expr_value.bin_and(15))
-			deps = deps.bin_or(expr.preexist_expr_value.rshift(4).lshift(4))
-
-			preexist_expr_value = pre.bin_or(deps)
+			impl = new PHImpl(false, gp.offset) 
 		end
-
-		return preexist_expr_value
 	end
 end
 
-redef class MOLit
-	redef var preexist_expr_value = pmask_PVAL_PER
+redef abstract class MOSite
+	# Implementation of the site (null if can't determine concretes receivers)
+	var impl: nullable Implementation is noinit
 
-	redef fun init_preexist do end 
-
-	redef fun preexist_expr do return preexist_expr_value
-end
-
-redef class MOParam
-	redef var preexist_expr_value = pmask_PVAL_PER
-
-	init do set_dependency_flag(offset)
-
-	redef fun init_preexist do end 
-
-	redef fun preexist_expr do return preexist_expr_value
-end
-
-redef class MONew
-	redef fun init_preexist do
-		if disable_preexistence_extensions then
-			set_npre_per
-		else if pattern.is_loaded then
-			set_ptype_per
+	# Get the implementation of the site
+	fun get_impl(vm: VirtualMachine): Implementation
+	do
+		if get_concretes.length == 0 then
+			# TODO: Test preexistence before return here
+			return pattern.get_impl(vm)
 		else
-			set_npre_nper
+			# We don't care the preeeixstence of the site here
+			if impl == null then compute_impl(vm)
+			return impl.as(not null)
 		end
 	end
 
-	redef fun preexist_expr do 
-		if is_pre_unknown then init_preexist
-		return preexist_expr_value
-	end
+	# Initialise the implementation decision
+	fun init_impl do impl = null
+
+	# Compute the implementation with rst/pic
+	private fun compute_impl(vm: VirtualMachine) is abstract
 end
 
-redef class MOSSAVar
-	redef fun preexist_expr
+redef class MOSubtypeSite
+	redef fun compute_impl(vm)
 	do
-		if is_pre_unknown then preexist_expr_value = dependency.preexist_expr
-		return preexist_expr_value
-	end
-end
-
-redef class MOPhiVar
-	redef fun preexist_expr
-	do
-		if is_pre_unknown then
-			preexist_expr_value = pmask_PVAL_PER
-			for dep in dependencies do
-				dep.preexist_expr
-				merge_preexistence(dep)
-				if is_npre_per then
-					break
-				end
-			end
+		if not target.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, pattern.rst.get_mclass(vm).color)
+			return
 		end
 
-		return preexist_expr_value
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
+
+		if get_concretes.length == 1 then
+			impl = new StaticImplSubtype(true,
+			vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
+			pattern.rst.get_mclass(vm).vtable.mask,
+			pattern.rst.get_mclass(vm).vtable.internal_vtable))		
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls)
+		else
+			impl = new PHImpl(false, target.get_mclass(vm).color) 
+		end
+	end
+
+	redef fun get_impl(vm)
+	do
+		if get_concretes.length > 0 then
+			compute_impl(vm)
+			return impl.as(not null)
+		else
+			return pattern.get_impl(vm)
+		end
 	end
 end
 
-
-redef class MOReadSite
-	redef fun preexist_expr
+redef abstract class MOAttrSite
+	redef fun compute_impl(vm)
 	do
-		if is_pre_unknown then
-			expr_recv.preexist_expr
-			if immutable and expr_recv.is_pre then
-				set_pval_per
-			else
-				if expr_recv.is_pre then
-					if expr_recv.is_per then
-						set_pval_per
-					else
-						set_pval_nper
-					end
+		var gp = pattern.gp
 
-					# The receiver is always at position 0 of the environment
-					set_dependency_flag(0)
-				else
-					if expr_recv.is_per then
-						set_npre_per
-					else
-						set_npre_nper
-					end
-				end
-			end
+		if not pattern.rst.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, gp.offset)
+			return
 		end
 
-		return preexist_expr_value
-	end
-end
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
 
-redef class MOCallSite
-	# If the receiver expression of `self` depends of the preexistence of the arg at `index`,
-	# check if `expr` depends of the preexistence of the same arg.
-	fun dep_matches(expr: MOExpr, index: Int): Bool
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if unique_pos_concrete_recv then
+			# SST immutable because it can't be more than these concretes receivers statically
+			# We don't check if there is one or more concrete type, because we can't make a static dispatch
+			# on attribute
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else
+			impl = new PHImpl(false, gp.offset) 
+		end
+	end
+
+	# Each concrete receiver has unique attribute position
+	private fun unique_pos_concrete_recv: Bool
 	do
-		if is_dependency_flag(index) and not expr.is_dependency_flag(index) then
-			return false
+		var gp = pattern.gp
+
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if recv.get_position_attributes(gp.intro_mclassdef.mclass) < 0 then return false
 		end
 
 		return true
 	end
+end
 
-	# Check if the preexistence of the arguments matches with the dependencies of the expression
-	# Then, merge the preexsitence values of all arguments with the expression preexistence
-	fun check_args: Int
+redef class MOCallSite
+	redef fun compute_impl(vm)
 	do
-		var index = 0
+		var gp = pattern.gp
 
-		for arg in given_args do
-			arg.preexist_expr
-			if dep_matches(arg, index) then
-				merge_preexistence(arg)
-			else
-				set_npre_nper
-				return preexist_expr_value
-			end
-			index += 1
+		if not pattern.rst.get_mclass(vm).loaded then
+			# The PHImpl here is mutable because it can be switch to a 
+			# lightweight implementation when the class will be loaded
+			impl = new PHImpl(false, gp.offset)
+			return
 		end
 
-		return preexist_expr_value
-	end
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 
-	redef fun preexist_expr
-	do
-		if disable_preexistence_extensions then
-			preexist_expr_value = pmask_NPRE_PER
-		else if pattern.cuc > 0 then
-			preexist_expr_value = pmask_NPRE_NPER
-		else if pattern.perennial_status then
-			preexist_expr_value = pmask_NPRE_PER
-		else if pattern.lp_all_perennial then 
-			preexist_expr_value = pmask_PVAL_PER
-			check_args
-		else if pattern.lps.length == 0 then
-			set_npre_nper
+		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + gp.offset)
+		else if get_concretes.length == 1 then
+			var cls = get_concretes.first
+			impl = new StaticImplProp(true,
+			vm.method_dispatch_ph(cls.vtable.internal_vtable,
+			cls.vtable.mask,
+			gp.intro_mclassdef.mclass.vtable.id, 
+			gp.offset))
+		else if unique_pos_concrete_recv then
+			# SST immutable because it can't be more than these concretes receivers statically
+			impl = new SSTImpl(false, pos_cls + gp.offset)
 		else
-			preexist_expr_value = pmask_PVAL_PER
-			for candidate in pattern.lps do
-				if candidate.is_intern or candidate.is_extern then
-					# WARNING
-					# If the candidate method is intern/extern, then the return is preexist immutable
-					# since the VM cannot make FFI.
-					set_pval_per
-					break
-				else if not candidate.compiled then
-					# The lp could be known by the model but not already compiled from ast to mo
-					# So, we must NOT check it's return_expr (it could be still null)
-					set_npre_nper
-					break
-				else if candidate.return_expr == null then
-					# Lazy attribute not yet initialized
-					# WARNING
-					# Be sure that it can't be anything else that lazy attributes here
-					trace("WARN NULL RETURN_EXPR {candidate} {candidate.mproperty}")
-					set_npre_nper
-					break
-				end
-				
-				candidate.preexist_return
-				merge_preexistence(candidate.return_expr.as(not null))
-				if is_npre_per then
-					break
-				else
-					check_args
-				end
-			end
+			impl = new PHImpl(false, gp.offset) 
+		end
+	end
+	
+	# Each concrete receiver has unique method position
+	private fun unique_pos_concrete_recv: Bool
+	do
+		var gp = pattern.gp
+
+		for recv in get_concretes do
+			if not recv.loaded then return false
+			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return false
 		end
 
-		return preexist_expr_value
+		return true
 	end
 end
 
-
-redef class MOSite
-	# Compute the preexistence of the site call
-	fun preexist_site: Int
-	do
-		expr_recv.preexist_expr
-		if expr_recv.is_rec then expr_recv.set_pval_nper
-		return expr_recv.preexist_expr_value
-	end
+# Root of type implementation (sst, ph, static)
+abstract class Implementation
+	# Is is a mutable implementation ?
+	var is_mutable: Bool
 end
 
-redef class MOExprSitePattern
-	# Number of uncompiled calles (local properties)
-	var cuc = 0
+# Commons properties on object mecanism implementations (sst, ph)
+abstract class ObjectImpl
+	super Implementation
 
-	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
-	var perennial_status = false
-
-	# If all LPs preexists and are perennial, according to the current class hierarchy
-	var lp_all_perennial = false
-
-	# Call MMethodDef.propage_preexist on all lps 
-	fun propage_preexist
-	do
-		for lp in lps do lp.propage_preexist
-	end
-
-	# Call MMethodDef.propage_npreexist on all lps
-	fun propage_npreexist
-	do
-		for lp in lps do lp.propage_npreexist
-	end
-
-	# When add a new branch, if it is not compiled, unset preexistence to all expressions using it
-	redef fun add_lp(lp)
-	do
-		super
-		cuc += 1
-
-		if cuc == 1 then
-			for site in sites do
-				site.expr_recv.init_preexist
-				site.lp.propage_preexist
-			end
-		end
-
-	end
+	# The (global if SST, relative if PH) offset of the property
+	var offset: Int
 end
 
-redef class MONewPattern
-	# Set npreexist new site preexistent
-	# The non preexistence of newsite became preesitent if class is loaded
-	fun set_preexist_newsite
-	do
-		for newexpr in newexprs do
-			newexpr.set_ptype_per
-			newexpr.lp.propage_npreexist
-		end
-	end
+# SST implementation
+class SSTImpl super ObjectImpl end
+
+# Perfect hashing implementation
+class PHImpl
+	super ObjectImpl
 end
 
-# Change preexistence state of new sites compiled before loading
-redef class MClass
-	redef fun handle_new_class
-	do
-		super
-		new_pattern.set_preexist_newsite
-	end
+# Common class for static implementation between subtypes, attr, meth.
+abstract class StaticImpl
+	super Implementation
 end
 
-redef class ModelBuilder
-	redef fun post_exec(mainmodule)
-	do
-		super(mainmodule)
+# Static implementation (used only for method call)
+class StaticImplProp
+	super StaticImpl
 
-		var compiled_methods = new List[MMethodDef]
+	# The called lp
+	var lp: MPropDef
+end
 
-		# Check if number of static callsites who preexists matches with the counter
-		var preexist_static = 0
+# Static implementation (used only for subtype tests)
+class StaticImplSubtype
+	super StaticImpl
 
-		for mprop in mainmodule.model.mproperties do
-			if not mprop isa MMethod then continue
-			for meth in mprop.mpropdefs do
-				compiled_methods.add(meth)
-				for site in meth.mosites do
-					# Force to recompile the site (set the better allowed optimization)
-					site.expr_recv.preexist_expr
-
-					# Actually, we MUST use get_impl, but it needs to have vm as argument
-					if site.impl isa StaticImpl and site.expr_recv.is_pre then
-						preexist_static += 1
-					else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
-						preexist_static += 1
-					end
-				end
-			end
-		end
-
-		if preexist_static != pstats.get("preexist_static") then
-			print("WARNING: preexist_static {pstats.get("preexist_static")} is actually {preexist_static }")
-		end
-
-		# Recompile all active methods to get the upper bound of the preexistance
-		# We don't need pstats counters with lower bound anymore
-
-		var old_counters = sys.pstats
-		pstats = new MOStats("UPPER")
-		pstats.copy_static_data(old_counters)
-
-		while compiled_methods.length != 0 do
-			var m = compiled_methods.pop
-			m.compiled = false
-			m.preexist_all(interpreter)
-		end
-		print(pstats.pretty)
-	end
+	# Is subtype ?
+	var is_subtype: Bool
 end
