@@ -6,7 +6,7 @@ import ssa
 redef class ToolContext
 	# Enable traces of analysis
 	var trace_on = new OptionBool("Display the trace of model optimizing / preexistence analysis", "--mo-trace")
-	
+
 	redef init
 	do
 		super
@@ -20,6 +20,14 @@ redef class Sys
 
 	# Tell if trace is enabled
 	var trace_on: Bool
+end
+
+redef class ModelBuilder
+	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	do
+		sys.trace_on = toolcontext.trace_on.value
+		super(mainmodule, arguments)
+	end
 end
 
 # Pattern of instantiation sites
