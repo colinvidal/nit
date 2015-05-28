@@ -820,6 +820,23 @@ redef abstract class MOSite
 
 	# Get the implementation of the site, according to preexist value
 	fun get_impl(vm: VirtualMachine): Implementation is abstract
+#	do
+#		if impl != null then return impl.as(not null)
+#		
+#		if get_concretes.length == 0 then
+#			var candidate_impl = pattern.get_impl(vm)
+#			if not expr_recv.is_pre then deoptimize(candidate_impl)
+#			return impl.as(not null)
+#		else
+#			# We don't case of the preexistence here
+#			compute_impl(vm)
+#			return impl.as(not null)
+#		end
+#	end
+
+	# Downgrade the optimization level given by the pattern, because the site is not preexsitant
+	# At the end of this function, self::impl must not be null
+	private fun deoptimize(candidate_impl: Implementation) is abstract
 	
 	# Compute the implementation with rst/pic, and concretes if any
 	fun compute_impl(vm: VirtualMachine)
