@@ -811,35 +811,80 @@ redef abstract class MOSite
 	# Implementation of the site (null if can't determine concretes receivers)
 	var impl: nullable Implementation is noinit
 
-	# Get the implementation of the site
+	# Get the implementation of the site, according to preexist value
 	fun get_impl(vm: VirtualMachine): Implementation is abstract
 	
-	# Compute the implementation with rst/pic
-	private fun compute_impl(vm: VirtualMachine) is abstract
-end
-
-redef class MOSubtypeSite
-	redef fun compute_impl(vm)
+	# Compute the implementation with rst/pic, and concretes if any
+	fun compute_impl(vm: VirtualMachine)
 	do
-		if not target.get_mclass(vm).loaded then
+		var offset = get_offset(vm)
+
+		if not pattern.rst.get_mclass(vm).loaded then
 			# The PHImpl here is mutable because it can be switch to a 
 			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(true, pattern.rst.get_mclass(vm).color)
+			impl = new PHImpl(true, offset)
 			return
 		end
 
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
+		var pos_cls = get_bloc_position(vm, pattern.rst.get_mclass(vm).as(not null))
+		var unique_pos_indicator = unique_pos_for_each_recv(vm)
 
-		if get_concretes.length == 1 then
-			impl = new StaticImplSubtype(true,
-			vm.inter_is_subtype_ph(target.get_mclass(vm).vtable.id,
-			pattern.rst.get_mclass(vm).vtable.mask,
-			pattern.rst.get_mclass(vm).vtable.internal_vtable))		
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls)
+		if get_pic(vm).is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + offset)
+		else if get_concretes.length == 1 then
+			set_static_impl(vm)
+		else if unique_pos_indicator == 1 then
+			# SST immutable because it can't be more than these concretes receivers statically
+			impl = new SSTImpl(false, pos_cls + offset)
+		else if unique_pos_indicator == -1 then
+			# Some receivers classes are not loaded yet, so we use a mutable implementation
+			impl = new PHImpl(true, offset)
 		else
-			impl = new PHImpl(false, target.get_mclass(vm).color) 
+			impl = new PHImpl(false, offset) 
 		end
+	end
+	
+	# Each concrete receiver has unique method position
+	# -1 : some classes still unloaded
+	# 0 : no unique position
+	# 1 : unique position
+	private fun unique_pos_for_each_recv(vm: VirtualMachine): Int
+	do
+		for recv in get_concretes do
+			if not recv.loaded then return -1
+			if get_bloc_position(vm, recv) < 0 then return 0
+		end
+
+		return 1
+	end
+
+	# Must return the position given by MClass:get_position_method
+	# Must be redefined by MOAttrSite to use MClass::get_position_attribute
+	private fun get_bloc_position(vm: VirtualMachine, recv: MClass): Int do return recv.get_position_methods(get_pic(vm))
+
+	# Return the pic
+	# In case of the subtype test, the pic is the target class
+	private fun get_pic(vm: VirtualMachine): MClass is abstract
+
+	# Return the offset of the "targeted property"
+	# (eg. gp.offset for MOPropSite, a_class.color for MOSubtypeSite)
+	private fun get_offset(vm: VirtualMachine): Int is abstract
+
+	# Set a static implementation
+	private fun set_static_impl(vm: VirtualMachine) is abstract
+end
+
+redef class MOSubtypeSite
+	redef fun get_offset(vm) do return get_pic(vm).color
+	
+	redef fun get_pic(vm) do return target.get_mclass(vm).as(not null)
+
+	redef fun set_static_impl(vm)
+	do
+		impl = new StaticImplSubtype(true, vm.inter_is_subtype_ph(
+		get_pic(vm).vtable.id,
+		pattern.rst.get_mclass(vm).vtable.mask,
+		pattern.rst.get_mclass(vm).vtable.internal_vtable))		
 	end
 
 	redef fun get_impl(vm)
@@ -867,51 +912,16 @@ redef class MOSubtypeSite
 	end
 end
 
+redef abstract class MOPropSite
+	redef fun get_offset(vm) do return pattern.gp.offset
+
+	redef fun get_pic(vm) do return pattern.gp.intro_mclassdef.mclass
+end
+
 redef abstract class MOAttrSite
-	redef fun compute_impl(vm)
-	do
-		var gp = pattern.gp
+	redef fun set_static_impl(vm) do abort
 
-		if not pattern.rst.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(true, gp.offset)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
-		var unique_pos_indicator = unique_pos_concrete_recv
-				
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if unique_pos_indicator == 1 then
-			# SST immutable because it can't be more than these concretes receivers statically
-			# We don't check if there is one or more concrete type, because we can't make a static dispatch
-			# on attribute
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if unique_pos_indicator == -1 then
-			# Some receivers classes are not loaded yet, so we use a mutable implementation
-			impl = new PHImpl(true, gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-
-	# Each concrete receiver has unique attribute position
-	# -1 : some classes still unloaded
-	# 0 : no unique position
-	# 1 : unique position
-	private fun unique_pos_concrete_recv: Int
-	do
-		var gp = pattern.gp
-
-		for recv in get_concretes do
-			if not recv.loaded then return -1
-			if recv.get_position_attributes(gp.intro_mclassdef.mclass) < 0 then return 0
-		end
-
-		return 1
-	end
+	redef fun get_bloc_position(vm, recv) do return recv.get_position_attributes(get_pic(vm))
 
 	redef fun get_impl(vm)
 	do
@@ -936,59 +946,17 @@ redef abstract class MOAttrSite
 			return impl.as(not null)
 		end
 	end
-
-
 end
 
 redef class MOCallSite
-	redef fun compute_impl(vm)
+	redef fun set_static_impl(vm)
 	do
-		var gp = pattern.gp
-
-		if not pattern.rst.get_mclass(vm).loaded then
-			# The PHImpl here is mutable because it can be switch to a 
-			# lightweight implementation when the class will be loaded
-			impl = new PHImpl(true, gp.offset)
-			return
-		end
-
-		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-		var unique_pos_indicator = unique_pos_concrete_recv
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if get_concretes.length == 1 then
-			var cls = get_concretes.first
-			impl = new StaticImplProp(false,
-			vm.method_dispatch_ph(cls.vtable.internal_vtable,
-			cls.vtable.mask,
-			gp.intro_mclassdef.mclass.vtable.id, 
-			gp.offset))
-		else if unique_pos_indicator == 1 then
-			# SST immutable because it can't be more than these concretes receivers statically
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if unique_pos_indicator == -1 then
-			# Some receivers classes are not loaded yet, so we use a mutable implementation
-			impl = new PHImpl(true, gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-	
-	# Each concrete receiver has unique method position
-	# -1 : some classes still unloaded
-	# 0 : no unique position
-	# 1 : unique position
-	private fun unique_pos_concrete_recv: Int
-	do
-		var gp = pattern.gp
-
-		for recv in get_concretes do
-			if not recv.loaded then return -1
-			if recv.get_position_methods(gp.intro_mclassdef.mclass) < 0 then return 0
-		end
-
-		return 1
+		var cls = get_concretes.first
+		impl = new StaticImplProp(false, vm.method_dispatch_ph(
+		cls.vtable.internal_vtable,
+		cls.vtable.mask,
+		get_pic(vm).vtable.id, 
+		get_offset(vm)))
 	end
 
 	redef fun get_impl(vm)
