@@ -734,28 +734,57 @@ redef abstract class MOSitePattern
 	end
 
 	# Compute the implementation
-	private fun compute_impl(vm: VirtualMachine) is abstract
-end
+	private fun compute_impl(vm: VirtualMachine)
+	do
+		var offset = get_offset(vm)
 
-redef class MOSubtypeSitePattern
-	redef fun compute_impl(vm)
-	do 
 		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(true, target.get_mclass(vm).color)
+			impl = new PHImpl(true, offset)
 			return
 		end
 
-		var pos_cls = rst.get_mclass(vm).get_position_methods(target.get_mclass(vm).as(not null))
-		
-		if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls)
+		var pos_cls = get_bloc_position(vm)
+
+		if get_pic(vm).is_instance_of_object(vm) then
+			impl = new SSTImpl(false, pos_cls + offset)
+		else if can_be_static then
+			set_static_impl
+		else if pos_cls > 0 then
+			impl = new SSTImpl(true, pos_cls + offset)
 		else
-			impl = new PHImpl(false, target.get_mclass(vm).color)
+			impl = new PHImpl(false, offset) 
 		end
 	end
+
+	# Get the relative offset of the "property" (gp for MOPropPattern, methodbloc offset for MOSubtypePattern)
+	private fun get_offset(vm: VirtualMachine): Int is abstract
+
+	# Get the pic
+	private fun get_pic(vm: VirtualMachine): MClass is abstract
+
+	# Set a static implementation
+	private fun set_static_impl is abstract
+
+	# True if the site can be static
+	# False by default
+	private fun can_be_static: Bool do return false
+
+	# Return the offset of the introduction property of the class
+	# Redef in MOAttrSitePattern to use MClass:get_position_attribute instead of get_position_method
+	private fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_methods(get_pic(vm))
+end
+
+redef class MOSubtypeSitePattern
+	redef fun get_offset(vm) do return get_pic(vm).color
+
+	redef fun get_pic(vm) do return target.get_mclass(vm).as(not null)
 end
 
 redef abstract class MOPropSitePattern
+	redef fun get_offset(vm) do return gp.offset
+
+	redef fun get_pic(vm) do return gp.intro_mclassdef.mclass
+
 	redef fun add_lp(lp: LP)
 	do
 		var reset = not lps.has(lp)
@@ -771,47 +800,9 @@ redef abstract class MOPropSitePattern
 end
 
 redef class MOCallSitePattern
-	redef fun compute_impl(vm)
-	do
-		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(true, gp.offset)
-			return
-		end
+	redef fun set_static_impl do impl = new StaticImplProp(true, lps.first)
 
-		var pos_cls = rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if lps.length == 1 then
-			# The method is an intro or a redef
-			impl = new StaticImplProp(true, lps.first)
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-		end
-	end
-end
-
-redef abstract class MOAttrPattern
-	redef fun compute_impl(vm)
-	do
-		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(true, gp.offset)
-			return
-		end
-
-		var pos_cls = rst.get_mclass(vm).get_position_attributes(gp.intro_mclassdef.mclass)
-
-		if gp.intro_mclassdef.mclass.is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + gp.offset)
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls + gp.offset)
-		else
-			impl = new PHImpl(false, gp.offset) 
-			trace("ATTR_PH")
-		end
-	end
+	redef fun can_be_static do return lps.length == 1
 end
 
 redef abstract class MOSite
