@@ -818,18 +818,8 @@ redef abstract class MOSite
 	var impl: nullable Implementation is noinit
 
 	# Get the implementation of the site
-	fun get_impl(vm: VirtualMachine): Implementation
-	do
-		if get_concretes.length == 0 then
-			# TODO: Test preexistence before return here
-			return pattern.get_impl(vm)
-		else
-			# We don't care the preeeixstence of the site here
-			if impl == null then compute_impl(vm)
-			return impl.as(not null)
-		end
-	end
-
+	fun get_impl(vm: VirtualMachine): Implementation is abstract
+	
 	# Compute the implementation with rst/pic
 	private fun compute_impl(vm: VirtualMachine) is abstract
 end
@@ -860,11 +850,23 @@ redef class MOSubtypeSite
 
 	redef fun get_impl(vm)
 	do
-		if get_concretes.length > 0 then
+		if get_concretes.length == 0 then
+			var candidate_impl = pattern.get_impl(vm)
+
+			if not expr_recv.is_pre then
+				assert not candidate_impl isa StaticImplProp
+
+				if candidate_impl isa SSTImpl or candidate_impl isa StaticImplSubtype then
+					impl = new PHImpl(false, target.get_mclass(vm).color)
+					candidate_impl = impl.as(not null)
+				end
+			end
+
+			return candidate_impl
+		else
+			# We don't case of the preexistence here
 			compute_impl(vm)
 			return impl.as(not null)
-		else
-			return pattern.get_impl(vm)
 		end
 	end
 end
@@ -907,6 +909,30 @@ redef abstract class MOAttrSite
 
 		return true
 	end
+
+	redef fun get_impl(vm)
+	do
+		if get_concretes.length == 0 then
+			var candidate_impl = pattern.get_impl(vm)
+
+			if not expr_recv.is_pre then
+				assert not candidate_impl isa StaticImplProp
+
+				if candidate_impl isa SSTImpl then
+					impl = new PHImpl(false, pattern.gp.offset)
+					candidate_impl = impl.as(not null)
+				end
+			end
+
+			return candidate_impl
+		else
+			# We don't care the preeeixstence of the site here
+			if impl == null then compute_impl(vm)
+			return impl.as(not null)
+		end
+	end
+
+
 end
 
 redef class MOCallSite
@@ -952,6 +978,38 @@ redef class MOCallSite
 
 		return true
 	end
+
+	redef fun get_impl(vm)
+	do
+		if get_concretes.length == 0 then
+			var candidate_impl = pattern.get_impl(vm)
+
+			if not expr_recv.is_pre then
+				var gp = pattern.gp
+				var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
+				
+				if candidate_impl isa StaticImplProp then
+					if pos_cls > 0 then
+						impl = new SSTImpl(true, gp.offset + pos_cls)
+					else
+						impl = new PHImpl(false, gp.offset)
+					end
+					candidate_impl = impl.as(not null)
+				else if candidate_impl isa SSTImpl and pos_cls <= 0 then
+					impl = new PHImpl(false, gp.offset)
+					candidate_impl = impl.as(not null)
+				end
+			end
+			
+			return candidate_impl
+		else
+			# We don't care the preeeixstence of the site here
+			if impl == null then compute_impl(vm)
+			return impl.as(not null)
+		end
+	end
+
+
 end
 
 # Root of type implementation (sst, ph, static)
