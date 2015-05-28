@@ -850,6 +850,8 @@ redef class MOSubtypeSite
 
 	redef fun get_impl(vm)
 	do
+		if impl != null then return impl.as(not null)
+		
 		if get_concretes.length == 0 then
 			var candidate_impl = pattern.get_impl(vm)
 
@@ -912,6 +914,8 @@ redef abstract class MOAttrSite
 
 	redef fun get_impl(vm)
 	do
+		if impl != null then return impl.as(not null)
+
 		if get_concretes.length == 0 then
 			var candidate_impl = pattern.get_impl(vm)
 
@@ -981,6 +985,8 @@ redef class MOCallSite
 
 	redef fun get_impl(vm)
 	do
+		if impl != null then return impl.as(not null)
+
 		if get_concretes.length == 0 then
 			var candidate_impl = pattern.get_impl(vm)
 
