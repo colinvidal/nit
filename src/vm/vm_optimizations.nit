@@ -812,24 +812,39 @@ redef abstract class MOSite
 	var impl: nullable Implementation is noinit
 
 	# Get the implementation of the site, according to preexist value
-	fun get_impl(vm: VirtualMachine): Implementation is abstract
-#	do
-#		if impl != null then return impl.as(not null)
-#		
-#		if get_concretes.length == 0 then
-#			var candidate_impl = pattern.get_impl(vm)
-#			if not expr_recv.is_pre then deoptimize(candidate_impl)
-#			return impl.as(not null)
-#		else
-#			# We don't case of the preexistence here
-#			compute_impl(vm)
-#			return impl.as(not null)
-#		end
-#	end
+	fun get_impl(vm: VirtualMachine): Implementation
+	do
+		if impl != null then return impl.as(not null)
+		
+		if get_concretes.length == 0 then
+			var candidate_impl = pattern.get_impl(vm)
+
+			if needs_deoptimize(vm, candidate_impl) then
+				deoptimize(vm, candidate_impl)
+				return impl.as(not null)
+			else
+				return candidate_impl
+			end
+		else
+			# We don't case of the preexistence here
+			compute_impl(vm)
+			return impl.as(not null)
+		end
+	end
 
 	# Downgrade the optimization level given by the pattern, because the site is not preexsitant
 	# At the end of this function, self::impl must not be null
-	private fun deoptimize(candidate_impl: Implementation) is abstract
+	private fun deoptimize(vm: VirtualMachine, candidate_impl: Implementation) is abstract
+
+	# Tell if the given implementation needs to be deoptimized for the site
+	private fun needs_deoptimize(vm: VirtualMachine, candidate_impl: Implementation): Bool
+	do
+		var not_pre = not expr_recv.is_pre
+		var not_ph = not candidate_impl isa PHImpl
+		var multiple_pos = get_bloc_position(vm, pattern.rst.get_mclass(vm).as(not null)) < 0
+
+		return not_pre and not_ph and multiple_pos 
+	end
 	
 	# Compute the implementation with rst/pic, and concretes if any
 	fun compute_impl(vm: VirtualMachine)
@@ -848,7 +863,7 @@ redef abstract class MOSite
 
 		if get_pic(vm).is_instance_of_object(vm) then
 			impl = new SSTImpl(false, pos_cls + offset)
-		else if get_concretes.length == 1 then
+		else if can_be_static then
 			set_static_impl(vm)
 		else if unique_pos_indicator == 1 then
 			# SST immutable because it can't be more than these concretes receivers statically
@@ -889,6 +904,9 @@ redef abstract class MOSite
 
 	# Set a static implementation
 	private fun set_static_impl(vm: VirtualMachine) is abstract
+
+	# Tell if the implementation can be static
+	private fun can_be_static: Bool do return get_concretes.length == 1
 end
 
 redef class MOSubtypeSite
@@ -898,35 +916,18 @@ redef class MOSubtypeSite
 
 	redef fun set_static_impl(vm)
 	do
-		impl = new StaticImplSubtype(true, vm.inter_is_subtype_ph(
-		get_pic(vm).vtable.id,
-		pattern.rst.get_mclass(vm).vtable.mask,
-		pattern.rst.get_mclass(vm).vtable.internal_vtable))		
-	end
-
-	redef fun get_impl(vm)
-	do
-		if impl != null then return impl.as(not null)
-		
-		if get_concretes.length == 0 then
-			var candidate_impl = pattern.get_impl(vm)
-
-			if not expr_recv.is_pre then
-				assert not candidate_impl isa StaticImplProp
-
-				if candidate_impl isa SSTImpl or candidate_impl isa StaticImplSubtype then
-					impl = new PHImpl(false, target.get_mclass(vm).color)
-					candidate_impl = impl.as(not null)
-				end
-			end
-
-			return candidate_impl
+		if not get_pic(vm).loaded then
+			impl = new StaticImplSubtype(false, false)
 		else
-			# We don't case of the preexistence here
-			compute_impl(vm)
-			return impl.as(not null)
+			impl = new StaticImplSubtype(true, vm.inter_is_subtype_ph(
+			get_pic(vm).vtable.id,
+			pattern.rst.get_mclass(vm).vtable.mask,
+			pattern.rst.get_mclass(vm).vtable.internal_vtable))		
 		end
 	end
+
+	# TODO: more granularity (can be downgrade from static to SST if only one subclass on the model)
+	redef fun deoptimize(vm, candidate_impl) do impl = new PHImpl(false, target.get_mclass(vm).color)
 end
 
 redef abstract class MOPropSite
@@ -936,33 +937,13 @@ redef abstract class MOPropSite
 end
 
 redef abstract class MOAttrSite
+	redef fun can_be_static do return false
+
 	redef fun set_static_impl(vm) do abort
 
 	redef fun get_bloc_position(vm, recv) do return recv.get_position_attributes(get_pic(vm))
 
-	redef fun get_impl(vm)
-	do
-		if impl != null then return impl.as(not null)
-
-		if get_concretes.length == 0 then
-			var candidate_impl = pattern.get_impl(vm)
-
-			if not expr_recv.is_pre then
-				assert not candidate_impl isa StaticImplProp
-
-				if candidate_impl isa SSTImpl then
-					impl = new PHImpl(false, pattern.gp.offset)
-					candidate_impl = impl.as(not null)
-				end
-			end
-
-			return candidate_impl
-		else
-			# We don't care the preeeixstence of the site here
-			if impl == null then compute_impl(vm)
-			return impl.as(not null)
-		end
-	end
+	redef fun deoptimize(vm, candidate_impl) do impl = new PHImpl(false, pattern.gp.offset)
 end
 
 redef class MOCallSite
@@ -976,39 +957,23 @@ redef class MOCallSite
 		get_offset(vm)))
 	end
 
-	redef fun get_impl(vm)
+	redef fun deoptimize(vm, candidate_impl)
 	do
-		if impl != null then return impl.as(not null)
+		var gp = pattern.gp
+		var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
 
-		if get_concretes.length == 0 then
-			var candidate_impl = pattern.get_impl(vm)
-
-			if not expr_recv.is_pre then
-				var gp = pattern.gp
-				var pos_cls = pattern.rst.get_mclass(vm).get_position_methods(gp.intro_mclassdef.mclass)
-				
-				if candidate_impl isa StaticImplProp then
-					if pos_cls > 0 then
-						impl = new SSTImpl(true, gp.offset + pos_cls)
-					else
-						impl = new PHImpl(false, gp.offset)
-					end
-					candidate_impl = impl.as(not null)
-				else if candidate_impl isa SSTImpl and pos_cls <= 0 then
-					impl = new PHImpl(false, gp.offset)
-					candidate_impl = impl.as(not null)
-				end
+		if candidate_impl isa StaticImplProp then
+			if pos_cls > 0 then
+				impl = new SSTImpl(true, gp.offset + pos_cls)
+			else
+				impl = new PHImpl(false, gp.offset)
 			end
-			
-			return candidate_impl
-		else
-			# We don't care the preeeixstence of the site here
-			if impl == null then compute_impl(vm)
-			return impl.as(not null)
+			candidate_impl = impl.as(not null)
+		else if candidate_impl isa SSTImpl then
+			impl = new PHImpl(false, gp.offset)
+			candidate_impl = impl.as(not null)
 		end
 	end
-
-
 end
 
 # Root of type implementation (sst, ph, static)
