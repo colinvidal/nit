@@ -16,10 +16,10 @@ end
 
 redef class Sys
 	# Preexist counters
-	var pstats = new MOStats("LOWER") is writable
+	var pstats = new MOStats("first") is writable
 
 	# Preexist counters (withs transitions)
-	var pstats_trans = new MOStats("REGULAR")
+#	var pstats_trans = new MOStats("REGULAR")
 end
 
 redef class ModelBuilder
@@ -82,7 +82,7 @@ redef class ModelBuilder
 		# We don't need pstats counters with lower bound anymore
 
 		var old_counters = sys.pstats
-		pstats = new MOStats("UPPER")
+		pstats = new MOStats("last")
 		pstats.copy_static_data(old_counters)
 
 		while compiled_methods.length != 0 do
@@ -354,7 +354,7 @@ class MOStats
 	# Make text csv file contains overview statistics
 	fun overview
 	do
-		var file = new FileWriter.open("mo_stats_{lbl}.csv")	
+		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
 
 		file.write(", method, attribute, cast, total\n")
 	
