@@ -553,6 +553,6 @@ redef class MClass
 	redef fun handle_new_class
 	do
 		super
-		new_pattern.set_preexist_newsite
+		if not disable_preexistence_extensions then new_pattern.set_preexist_newsite
 	end
 end
