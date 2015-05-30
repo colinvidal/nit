@@ -319,6 +319,34 @@ redef class ABinopExpr
 	end
 end
 
+redef class MOSitePattern
+	redef fun compute_impl(vm)
+	do
+		if not rst.get_mclass(vm).loaded then pstats.inc("rst_unloaded")
+		super(vm)
+	end
+
+	redef fun get_pic(vm)
+	do
+		var sup = super(vm)
+		if not sup.loaded then pstats.inc("pic_unloaded")
+		return sup
+	end
+end
+
+redef class MOSite
+	redef fun compute_impl(vm)
+	do
+		if not pattern.rst.get_mclass(vm).loaded then pstats.inc("rst_unloaded")
+	end
+
+	redef fun get_pic(vm)
+	do
+		var sup = super(vm)
+		if not sup.loaded then pstats.inc("pic_unloaded")
+		return sup
+	end
+end
 
 # Stats of the optimizing model
 class MOStats
@@ -414,8 +442,11 @@ class MOStats
 		file.write("non optimisable inline,,,,{cant_optimize}\n")
 
 		var not_inline_subject = map["impl_ph"] + meth_sst
-		file.write("non inline,,,,{not_inline_subject}")
-		
+		file.write("non inline,,,,{not_inline_subject}\n")
+	
+		file.write("pic unloaded,,,,{map["pic_unloaded"]}\n")
+		file.write("rst unloaded,,,,{map["rst_unloaded"]}\n")
+
 		file.close
 	end
 
@@ -460,7 +491,6 @@ class MOStats
 		map["ast_new"] = 0
 		
 		# incr when compute an implementation
-		# decr (on regular counters) when implementation is reset
 		map["impl_static"] = 0
 		map["impl_sst"] = 0
 		map["impl_ph"] = 0
@@ -487,16 +517,20 @@ class MOStats
 		map["lits"] = 0
 
 		# incr if a site is preexist
-		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["preexist"] = 0
 
 		# incr if a site isn't preexist
-		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["npreexist"] = 0
 
 		# incr if a site is preexist and it implementation is static
-		# decr (on regular counters) if the preexistance of the receiver is reset
 		map["preexist_static"] = 0
+
+		# incr if a pic is unloaded
+		# the value of this must be <= of rst_unloaded
+		map["pic_unloaded"] = 0
+
+		# incr if a rst is unloaded
+		map["rst_unloaded"] = 0
 
 		map["attr"] = 0
 		map["attr_self"] = 0
