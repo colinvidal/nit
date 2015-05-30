@@ -338,6 +338,7 @@ redef class MOSite
 	redef fun compute_impl(vm)
 	do
 		if not pattern.rst.get_mclass(vm).loaded then pstats.inc("rst_unloaded")
+		super(vm)
 	end
 
 	redef fun get_pic(vm)
