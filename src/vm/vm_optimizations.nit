@@ -727,7 +727,7 @@ redef abstract class MOSitePattern
 	end
 
 	# Compute the implementation
-	private fun compute_impl(vm: VirtualMachine)
+	fun compute_impl(vm: VirtualMachine)
 	do
 		var offset = get_offset(vm)
 
@@ -753,7 +753,7 @@ redef abstract class MOSitePattern
 	private fun get_offset(vm: VirtualMachine): Int is abstract
 
 	# Get the pic
-	private fun get_pic(vm: VirtualMachine): MClass is abstract
+	fun get_pic(vm: VirtualMachine): MClass is abstract
 
 	# Set a static implementation
 	private fun set_static_impl is abstract
@@ -887,7 +887,7 @@ redef abstract class MOSite
 
 	# Return the pic
 	# In case of the subtype test, the pic is the target class
-	private fun get_pic(vm: VirtualMachine): MClass is abstract
+	fun get_pic(vm: VirtualMachine): MClass is abstract
 
 	# Return the offset of the "targeted property"
 	# (eg. gp.offset for MOPropSite, a_class.color for MOSubtypeSite)
