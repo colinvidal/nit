@@ -81,7 +81,7 @@ redef class ModelBuilder
 					# Force to recompile the site (set the better allowed optimization)
 					site.expr_recv.preexist_expr
 
-					# Actually, we MUST use get_impl, but it needs to have vm as argument
+					# Actually, we MUST use get_impl to access to implementation, but it needs to have vm as argument
 					if site.impl isa StaticImpl and site.expr_recv.is_pre then
 						preexist_static += 1
 					else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
@@ -134,7 +134,7 @@ redef class MMethodDef
 
 			if recv.is_pre then
 				pstats.inc("preexist")
-				if site.get_impl(vm) isa StaticImpl then pstats.inc("preexist_static")
+				if impl isa StaticImpl then pstats.inc("preexist_static")
 			else
 				pstats.inc("npreexist")
 			end
@@ -454,13 +454,13 @@ class MOStats
 		var concretes_pre_attr = map["attr_concretes_preexist"]
 		var concretes_pre_cast = map["cast_concretes_preexist"]
 		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
-		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}, {map["rst_unloaded_concretes_pre"]}, {map["pic_unloaded_concretes_npre"]}\n")
+		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}, {map["rst_unloaded_concretes_pre"]}, {map["pic_unloaded_concretes_pre"]}\n")
 
 		var concretes_npre_meth = map["meth_concretes_npreexist"]
 		var concretes_npre_attr = map["attr_concretes_npreexist"]
 		var concretes_npre_cast = map["cast_concretes_npreexist"]
 		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
-		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}, {map["rst_unloaded_concretes_pre"]}, {map["pic_unloaded_concretes_npre"]}\n")
+		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}, {map["rst_unloaded_concretes_npre"]}, {map["pic_unloaded_concretes_npre"]}\n")
 
 		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
 		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
