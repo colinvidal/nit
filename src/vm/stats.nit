@@ -40,7 +40,7 @@ redef class Sys
 end
 
 redef class ModelBuilder
-	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	redef fun run_virtual_machine(mainmodule, arguments)
 	do
 		super(mainmodule, arguments)
 
@@ -112,7 +112,7 @@ redef class ModelBuilder
 end
 
 redef class MMethodDef
-	redef fun preexist_all(vm: VirtualMachine)
+	redef fun preexist_all(vm)
 	do
 		if not super(vm) then return false
 
@@ -126,8 +126,8 @@ redef class MMethodDef
 			var is_pre = recv.is_pre
 			var impl = site.get_impl(vm)
 			var is_concretes = site.get_concretes.length > 0
-			var rst_loaded = site.pattern.rst.get_mclass(vm).loaded
-			var pic_loaded = site.get_pic(vm).loaded
+			var rst_loaded = site.pattern.rst.get_mclass(vm).as(not null).abstract_loaded
+			var pic_loaded = site.get_pic(vm).abstract_loaded
 
 			var is_self_recv = false
 			if recv isa MOParam and recv.offset == 0 then is_self_recv = true
@@ -245,10 +245,19 @@ redef class VirtualMachine
 
 		super(mclass)
 
+		pstats.inc("loaded_classes_explicits")
+	end
+
+	redef fun load_class_indirect(mclass)
+	do
+		if mclass.abstract_loaded then return
+
+		super(mclass)
+
 		if mclass.kind == abstract_kind and not mclass.mclass_type.is_primitive_type then
 			pstats.inc("loaded_classes_abstracts")
 		else
-			pstats.inc("loaded_classes_explicits")
+			pstats.inc("loaded_classes_implicits")
 		end
 	end
 end
@@ -257,13 +266,13 @@ redef class ANewExpr
 	redef fun generate_basicBlocks(vm, old_block)
 	do
 		var sup = super(vm, old_block)
-		if not recvtype.is_primitive_type then pstats.inc("ast_new")
+		pstats.inc("ast_new")
 		return sup
 	end
 end
 
 redef class ANode
-	redef fun ast2mo: nullable MOExpr
+	redef fun ast2mo
 	do
 		if is_primitive_node then
 			pstats.inc("primitive_sites")
@@ -281,17 +290,17 @@ redef class AAttrPropdef
 end
 
 redef class ASendExpr
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+	redef fun compile_ast(vm, lp)
 	do
 		super(vm, lp)
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			pstats.inc("lits")
-		else if n_expr.mtype.is_primitive_type then
+		else if n_expr.mtype.as(not null).is_primitive_type then
 			pstats.inc("primitive_sites")
 		end
 	end
 
-	redef fun compile_ast_method(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode, is_attribute: Bool)
+	redef fun compile_ast_method(vm, lp, recv, node_ast, is_attribute)
 	do
 		super(vm, lp, recv, node_ast, is_attribute)
 
@@ -310,9 +319,9 @@ redef class AAsCastExpr
 
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			pstats.inc("lits")
-		else if n_expr.mtype.is_primitive_type then
+		else if n_expr.mtype.as(not null).is_primitive_type then
 			pstats.inc("primitive_sites")
-		else if n_type.mtype.get_mclass(vm).mclass_type.is_primitive_type then
+		else if n_type.mtype.as(not null).get_mclass(vm).as(not null).mclass_type.is_primitive_type then
 			pstats.inc("primitive_sites")
 		end
 	end
@@ -325,7 +334,7 @@ redef class AAttrFormExpr
 
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			pstats.inc("lits")
-		else if n_expr.mtype.is_primitive_type then
+		else if n_expr.mtype.as(not null).is_primitive_type then
 			pstats.inc("primitive_sites")
 		end
 	end
@@ -338,7 +347,7 @@ redef class AIsaExpr
 		
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
 			pstats.inc("lits")
-		else if n_expr.mtype.get_mclass(vm).mclass_type.is_primitive_type then
+		else if n_expr.mtype.as(not null).get_mclass(vm).as(not null).mclass_type.is_primitive_type then
 			pstats.inc("primitive_sites")
 		end
 	end
@@ -359,8 +368,8 @@ redef class MOSite
 		var sup = super(vm)
 
 		var is_pre = expr_recv.is_pre
-		var rst_loaded = pattern.rst.get_mclass(vm).loaded
-		var pic_loaded = get_pic(vm).loaded
+		var rst_loaded = pattern.rst.get_mclass(vm).as(not null).abstract_loaded
+		var pic_loaded = get_pic(vm).abstract_loaded
 
 		if impl isa StaticImpl then
 			if not rst_loaded then
