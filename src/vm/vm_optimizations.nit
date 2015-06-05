@@ -739,15 +739,15 @@ redef abstract class MOSitePattern
 		var offset = get_offset(vm)
 
 		if not rst.get_mclass(vm).loaded then
-			if pic_pos_unique(vm) then
-				if can_be_static then
-					set_static_impl
-				else
-					impl = new SSTImpl(true, get_pic_position(vm) + offset)
-				end
-			else
+#			if pic_pos_unique(vm) then
+#				if can_be_static then
+#					set_static_impl
+#				else
+#					impl = new SSTImpl(true, get_pic_position(vm) + offset)
+#				end
+#			else
 				impl = new PHImpl(true, offset)
-			end
+#			end
 		else
 			var pos_cls = get_bloc_position(vm)
 
@@ -814,7 +814,7 @@ redef abstract class MOPropSitePattern
 end
 
 redef class MOAttrPattern
-	redef fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_attributes(get_pic(vm))
+#	redef fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_attributes(get_pic(vm))
 
  	redef fun get_pic_position(vm) do return get_pic(vm).position_attributes
 end
