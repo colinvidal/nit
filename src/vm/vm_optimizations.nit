@@ -732,20 +732,27 @@ redef abstract class MOSitePattern
 		var offset = get_offset(vm)
 
 		if not rst.get_mclass(vm).loaded then
-			impl = new PHImpl(true, offset)
-			return
-		end
-
-		var pos_cls = get_bloc_position(vm)
-
-		if get_pic(vm).is_instance_of_object(vm) then
-			impl = new SSTImpl(false, pos_cls + offset)
-		else if can_be_static then
-			set_static_impl
-		else if pos_cls > 0 then
-			impl = new SSTImpl(true, pos_cls + offset)
+			if pic_pos_unique(vm) then
+				if can_be_static then
+					set_static_impl
+				else
+					impl = new SSTImpl(true, get_pic_position(vm) + offset)
+				end
+			else
+				impl = new PHImpl(true, offset)
+			end
 		else
-			impl = new PHImpl(false, offset) 
+			var pos_cls = get_bloc_position(vm)
+
+			if get_pic(vm).is_instance_of_object(vm) then
+				impl = new SSTImpl(false, pos_cls + offset)
+			else if can_be_static then
+				set_static_impl
+			else if pos_cls > 0 then
+				impl = new SSTImpl(true, pos_cls + offset)
+			else
+				impl = new PHImpl(false, offset) 
+			end
 		end
 	end
 
@@ -763,8 +770,15 @@ redef abstract class MOSitePattern
 	private fun can_be_static: Bool do return false
 
 	# Return the offset of the introduction property of the class
-	# Redef in MOAttrSitePattern to use MClass:get_position_attribute instead of get_position_method
+	# Redef in MOAttrPattern to use MClass:get_position_attribute instead of get_position_method
 	private fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_methods(get_pic(vm))
+
+	# Tell if the pic is at unique position on whole class hierarchy
+	private fun pic_pos_unique(vm: VirtualMachine): Bool do return get_pic_position(vm) > 0
+
+	# Return the position of the pic (neg. value if pic is at multiple positions)
+	# Redef in MOAttrPattern to use position_attributes
+	private fun get_pic_position(vm: VirtualMachine): Int do return get_pic(vm).position_methods
 end
 
 redef class MOSubtypeSitePattern
@@ -790,6 +804,12 @@ redef abstract class MOPropSitePattern
 			end
 		end
 	end
+end
+
+redef class MOAttrPattern
+	redef fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_attributes(get_pic(vm))
+
+ 	redef fun get_pic_position(vm) do return get_pic(vm).position_attributes
 end
 
 redef class MOCallSitePattern
