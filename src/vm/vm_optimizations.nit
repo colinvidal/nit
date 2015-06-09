@@ -814,7 +814,16 @@ redef abstract class MOPropSitePattern
 end
 
 redef class MOAttrPattern
-#	redef fun get_bloc_position(vm: VirtualMachine): Int do return rst.get_mclass(vm).get_position_attributes(get_pic(vm))
+	redef fun get_bloc_position(vm: VirtualMachine): Int
+	do 
+		var pos_attr = rst.get_mclass(vm).get_position_attributes(get_pic(vm))
+		var pos_meth = rst.get_mclass(vm).get_position_methods(get_pic(vm))
+
+		if pos_attr > 0 and pos_meth < 0 then print("pos_attr:{pos_attr} pos_meth:{pos_meth}")
+		if pos_attr < 0 and pos_meth > 0 then print("pos_attr:{pos_attr} pos_meth:{pos_meth}")
+
+		return pos_attr
+	end
 
  	redef fun get_pic_position(vm) do return get_pic(vm).position_attributes
 end
