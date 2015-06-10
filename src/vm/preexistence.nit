@@ -379,9 +379,7 @@ redef class MOReadSite
 	do
 		if is_pre_unknown then
 			expr_recv.preexist_expr
-			if immutable and expr_recv.is_pre then
-				set_pval_per
-			else
+			if immutable then
 				if expr_recv.is_pre then
 					if expr_recv.is_per then
 						set_pval_per
@@ -398,6 +396,8 @@ redef class MOReadSite
 						set_npre_nper
 					end
 				end
+			else
+				set_npre_per
 			end
 		end
 
