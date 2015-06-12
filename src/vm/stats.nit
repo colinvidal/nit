@@ -33,9 +33,6 @@ end
 redef class Sys
 	# Preexist counters
 	var pstats = new MOStats("first") is writable
-
-	# Preexist counters (withs transitions)
-#	var pstats_trans = new MOStats("REGULAR")
 end
 
 redef class ModelBuilder
@@ -651,3 +648,91 @@ class MOStats
 	end
 end
 
+#
+fun incr_preexist(site: MOSite) do incr_specific_counters(site.expr_recv.is_pre, "preexist", "npreexist")
+
+#
+fun incr_type_impl(vm: VirtualMachine, site: MOSite, site_type: String)
+do
+	var impl = site.get_impl(vm)
+
+	pstats.inc(site_type)
+
+	if impl isa StaticImpl then
+		pstats.inc("{site_type}_static")
+		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_preexist_static", "{site_type}_npreexist_static")
+	else if impl isa SSTImpl then
+		pstats.inc("{site_type}_sst")
+		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_preexist_sst", "{site_type}_npreexist_sst")
+	else if impl isa PHImpl then
+		pstats.inc("{site_type}_ph")
+		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_preexist_ph", "{site_type}_npreexist_ph")
+	else if impl isa NullImpl then
+		pstats.inc("{site_type}_null")
+		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_preexist_null", "{site_type}_npreexist_null")
+	else
+		abort
+	end
+end
+
+#
+fun incr_from_site(site: MOSite)
+do
+	# WARN : this partition is not exclusive
+
+	if site.expr_recv.is_from_monew then
+		pstats.inc("sites_from_new")
+	else if site.expr_recv.is_from_mocallsite then
+		pstats.inc("sites_from_meth_return")
+	else if site.expr_recv.is_from_moparam then
+		pstats.inc("sites_from_param")
+	else
+		abort
+	end
+end
+
+#
+fun incr_concrete_site(site: MOSite, site_type: String)
+do
+	if site.get_concretes.length > 0 then
+		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_concretes_preexist", "{site_type}_concretes_npreexist")
+	end
+end
+
+#
+#			var is_self_recv = false
+#			if recv isa MOParam and recv.offset == 0 then is_self_recv = true
+#
+
+redef class MOSite
+	# Count the implementation of the site
+	fun stats(vm: VirtualMachine)
+	do
+		incr_preexist(self)
+		incr_from_site(self)
+	end
+end
+
+redef class MOCallSite
+	redef fun stats(vm)
+	do
+		super
+		incr_type_impl(vm, self, "method")
+	end
+end
+
+redef class MOAttrSite
+	redef fun stats(vm)
+	do
+		super
+		incr_type_impl(vm, self, "attribute")
+	end
+end
+
+redef class MOSubtypeSite
+	redef fun stats(vm)
+	do
+		super
+		incr_type_impl(vm, self, "cast")
+	end
+end
