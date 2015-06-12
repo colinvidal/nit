@@ -692,17 +692,41 @@ do
 end
 
 #
-fun incr_concrete_site(site: MOSite, site_type: String)
+fun incr_concrete_site(site: MOSite)
 do
 	if site.get_concretes.length > 0 then
-		incr_specific_counters(site.expr_recv.is_pre, "{site_type}_concretes_preexist", "{site_type}_concretes_npreexist")
+		pstats.inc("concretes")
+		incr_specific_counters(site.expr_recv.is_pre, "concretes_preexist", "concretes_npreexist")
 	end
 end
 
 #
-#			var is_self_recv = false
-#			if recv isa MOParam and recv.offset == 0 then is_self_recv = true
+fun incr_self(site: MOSite)
+do
+	if site.expr_recv isa MOParam and site.expr_recv.as(MOParam).offset == 0 then pstats.inc("self")
+end
+
 #
+fun incr_rst_unloaded(vm: VirtualMachine, site: MOSite)
+do
+	var rst_loaded = site.pattern.rst.get_mclass(vm).as(not null).abstract_loaded
+	
+	if not rst_loaded then
+		var is_pre = site.expr_recv.is_pre
+
+		if site isa StaticImpl then
+			incr_specific_counters(is_pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
+		else if site isa SSTImpl then
+			incr_specific_counters(is_pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
+		else if site isa PHImpl then
+			pstats.inc("rst_unloaded_ph")
+		else if site isa NullImpl then
+			pstats.inc("rst_unloaded_null")
+		else 
+			abort
+		end
+	end
+end
 
 redef class MOSite
 	# Count the implementation of the site
@@ -710,6 +734,9 @@ redef class MOSite
 	do
 		incr_preexist(self)
 		incr_from_site(self)
+		incr_concrete_site(self)
+		incr_self(self)
+		incr_rst_unloaded(vm, self)
 	end
 end
 
