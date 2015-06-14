@@ -234,6 +234,7 @@ class MOStats
 	# Make text csv file contains overview statistics
 	fun overview
 	do
+		var buf: String
 		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
 
 		file.write(", method, attribute, cast, total, rst null\n")
@@ -242,32 +243,30 @@ class MOStats
 		var self_attr = map["attribute_self"]
 		var self_cast = map["cast_self"]
 		var self_sum = self_meth + self_attr + self_cast
+
 		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, \n")
 
-#		var rst_null_pre_sum = map["rst_unloaded_static_pre"] + map["rst_unloaded_sst_pre"]
-#		var rst_null_npre_sum = map["rst_unloaded_ph"] + map["rst_unloaded_static_npre"] + map["rst_unloaded_sst_npre"]
-#		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, {rst_null_pre_sum}\n")
-#		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, {rst_null_npre_sum}\n")
+		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, \n")
+		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, \n")
 
-#		var concretes_meth = map["meth_concretes_receivers"]
-#		var concretes_attr = map["attr_concretes_receivers"]
-#		var concretes_cast = map["cast_concretes_receivers"]
-#		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
-#		var concretes_rst_null_sum = map["rst_unloaded_concretes_pre"] + map["rst_unloaded_concretes_npre"]
-#		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}, {concretes_rst_null_sum}\n")
-#
-#		var concretes_pre_meth = map["meth_concretes_preexist"]
-#		var concretes_pre_attr = map["attr_concretes_preexist"]
-#		var concretes_pre_cast = map["cast_concretes_preexist"]
-#		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
-#		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}, {map["rst_unloaded_concretes_pre"]}\n")
-#
-#		var concretes_npre_meth = map["meth_concretes_npreexist"]
-#		var concretes_npre_attr = map["attr_concretes_npreexist"]
-#		var concretes_npre_cast = map["cast_concretes_npreexist"]
-#		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
-#		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}, {map["rst_unloaded_concretes_npre"]}\n")
-#
+		buf = "{map["method_concretes"]},"
+		buf += "{map["attribute_concretes"]},"
+		buf += "{map["concretes_cast"]},"
+		buf += "{map["concretes"]}"
+		file.write("concretes,{buf},\n")
+
+		buf = "{map["method_concretes_preexist"]},"
+		buf += "{map["attribute_concretes_preexist"]},"
+		buf += "{map["concretes_cast_preexist"]},"
+		buf += "{map["concretes_preexist"]}"
+		file.write("concretes preexist,{buf},\n")
+
+		buf = "{map["method_concretes_npreexist"]},"
+		buf += "{map["attribute_concretes_npreexist"]},"
+		buf += "{map["concretes_cast_npreexist"]},"
+		buf += "{map["concretes_npreexist"]}"
+		file.write("concretes npreexist,{buf},\n")
+
 #		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
 #		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
 #		var rst_null_static = map["rst_unloaded_static_pre"] + map["rst_unloaded_static_npre"]
