@@ -234,91 +234,91 @@ class MOStats
 	# Make text csv file contains overview statistics
 	fun overview
 	do
-		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
-
-		file.write(", method, attribute, cast, total, rst null\n")
-	
-		var self_meth = map["meth_self"]
-		var self_attr = map["attr_self"]
-		var self_cast = map["cast_self"]
-		var self_sum = self_meth + self_attr + self_cast
-		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, {map["rst_unloaded_self"]}\n")
-
-		var rst_null_pre_sum = map["rst_unloaded_static_pre"] + map["rst_unloaded_sst_pre"]
-		var rst_null_npre_sum = map["rst_unloaded_ph"] + map["rst_unloaded_static_npre"] + map["rst_unloaded_sst_npre"]
-		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, {rst_null_pre_sum}\n")
-		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, {rst_null_npre_sum}\n")
-
-		var concretes_meth = map["meth_concretes_receivers"]
-		var concretes_attr = map["attr_concretes_receivers"]
-		var concretes_cast = map["cast_concretes_receivers"]
-		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
-		var concretes_rst_null_sum = map["rst_unloaded_concretes_pre"] + map["rst_unloaded_concretes_npre"]
-		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}, {concretes_rst_null_sum}\n")
-
-		var concretes_pre_meth = map["meth_concretes_preexist"]
-		var concretes_pre_attr = map["attr_concretes_preexist"]
-		var concretes_pre_cast = map["cast_concretes_preexist"]
-		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
-		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}, {map["rst_unloaded_concretes_pre"]}\n")
-
-		var concretes_npre_meth = map["meth_concretes_npreexist"]
-		var concretes_npre_attr = map["attr_concretes_npreexist"]
-		var concretes_npre_cast = map["cast_concretes_npreexist"]
-		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
-		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}, {map["rst_unloaded_concretes_npre"]}\n")
-
-		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
-		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
-		var rst_null_static = map["rst_unloaded_static_pre"] + map["rst_unloaded_static_npre"]
-		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]},{rst_null_static}\n")
-
-		file.write("static preexist, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}, {map["rst_unloaded_static_pre"]}\n")
-
-		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
-		file.write("static npreexist, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}, {map["rst_unloaded_static_npre"]}\n")
-
-		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
-		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
-		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
-		var rst_null_sst = map["rst_unloaded_sst_pre"] + map["rst_unloaded_sst_npre"]
-		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}, {rst_null_sst}\n")
-	
-		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
-		file.write("sst preexist, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}, {map["rst_unloaded_sst_pre"]}\n")
-
-		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
-		file.write("sst npreexist, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}, {map["rst_unloaded_sst_npre"]}\n")
-
-		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}, {map["rst_unloaded_ph"]}\n")
-
-		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"] + map["cast_preexist_static"]
-		file.write(",,,,,,,\n")
-	
-		var sum_pic_null_method = map["pic_unloaded_method_pre"] + map["pic_unloaded_method_npre"]
-		var sum_pic_null_attribute = map["pic_unloaded_attribute_pre"] + map["pic_unloaded_attribute_npre"]
-		var sum_pic_null_cast = map["pic_unloaded_cast_pre"] + map["pic_unloaded_cast_npre"]
-
-		file.write("pic null, {sum_pic_null_method}, {sum_pic_null_attribute}, {sum_pic_null_cast}\n")
-		file.write("pic null pre,{map["pic_unloaded_method_pre"]},{map["pic_unloaded_attribute_pre"]},{map["pic_unloaded_cast_pre"]}\n")
-		file.write("pic null npre,{map["pic_unloaded_method_npre"]},{map["pic_unloaded_attribute_npre"]},{map["pic_unloaded_cast_npre"]}\n")
-
-
-		file.write(",,,,,,,\n")
-		file.write("optimisable inline,,,,{optimization_inline},{map["rst_unloaded_optimizable_inline"]}\n")
-
-		var cant_optimize = map["meth_npreexist_static"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
-		file.write("non optimisable inline,,,,{cant_optimize},{map["rst_unloaded_non_optimizable_inline"]}\n")
-
-		var not_inline_subject = map["impl_ph"] + meth_sst
-		file.write("non inline,,,,{not_inline_subject},{map["rst_unloaded_other"]}\n")
-
-		file.write(",,,,,,,\n")
-		file.write("from new,{map["sites_from_new"]}\n")
-		file.write("from return,{map["sites_from_meth_return"]}\n")
-
-		
-		file.close
+#		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
+#
+#		file.write(", method, attribute, cast, total, rst null\n")
+#	
+#		var self_meth = map["meth_self"]
+#		var self_attr = map["attr_self"]
+#		var self_cast = map["cast_self"]
+#		var self_sum = self_meth + self_attr + self_cast
+#		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, {map["rst_unloaded_self"]}\n")
+#
+#		var rst_null_pre_sum = map["rst_unloaded_static_pre"] + map["rst_unloaded_sst_pre"]
+#		var rst_null_npre_sum = map["rst_unloaded_ph"] + map["rst_unloaded_static_npre"] + map["rst_unloaded_sst_npre"]
+#		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, {rst_null_pre_sum}\n")
+#		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, {rst_null_npre_sum}\n")
+#
+#		var concretes_meth = map["meth_concretes_receivers"]
+#		var concretes_attr = map["attr_concretes_receivers"]
+#		var concretes_cast = map["cast_concretes_receivers"]
+#		var concretes_sum = concretes_meth + concretes_attr + concretes_cast
+#		var concretes_rst_null_sum = map["rst_unloaded_concretes_pre"] + map["rst_unloaded_concretes_npre"]
+#		file.write("concretes, {concretes_meth}, {concretes_attr}, {concretes_cast}, {concretes_sum}, {concretes_rst_null_sum}\n")
+#
+#		var concretes_pre_meth = map["meth_concretes_preexist"]
+#		var concretes_pre_attr = map["attr_concretes_preexist"]
+#		var concretes_pre_cast = map["cast_concretes_preexist"]
+#		var concretes_pre_total = concretes_pre_meth + concretes_pre_attr + concretes_pre_cast
+#		file.write("preexist concretes, {concretes_pre_meth}, {concretes_pre_attr}, {concretes_pre_cast}, {concretes_pre_total}, {map["rst_unloaded_concretes_pre"]}\n")
+#
+#		var concretes_npre_meth = map["meth_concretes_npreexist"]
+#		var concretes_npre_attr = map["attr_concretes_npreexist"]
+#		var concretes_npre_cast = map["cast_concretes_npreexist"]
+#		var concretes_npre_total = concretes_npre_meth + concretes_npre_attr + concretes_npre_cast
+#		file.write("npreexist concretes, {concretes_npre_meth}, {concretes_npre_attr}, {concretes_npre_cast}, {concretes_npre_total}, {map["rst_unloaded_concretes_npre"]}\n")
+#
+#		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
+#		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
+#		var rst_null_static = map["rst_unloaded_static_pre"] + map["rst_unloaded_static_npre"]
+#		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]},{rst_null_static}\n")
+#
+#		file.write("static preexist, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}, {map["rst_unloaded_static_pre"]}\n")
+#
+#		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
+#		file.write("static npreexist, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}, {map["rst_unloaded_static_npre"]}\n")
+#
+#		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
+#		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
+#		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
+#		var rst_null_sst = map["rst_unloaded_sst_pre"] + map["rst_unloaded_sst_npre"]
+#		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}, {rst_null_sst}\n")
+#	
+#		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
+#		file.write("sst preexist, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}, {map["rst_unloaded_sst_pre"]}\n")
+#
+#		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
+#		file.write("sst npreexist, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}, {map["rst_unloaded_sst_npre"]}\n")
+#
+#		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}, {map["rst_unloaded_ph"]}\n")
+#
+#		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"] + map["cast_preexist_static"]
+#		file.write(",,,,,,,\n")
+#	
+#		var sum_pic_null_method = map["pic_unloaded_method_pre"] + map["pic_unloaded_method_npre"]
+#		var sum_pic_null_attribute = map["pic_unloaded_attribute_pre"] + map["pic_unloaded_attribute_npre"]
+#		var sum_pic_null_cast = map["pic_unloaded_cast_pre"] + map["pic_unloaded_cast_npre"]
+#
+#		file.write("pic null, {sum_pic_null_method}, {sum_pic_null_attribute}, {sum_pic_null_cast}\n")
+#		file.write("pic null pre,{map["pic_unloaded_method_pre"]},{map["pic_unloaded_attribute_pre"]},{map["pic_unloaded_cast_pre"]}\n")
+#		file.write("pic null npre,{map["pic_unloaded_method_npre"]},{map["pic_unloaded_attribute_npre"]},{map["pic_unloaded_cast_npre"]}\n")
+#
+#
+#		file.write(",,,,,,,\n")
+#		file.write("optimisable inline,,,,{optimization_inline},{map["rst_unloaded_optimizable_inline"]}\n")
+#
+#		var cant_optimize = map["meth_npreexist_static"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
+#		file.write("non optimisable inline,,,,{cant_optimize},{map["rst_unloaded_non_optimizable_inline"]}\n")
+#
+#		var not_inline_subject = map["impl_ph"] + meth_sst
+#		file.write("non inline,,,,{not_inline_subject},{map["rst_unloaded_other"]}\n")
+#
+#		file.write(",,,,,,,\n")
+#		file.write("from new,{map["sites_from_new"]}\n")
+#		file.write("from return,{map["sites_from_meth_return"]}\n")
+#
+#		
+#		file.close
 	end
 
 	# Pretty format
@@ -361,12 +361,7 @@ class MOStats
 
 		# incr when compile a instantiation site
 		map["ast_new"] = 0
-		
-		# incr when compute an implementation
-		map["impl_static"] = 0
-		map["impl_sst"] = 0
-		map["impl_ph"] = 0
-	
+			
 		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
 
@@ -394,73 +389,78 @@ class MOStats
 		# incr if a site isn't preexist
 		map["npreexist"] = 0
 
-		# incr if a site is preexist and it implementation is static
-		map["preexist_static"] = 0
-
-		# incr if a pic is unloaded
-		# the value of this must be <= of rst_unloaded
-		map["pic_unloaded_method_pre"] = 0
-		map["pic_unloaded_method_npre"] = 0
-		map["pic_unloaded_attribute_pre"] = 0
-		map["pic_unloaded_attribute_npre"] = 0
-		map["pic_unloaded_cast_pre"] = 0
-		map["pic_unloaded_cast_npre"] = 0
-
-		# incr if a rst is unloaded
-		map["rst_unloaded_self"] = 0
-		map["rst_unloaded_static_pre"] = 0
-		map["rst_unloaded_static_npre"] = 0
-		map["rst_unloaded_sst_pre"] = 0
-		map["rst_unloaded_sst_npre"] = 0
-		map["rst_unloaded_ph"] = 0
-		map["rst_unloaded_concretes_pre"] = 0
-		map["rst_unloaded_concretes_npre"] = 0
-		map["rst_unloaded_optimizable_inline"] = 0
-		map["rst_unloaded_non_optimizable_inline"] = 0
-		map["rst_unloaded_other"] = 0
-
-		map["attr"] = 0
-		map["attr_self"] = 0
-		map["attr_concretes_receivers"] = 0
-		map["attr_concretes_preexist"] = 0
-		map["attr_concretes_npreexist"] = 0
-		map["attr_read"] = 0
-		map["attr_write"] = 0
-		map["attr_preexist"] = 0
-		map["attr_npreexist"] = 0
-		map["attr_preexist_sst"] = 0
-		map["attr_npreexist_sst"] = 0
-		map["attr_ph"] = 0 
 		# incr if construct MO node to access on attribute as MOCallSite
 		# because it's an accessors with redefinitions
 		# If it's incr, some meth_* counters will be incr too, as regular method call
 		map["attr_redef"] = 0
 
+		map["concretes"] = 0
+		map["concretes_preexist"] = 0
+		map["concretes_npreexist"] = 0
+
+		# access to self receiver
+		map["self"] = 0
+
+		map["rst_unloaded_static_pre"] = 0
+		map["rst_unloaded_static_npre"] = 0
+		map["rst_unloaded_sst_pre"] = 0
+		map["rst_unloaded_sst_npre"] = 0
+		map["rst_unloaded_ph"] = 0
+		map["rst_unloaded_null"] = 0
+
+		map["method"] = 0
+		map["method_preexist"] = 0
+		map["method_npreexist"] = 0
+		map["method_self"] = 0
+		map["method_concretes"] = 0
+		map["method_concretes_preexist"] = 0
+		map["method_concretes_npreexist"] = 0
+		map["method_static"] = 0
+		map["method_preexist_static"] = 0
+		map["method_npreexist_static"] = 0
+		map["method_sst"] = 0
+		map["method_preexist_sst"] = 0
+		map["method_npreexist_sst"] = 0
+		map["method_ph"] = 0
+		map["method_null"] = 0
+		map["method_preexist_null"] = 0
+		map["method_npreexist_null"] = 0
+
+		map["attribute"] = 0
+		map["attribute_preexist"] = 0
+		map["attribute_npreexist"] = 0
+		map["attribute_self"] = 0
+		map["attribute_concretes"] = 0
+		map["attribute_concretes_preexist"] = 0
+		map["attribute_concretes_npreexist"] = 0
+		map["attribute_static"] = 0
+		map["attribute_preexist_static"] = 0
+		map["attribute_npreexist_static"] = 0
+		map["attribute_sst"] = 0
+		map["attribute_preexist_sst"] = 0
+		map["attribute_npreexist_sst"] = 0
+		map["attribute_ph"] = 0
+		map["attribute_null"] = 0
+		map["attribute_preexist_null"] = 0
+		map["attribute_npreexist_null"] = 0
+
 		map["cast"] = 0
-		map["cast_self"] = 0
-		map["cast_concretes_receivers"] = 0
-		map["cast_concretes_preexist"] = 0
-		map["cast_concretes_npreexist"] = 0
 		map["cast_preexist"] = 0
 		map["cast_npreexist"] = 0
+		map["cast_self"] = 0
+		map["cast_concretes"] = 0
+		map["cast_concretes_preexist"] = 0
+		map["cast_concretes_npreexist"] = 0
+		map["cast_static"] = 0
 		map["cast_preexist_static"] = 0
 		map["cast_npreexist_static"] = 0
+		map["cast_sst"] = 0
 		map["cast_preexist_sst"] = 0
 		map["cast_npreexist_sst"] = 0
 		map["cast_ph"] = 0
-
-		map["meth"] = 0
-		map["meth_self"] = 0
-		map["meth_concretes_receivers"] = 0
-		map["meth_concretes_preexist"] = 0
-		map["meth_concretes_npreexist"] = 0
-		map["meth_preexist"] = 0
-		map["meth_npreexist"] = 0
-		map["meth_preexist_static"] = 0
-		map["meth_npreexist_static"] = 0
-		map["meth_preexist_sst"] = 0
-		map["meth_npreexist_sst"] = 0
-		map["meth_ph"] = 0
+		map["cast_null"] = 0
+		map["cast_preexist_null"] = 0
+		map["cast_npreexist_null"] = 0
 	end
 end
 
@@ -481,7 +481,10 @@ redef class MOSite
 	end
 
 	#
-	fun incr_preexist do incr_specific_counters(expr_recv.is_pre, "preexist", "npreexist")
+	fun incr_preexist do 
+		incr_specific_counters(expr_recv.is_pre, "preexist", "npreexist")
+		incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist", "{site_type}_npreexist")
+	end
 
 	#
 	fun incr_type_impl(vm: VirtualMachine)
@@ -498,7 +501,6 @@ redef class MOSite
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_sst", "{site_type}_npreexist_sst")
 		else if impl isa PHImpl then
 			pstats.inc("{site_type}_ph")
-			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_ph", "{site_type}_npreexist_ph")
 		else if impl isa NullImpl then
 			pstats.inc("{site_type}_null")
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_null", "{site_type}_npreexist_null")
@@ -511,15 +513,10 @@ redef class MOSite
 	fun incr_from_site
 	do
 		# WARN : this partition is not exclusive
-
 		if expr_recv.is_from_monew then
 			pstats.inc("sites_from_new")
 		else if expr_recv.is_from_mocallsite then
 			pstats.inc("sites_from_meth_return")
-		else if expr_recv.is_from_moparam then
-			pstats.inc("sites_from_param")
-		else
-			abort
 		end
 	end
 
@@ -528,14 +525,19 @@ redef class MOSite
 	do
 		if get_concretes.length > 0 then
 			pstats.inc("concretes")
+			pstats.inc("{site_type}_concretes")
 			incr_specific_counters(expr_recv.is_pre, "concretes_preexist", "concretes_npreexist")
+			incr_specific_counters(expr_recv.is_pre, "{site_type}_concretes_preexist", "{site_type}_concretes_npreexist")
 		end
 	end
 
 	#
 	fun incr_self
 	do
-		if expr_recv isa MOParam and expr_recv.as(MOParam).offset == 0 then pstats.inc("self")
+		if expr_recv isa MOParam and expr_recv.as(MOParam).offset == 0 then 
+			pstats.inc("self")
+			pstats.inc("{site_type}_self")
+		end
 	end
 
 	#
@@ -545,14 +547,15 @@ redef class MOSite
 
 		if not rst_loaded then
 			var is_pre = expr_recv.is_pre
+			var impl = get_impl(vm)
 
-			if self isa StaticImpl then
+			if impl isa StaticImpl then
 				incr_specific_counters(is_pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
-			else if self isa SSTImpl then
+			else if impl isa SSTImpl then
 				incr_specific_counters(is_pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
-			else if self isa PHImpl then
+			else if impl isa PHImpl then
 				pstats.inc("rst_unloaded_ph")
-			else if self isa NullImpl then
+			else if impl isa NullImpl then
 				pstats.inc("rst_unloaded_null")
 			else 
 				abort
@@ -580,7 +583,6 @@ redef class AMethPropdef
 
 		if mpropdef isa MMethodDef then
 			for site in mpropdef.as(MMethodDef).mosites do
-				print("stats")
 				site.stats(vm)
 				pstats.analysed_sites.add(site)
 			end

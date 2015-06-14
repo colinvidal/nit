@@ -197,9 +197,6 @@ abstract class MOExpr
 
 	# Tell if the expression comes from MOCallSite (return of method)
 	fun is_from_mocallsite: Bool do return false
-
-	# Tell if the expression comes from MOParam
-	fun is_from_moparam: Bool do return false
 end
 
 # MO of variables
@@ -236,8 +233,6 @@ class MOSSAVar
 	redef fun is_from_monew do return dependency.is_from_monew
 
 	redef fun is_from_mocallsite do return dependency.is_from_mocallsite
-
-	redef fun is_from_moparam do return dependency.is_from_moparam
 end
 
 # MO of variable with multiples dependencies
@@ -272,15 +267,6 @@ class MOPhiVar
 
 		return false
 	end
-
-	redef fun is_from_moparam
-	do
-		for dep in dependencies do
-			if dep.is_from_moparam then return true
-		end
-
-		return false
-	end
 end
 
 # MO of each parameters given to a call site
@@ -288,8 +274,6 @@ class MOParam
 	super MOVar
 
 	redef fun compute_concretes(concretes) do return false
-
-	redef fun is_from_moparam do return true
 end
 
 # MO of instantiation sites
