@@ -53,211 +53,21 @@ redef class ModelBuilder
 	# of preexistence (see redef in vm_optimizations)
 	fun post_exec(mainmodule: MModule)
 	do
-		var loaded_cls = 0
-		for cls in mainmodule.model.mclasses do if cls.loaded then loaded_cls += 1
-
-		# Check if number of loaded classes by the VM matches with the counter
-		var analysed_cls = pstats.get("loaded_classes_implicits")
-		analysed_cls += pstats.get("loaded_classes_explicits")
-		analysed_cls += pstats.get("loaded_classes_abstracts")
-		if loaded_cls != analysed_cls then
-			print("WARNING: numbers of loaded classes in [model: {loaded_cls}] [vm: {analysed_cls}]")
-		end
-
-		var compiled_methods = new List[MMethodDef]
-
-		# Check if number of static callsites who preexists matches with the counter
-		var preexist_static = 0
-
-		for mprop in mainmodule.model.mproperties do
-			if not mprop isa MMethod then continue
-			for meth in mprop.mpropdefs do
-				compiled_methods.add(meth)
-				for site in meth.mosites do
-					# Force to recompile the site (set the better allowed optimization)
-					site.expr_recv.preexist_expr
-
-					# Actually, we MUST use get_impl to access to implementation, but it needs to have vm as argument
-					if site.impl isa StaticImpl and site.expr_recv.is_pre then
-						preexist_static += 1
-					else if site.pattern.impl isa StaticImpl and site.expr_recv.is_pre then
-						preexist_static += 1
-					end
-				end
-			end
-		end
-
-		if preexist_static != pstats.get("preexist_static") then
-			print("WARNING: preexist_static {pstats.get("preexist_static")} is actually {preexist_static }")
-		end
-
-		# Recompile all active methods to get the upper bound of the preexistance
-		# We don't need pstats counters with lower bound anymore
+		# Recompile all active objet sites to get the upper bound of the preexistence
+		# We don't need pstats counters with lower bound anymore, so we override it
 
 		var old_counters = sys.pstats
 		pstats = new MOStats("last")
 		pstats.copy_static_data(old_counters)
 
-		while compiled_methods.length != 0 do
-			var m = compiled_methods.pop
-			m.compiled = false
-			m.preexist_all(interpreter)
+		for site in pstats.analysed_sites do
+			site.preexist_site
+			site.impl = null
+			site.get_impl(interpreter)
+			site.stats(interpreter)
 		end
+
 		print(pstats.pretty)
-	end
-end
-
-redef class MMethodDef
-	redef fun preexist_all(vm)
-	do
-		if not super(vm) then return false
-
-		for site in mosites do
-			var recv = site.expr_recv
-
-			if recv.is_from_monew then pstats.inc("sites_from_new")
-			if recv.is_from_mocallsite then pstats.inc("sites_from_meth_return")
-			if recv.is_from_monew or recv.is_from_mocallsite then pstats.inc("sites_handle_by_extend_preexist")
-
-			var is_pre = recv.is_pre
-			var impl = site.get_impl(vm)
-			var is_concretes = site.get_concretes.length > 0
-			var rst_loaded = site.pattern.rst.get_mclass(vm).as(not null).abstract_loaded
-
-			var is_self_recv = false
-			if recv isa MOParam and recv.offset == 0 then is_self_recv = true
-
-			if recv.is_pre then
-				pstats.inc("preexist")
-				if impl isa StaticImpl then pstats.inc("preexist_static")
-			else
-				pstats.inc("npreexist")
-			end
-
-			# attr_*
-			if site isa MOAttrSite then
-				if is_self_recv then pstats.inc("attr_self")
-
-				if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "attr_preexist_sst", "attr_npreexist_sst")
-					pstats.inc("impl_sst")
-					if is_pre then
-						incr_rst(rst_loaded, "optimizable_inline")
-					else
-						incr_rst(rst_loaded, "non_optimizable_inline")
-					end
-				else if impl isa PHImpl then 
-					pstats.inc("attr_ph")
-					pstats.inc("impl_ph")
-					incr_rst(rst_loaded, "other")
-				end
-
-				if site isa MOReadSite then
-					pstats.inc("attr_read")
-				else
-					pstats.inc("attr_write")
-				end
-
-				pstats.inc("attr")
-				incr_specific_counters(is_pre, "attr_preexist", "attr_npreexist")
-				if is_concretes then
-					pstats.inc("attr_concretes_receivers")
-					incr_specific_counters(is_pre, "attr_concretes_preexist", "attr_concretes_npreexist")
-				end
-
-			# cast_*
-			else if site isa MOSubtypeSite then
-				if is_self_recv then pstats.inc("cast_self")
-
-				if impl isa StaticImpl then
-					incr_specific_counters(is_pre, "cast_preexist_static", "cast_npreexist_static")
-					pstats.inc("impl_static")
-					if is_pre then
-						incr_rst(rst_loaded, "optimizable_inline")
-					else
-						incr_rst(rst_loaded, "non_optimizable_inline")
-					end
-				else if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "cast_preexist_sst", "cast_npreexist_sst")
-					pstats.inc("impl_sst")
-					if is_pre then
-						incr_rst(rst_loaded, "optimizable_inline")
-					else
-						incr_rst(rst_loaded, "non_optimizable_inline")
-					end
-				else
-					pstats.inc("cast_ph")
-					pstats.inc("impl_ph")
-					incr_rst(rst_loaded, "other")
-				end
-
-				pstats.inc("cast")
-				incr_specific_counters(is_pre, "cast_preexist", "cast_npreexist")
-				if is_concretes then
-					pstats.inc("cast_concretes_receivers")
-					incr_specific_counters(is_pre, "cast_concretes_preexist", "cast_concretes_npreexist")
-				end
-
-			# meth_*
-			else if site isa MOCallSite then
-				if is_self_recv then pstats.inc("meth_self")
-
-				if impl isa StaticImpl then
-					incr_specific_counters(is_pre, "meth_preexist_static", "meth_npreexist_static")
-					pstats.inc("impl_static")
-
-					if is_pre then
-						incr_rst(rst_loaded, "optimizable_inline")
-					else
-						incr_rst(rst_loaded, "non_optimizable_inline")
-					end
-				else if impl isa SSTImpl then
-					incr_specific_counters(is_pre, "meth_preexist_sst", "meth_npreexist_sst")
-					pstats.inc("impl_sst")
-					incr_rst(rst_loaded, "other")
-				else
-					pstats.inc("meth_ph")
-					pstats.inc("impl_ph")
-					incr_rst(rst_loaded, "other")
-				end
-
-				pstats.inc("meth")
-				incr_specific_counters(is_pre, "meth_preexist", "meth_npreexist")
-				if is_concretes then 
-					pstats.inc("meth_concretes_receivers")
-					incr_specific_counters(is_pre, "meth_concretes_preexist", "meth_concretes_npreexist")
-				end
-			end
-
-			if impl isa StaticImpl then
-				if not rst_loaded then incr_specific_counters(is_pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
-			else if impl isa SSTImpl then
-				if not rst_loaded then incr_specific_counters(is_pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
-			else 
-				incr_rst(rst_loaded, "ph")
-			end
-
-			if site.get_concretes.length > 0 then 
-				if not rst_loaded then incr_specific_counters(is_pre, "rst_unloaded_concretes_pre", "rst_unloaded_concretes_npre")
-			end
-
-			if site.expr_recv isa MOParam and site.expr_recv.as(MOParam).offset == 0 then
-				incr_rst(rst_loaded, "self")
-			end
-
-			if impl isa NullImpl then
-				if site isa MOCallSite then
-					incr_specific_counters(is_pre, "pic_unloaded_method_pre", "pic_unloaded_method_npre")
-				else if site isa MOAttrSite then
-					incr_specific_counters(is_pre, "pic_unloaded_attribute_pre", "pic_unloaded_attribute_npre")
-				else if site isa MOSubtypeSite then
-					incr_specific_counters(is_pre, "pic_unloaded_cast_pre", "pic_unloaded_cast_npre")
-				else
-					abort
-				end
-			end
-		end
-		return true
 	end
 end
 
@@ -387,6 +197,9 @@ end
 
 # Stats of the optimizing model
 class MOStats
+	# List of analysed sites
+	var analysed_sites = new List[MOSite]
+
 	# Label to display on dump
 	var lbl: String
 
@@ -530,6 +343,7 @@ class MOStats
 		map["ast_new"] = counters.get("ast_new")
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
+		analysed_sites.add_all(counters.analysed_sites)
 	end
 
 	init
@@ -755,4 +569,20 @@ end
 
 redef class MOSubtypeSite
 	redef var site_type = "cast"
+end
+
+redef class APropdef
+	redef fun compile(vm)
+	do
+		super
+
+		if mpropdef isa MMethodDef then
+			for site in mpropdef.as(MMethodDef).mosites do
+
+			print("stats")
+				site.stats(vm)
+				pstats.analysed_sites.add(site)
+			end
+		end
+	end
 end

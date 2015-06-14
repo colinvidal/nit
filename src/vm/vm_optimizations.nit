@@ -574,8 +574,16 @@ class AToCompile
 end
 
 redef class APropdef
-		# List of ast node to compile
+	# List of ast node to compile
 	var to_compile = new List[AToCompile]
+
+	# Force to compute the implementation of the site when AST node is compiled
+	# TODO: compute objet site implementation on attributes with body too
+	redef fun compile(vm)
+	do
+		super
+		if mpropdef isa MMethodDef then for site in mpropdef.as(MMethodDef).mosites do site.get_impl(vm)
+	end
 end
 
 redef class AMethPropdef
@@ -840,7 +848,7 @@ end
 redef abstract class MOSite
 	# Implementation of the site (null if can't determine concretes receivers.
 	# We always must use get_impl to read this value
-	var impl: nullable Implementation is noinit
+	var impl: nullable Implementation is writable, noinit
 
 	# Get the implementation of the site, according to preexist value
 	fun get_impl(vm: VirtualMachine): Implementation

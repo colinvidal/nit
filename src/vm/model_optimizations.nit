@@ -535,6 +535,15 @@ end
 redef class VirtualMachine
 	# The top of list is the type of the receiver that will be used after new_frame
 	var next_receivers = new List[MType]
+	
+	redef fun new_frame(node, mpropdef, args)
+	do
+		next_receivers.push(args.first.mtype)
+		var ret = super(node, mpropdef, args)
+		next_receivers.pop
+		return ret
+	end
+
 end
 
 redef class MType

@@ -34,15 +34,14 @@ redef class VirtualMachine
 		super(mclass)
 		mclass.handle_new_class
 	end
+end
 
-	redef fun new_frame(node, mpropdef, args)
+redef class APropdef
+	# TODO: make preexistence analysis on attributes with body too
+	redef fun compile(vm)
 	do
-		next_receivers.push(args.first.mtype)
-#		trace("NEXT_RECEIVERS: {next_receivers}")
-		var ret = super(node, mpropdef, args)
-		if mpropdef isa MMethodDef then	mpropdef.preexist_all(self)
-		next_receivers.pop
-		return ret
+		super
+		if mpropdef isa MMethodDef then mpropdef.as(MMethodDef).preexist_all(vm)
 	end
 end
 
