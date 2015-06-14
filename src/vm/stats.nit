@@ -234,21 +234,21 @@ class MOStats
 	# Make text csv file contains overview statistics
 	fun overview
 	do
-#		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
-#
-#		file.write(", method, attribute, cast, total, rst null\n")
-#	
-#		var self_meth = map["meth_self"]
-#		var self_attr = map["attr_self"]
-#		var self_cast = map["cast_self"]
-#		var self_sum = self_meth + self_attr + self_cast
-#		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, {map["rst_unloaded_self"]}\n")
-#
+		var file = new FileWriter.open("mo-stats-{lbl}.csv")	
+
+		file.write(", method, attribute, cast, total, rst null\n")
+	
+		var self_meth = map["method_self"]
+		var self_attr = map["attribute_self"]
+		var self_cast = map["cast_self"]
+		var self_sum = self_meth + self_attr + self_cast
+		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, \n")
+
 #		var rst_null_pre_sum = map["rst_unloaded_static_pre"] + map["rst_unloaded_sst_pre"]
 #		var rst_null_npre_sum = map["rst_unloaded_ph"] + map["rst_unloaded_static_npre"] + map["rst_unloaded_sst_npre"]
 #		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, {rst_null_pre_sum}\n")
 #		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, {rst_null_npre_sum}\n")
-#
+
 #		var concretes_meth = map["meth_concretes_receivers"]
 #		var concretes_attr = map["attr_concretes_receivers"]
 #		var concretes_cast = map["cast_concretes_receivers"]
@@ -302,23 +302,24 @@ class MOStats
 #		file.write("pic null, {sum_pic_null_method}, {sum_pic_null_attribute}, {sum_pic_null_cast}\n")
 #		file.write("pic null pre,{map["pic_unloaded_method_pre"]},{map["pic_unloaded_attribute_pre"]},{map["pic_unloaded_cast_pre"]}\n")
 #		file.write("pic null npre,{map["pic_unloaded_method_npre"]},{map["pic_unloaded_attribute_npre"]},{map["pic_unloaded_cast_npre"]}\n")
-#
-#
-#		file.write(",,,,,,,\n")
-#		file.write("optimisable inline,,,,{optimization_inline},{map["rst_unloaded_optimizable_inline"]}\n")
-#
-#		var cant_optimize = map["meth_npreexist_static"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
-#		file.write("non optimisable inline,,,,{cant_optimize},{map["rst_unloaded_non_optimizable_inline"]}\n")
-#
-#		var not_inline_subject = map["impl_ph"] + meth_sst
-#		file.write("non inline,,,,{not_inline_subject},{map["rst_unloaded_other"]}\n")
-#
-#		file.write(",,,,,,,\n")
-#		file.write("from new,{map["sites_from_new"]}\n")
-#		file.write("from return,{map["sites_from_meth_return"]}\n")
-#
-#		
-#		file.close
+
+		file.write("\n\n")
+
+		var optimizable_inline = 0
+		file.write("optimisable inline,{optimizable_inline}\n")
+
+		var no_optimizable = map["method_npreexist_static"] + map["attribute_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
+		file.write("non optimisable inline,{no_optimizable}\n")
+
+		var no_inline = map["impl_ph"] + map["method_sst"]
+		file.write("non inline,{no_inline}\n")
+
+		file.write("\n\n")
+
+		file.write("from new,{map["sites_from_new"]}\n")
+		file.write("from return,{map["sites_from_meth_return"]}\n")
+
+		file.close
 	end
 
 	# Pretty format
