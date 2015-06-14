@@ -246,24 +246,24 @@ class MOStats
 
 		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, \n")
 
-		file.write("preexist, {map["meth_preexist"]}, {map["attr_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, \n")
-		file.write("npreexist, {map["meth_npreexist"]}, {map["attr_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, \n")
+		file.write("preexist, {map["method_preexist"]}, {map["attribute_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, \n")
+		file.write("npreexist, {map["method_npreexist"]}, {map["attribute_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, \n")
 
 		buf = "{map["method_concretes"]},"
 		buf += "{map["attribute_concretes"]},"
-		buf += "{map["concretes_cast"]},"
+		buf += "{map["cast_concretes"]},"
 		buf += "{map["concretes"]}"
 		file.write("concretes,{buf},\n")
 
 		buf = "{map["method_concretes_preexist"]},"
 		buf += "{map["attribute_concretes_preexist"]},"
-		buf += "{map["concretes_cast_preexist"]},"
+		buf += "{map["cast_concretes_preexist"]},"
 		buf += "{map["concretes_preexist"]}"
 		file.write("concretes preexist,{buf},\n")
 
 		buf = "{map["method_concretes_npreexist"]},"
 		buf += "{map["attribute_concretes_npreexist"]},"
-		buf += "{map["concretes_cast_npreexist"]},"
+		buf += "{map["cast_concretes_npreexist"]},"
 		buf += "{map["concretes_npreexist"]}"
 		file.write("concretes npreexist,{buf},\n")
 
@@ -310,7 +310,7 @@ class MOStats
 		var no_optimizable = map["method_npreexist_static"] + map["attribute_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
 		file.write("non optimisable inline,{no_optimizable}\n")
 
-		var no_inline = map["impl_ph"] + map["method_sst"]
+		var no_inline = map["method_ph"] + map["method_sst"] + map["attribute_ph"] + map["cast_ph"]
 		file.write("non inline,{no_inline}\n")
 
 		file.write("\n\n")
