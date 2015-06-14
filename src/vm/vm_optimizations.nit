@@ -579,11 +579,11 @@ redef class APropdef
 
 	# Force to compute the implementation of the site when AST node is compiled
 	# TODO: compute objet site implementation on attributes with body too
-	redef fun compile(vm)
-	do
-		super
-		if mpropdef isa MMethodDef then for site in mpropdef.as(MMethodDef).mosites do site.get_impl(vm)
-	end
+#	redef fun compile(vm)
+#	do
+#		super
+#		if mpropdef isa MMethodDef then for site in mpropdef.as(MMethodDef).mosites do site.get_impl(vm)
+#	end
 end
 
 redef class AMethPropdef
@@ -617,6 +617,9 @@ redef class AMethPropdef
 
 		# Generate MO for sites inside the propdef
 		for expr in to_compile do expr.compile_ast(vm, mpropdef.as(not null))
+
+		# Force to compute the implementation of each site of the method
+		for site in mpropdef.mosites do site.get_impl(vm)
 	end
 end
 

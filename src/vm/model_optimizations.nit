@@ -179,9 +179,6 @@ end
 
 redef class MMethodDef
 	redef type P: MOCallSitePattern
-
-	# Tell if the method has been compiled at least one time (not in MMethodDef because attribute can have blocks)
-	var compiled = false is writable
 	
 	# Return expression of the method (null if procedure)
 	var return_expr: nullable MOExpr is writable

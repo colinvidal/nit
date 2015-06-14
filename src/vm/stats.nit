@@ -61,6 +61,8 @@ redef class ModelBuilder
 		pstats.copy_static_data(old_counters)
 
 		for site in pstats.analysed_sites do
+			# WARN: this cast is always true for now, but we need to put preexist_analysed on MPropDef when we'll analysed attribute with body.
+			site.lp.as(MMethodDef).preexist_analysed = false
 			site.preexist_site
 			site.impl = null
 			site.get_impl(interpreter)
@@ -571,15 +573,14 @@ redef class MOSubtypeSite
 	redef var site_type = "cast"
 end
 
-redef class APropdef
+redef class AMethPropdef
 	redef fun compile(vm)
 	do
 		super
 
 		if mpropdef isa MMethodDef then
 			for site in mpropdef.as(MMethodDef).mosites do
-
-			print("stats")
+				print("stats")
 				site.stats(vm)
 				pstats.analysed_sites.add(site)
 			end

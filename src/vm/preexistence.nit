@@ -3,6 +3,9 @@ module preexistence
 
 import model_optimizations
 
+# TODO: switch preexist_analysed boolean to false when propage_preexist or propage_npreexist
+# TODO: how call MMethodDef::preexist_all when preexist_analysed is switched to false ?
+
 redef class ToolContext
 	# Disable inter-procedural analysis and 'new' cases
 	var disable_preexistence_extensions = new OptionBool("Disable preexistence extensions", "--no-preexist-ext")
@@ -106,10 +109,13 @@ redef class MPropDef
 end
 
 redef class MMethodDef
+	# Tell if preexistance analysis is done
+	var preexist_analysed: Bool = false is writable
+
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
-		if not compiled then
+		if not preexist_analysed then
 			return_expr.set_npre_nper
 			return return_expr.preexist_expr_value
 		else if not return_expr.is_pre_unknown then
@@ -129,8 +135,8 @@ redef class MMethodDef
 	#
 	fun preexist_all(vm: VirtualMachine): Bool
 	do
-		if compiled or is_intern or is_extern then return false
-		compiled = true
+		if preexist_analysed or is_intern or is_extern then return false
+		preexist_analysed = true
 
 		trace("\npreexist_all of {self}")
 		var preexist: Int
@@ -458,7 +464,7 @@ redef class MOCallSite
 					# since the VM cannot make FFI.
 					set_pval_per
 					break
-				else if not candidate.compiled then
+				else if not candidate.preexist_analysed then
 					# The lp could be known by the model but not already compiled from ast to mo
 					# So, we must NOT check it's return_expr (it could be still null)
 					set_npre_nper
