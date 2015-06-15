@@ -267,16 +267,40 @@ class MOStats
 		buf += "{map["concretes_npreexist"]}"
 		file.write("concretes npreexist,{buf},\n")
 
-#		var meth_static = map["meth_preexist_static"] + map["meth_npreexist_static"]
-#		var cast_static = map["cast_preexist_static"] + map["cast_npreexist_static"]
-#		var rst_null_static = map["rst_unloaded_static_pre"] + map["rst_unloaded_static_npre"]
-#		file.write("static, {meth_static}, 0, {cast_static}, {map["impl_static"]},{rst_null_static}\n")
-#
-#		file.write("static preexist, {map["meth_preexist_static"]}, 0, {map["cast_preexist_static"]}, {map["preexist_static"]}, {map["rst_unloaded_static_pre"]}\n")
-#
-#		var sum_npre_static = map["meth_npreexist_static"] + map["cast_npreexist_static"]
-#		file.write("static npreexist, {map["meth_npreexist_static"]}, 0, {map["cast_npreexist_static"]}, {sum_npre_static}, {map["rst_unloaded_static_npre"]}\n")
-#
+		file.write("static, {map["method_static"]}, {map["attribute_static"]}, {map["cast_static"]}, {map["static"]}, {map["rst_unloaded_static"]}\n")
+
+		buf = "{map["method_preexist_static"]},"
+		buf += "{map["attribute_preexist_static"]},"
+		buf += "{map["cast_preexist_static"]},"
+		buf += "{map["static_preexist"]},"
+		buf += "{map["rst_unloaded_static_pre"]}"
+		file.write("static preexist, {buf}\n")
+
+		buf = "{map["method_npreexist_static"]},"
+		buf += "{map["attribute_npreexist_static"]},"
+		buf += "{map["cast_npreexist_static"]},"
+		buf += "{map["static_npreexist"]},"
+		buf += "{map["rst_unloaded_static_npre"]}"
+		file.write("static npreexist, {buf}\n")
+
+		file.write("sst, {map["method_sst"]}, {map["attribute_sst"]}, {map["cast_sst"]}, {map["sst"]}, {map["rst_unloaded_sst"]}\n")
+
+		buf = "{map["method_preexist_sst"]},"
+		buf += "{map["attribute_preexist_sst"]},"
+		buf += "{map["cast_preexist_sst"]},"
+		buf += "{map["sst_preexist"]},"
+		buf += "{map["rst_unloaded_sst_pre"]}"
+		file.write("sst preexist, {buf}\n")
+
+		buf = "{map["method_npreexist_sst"]},"
+		buf += "{map["attribute_npreexist_sst"]},"
+		buf += "{map["cast_npreexist_sst"]},"
+		buf += "{map["sst_npreexist"]},"
+		buf += "{map["rst_unloaded_sst_npre"]}"
+		file.write("sst npreexist, {buf}\n")
+
+
+
 #		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
 #		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
 #		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
@@ -389,6 +413,17 @@ class MOStats
 		# incr if a site isn't preexist
 		map["npreexist"] = 0
 
+		map["static"] = 0
+		map["static_preexist"] = 0
+		map["static_npreexist"] = 0
+		map["sst"] = 0
+		map["sst_preexist"] = 0
+		map["sst_npreexist"] = 0
+		map["ph"] = 0
+		map["null"] = 0
+		map["null_preexist"] = 0
+		map["null_npreexist"] = 0
+
 		# incr if construct MO node to access on attribute as MOCallSite
 		# because it's an accessors with redefinitions
 		# If it's incr, some meth_* counters will be incr too, as regular method call
@@ -401,8 +436,10 @@ class MOStats
 		# access to self receiver
 		map["self"] = 0
 
+		map["rst_unloaded_static"] = 0
 		map["rst_unloaded_static_pre"] = 0
 		map["rst_unloaded_static_npre"] = 0
+		map["rst_unloaded_sst"] = 0
 		map["rst_unloaded_sst_pre"] = 0
 		map["rst_unloaded_sst_npre"] = 0
 		map["rst_unloaded_ph"] = 0
@@ -495,14 +532,21 @@ redef class MOSite
 
 		if impl isa StaticImpl then
 			pstats.inc("{site_type}_static")
+			pstats.inc("static")
+			incr_specific_counters(expr_recv.is_pre, "static_preexist", "static_npreexist")
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_static", "{site_type}_npreexist_static")
 		else if impl isa SSTImpl then
 			pstats.inc("{site_type}_sst")
+			pstats.inc("sst")
+			incr_specific_counters(expr_recv.is_pre, "sst_preexist", "sst_npreexist")
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_sst", "{site_type}_npreexist_sst")
 		else if impl isa PHImpl then
 			pstats.inc("{site_type}_ph")
+			pstats.inc("ph")
 		else if impl isa NullImpl then
 			pstats.inc("{site_type}_null")
+			pstats.inc("null")
+			incr_specific_counters(expr_recv.is_pre, "null_preexist", "null_npreexist")
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_null", "{site_type}_npreexist_null")
 		else
 			abort
@@ -550,8 +594,10 @@ redef class MOSite
 			var impl = get_impl(vm)
 
 			if impl isa StaticImpl then
+				pstats.inc("rst_unloaded_static")
 				incr_specific_counters(is_pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
 			else if impl isa SSTImpl then
+				pstats.inc("rst_unloaded_sst")
 				incr_specific_counters(is_pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
 			else if impl isa PHImpl then
 				pstats.inc("rst_unloaded_ph")
