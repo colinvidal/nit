@@ -23,23 +23,32 @@ redef class ToolContext
 	# Enable print stats
 	var stats_on = new OptionBool("Display statistics of model optimizing / preexistence after execution", "--mo-stats")
 
+	# Enable print site state
+	var print_site_state = new OptionBool("Display state of a MOSite (preexistence, impl)", "--site-state")
+
 	redef init
 	do
 		super
 		option_context.add_option(stats_on)
+		option_context.add_option(print_site_state)
 	end
 end
 
 redef class Sys
 	# Preexist counters
 	var pstats = new MOStats("first") is writable
+
+	# Access to print_site_state from anywhere
+	var print_site_state: Bool = false
 end
 
 redef class ModelBuilder
 	redef fun run_virtual_machine(mainmodule, arguments)
 	do
+		sys.print_site_state = toolcontext.print_site_state.value
+		
 		super(mainmodule, arguments)
-
+		
 		if toolcontext.stats_on.value then 
 			print(pstats.pretty)
 			pstats.overview
@@ -621,7 +630,17 @@ redef class MOSite
 		incr_self
 		incr_rst_unloaded(vm)
 		incr_type_impl(vm)
+
+		if print_site_state then
+			var buf = "site state {self} {pattern2str}\n"
+			buf += "\tpreexist: {expr_recv.is_pre}\n"
+			buf += "\timpl: {get_impl(vm)}\n"
+			print(buf)
+		end
 	end
+
+	#
+	fun pattern2str: String is abstract
 
 	#
 	fun incr_preexist(vm: VirtualMachine) do 
@@ -738,6 +757,10 @@ redef class MOSite
 	end
 end
 
+redef class MOPropSite
+	redef fun pattern2str do return "{pattern.rst}::{pattern.gp}"
+end
+
 redef class MOCallSite
 	redef var site_type = "method"
 end
@@ -747,6 +770,8 @@ redef class MOAttrSite
 end
 
 redef class MOSubtypeSite
+	redef fun pattern2str do return "{pattern.rst}->{pattern.target}"
+
 	redef var site_type = "cast"
 end
 
