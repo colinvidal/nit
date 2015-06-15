@@ -317,7 +317,7 @@ class MOStats
 
 		file.write("\n\n")
 
-		var optimizable_inline = 0
+		var optimizable_inline = map["method_preexist_static"] + map["attribute_preexist_sst"] + map["cast_preexist_static"] + map["cast_preexist_sst"]
 		file.write("optimisable inline,{optimizable_inline}\n")
 
 		var no_optimizable = map["method_npreexist_static"] + map["attribute_npreexist_sst"] + map["cast_npreexist_sst"] + map["cast_npreexist_static"]
