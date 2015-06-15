@@ -811,47 +811,44 @@ redef class APropdef
 	# List of ast node to compile
 	var to_compile = new List[AToCompile]
 
-	# Force to compute the implementation of the site when AST node is compiled
-	# TODO: compute objet site implementation on attributes with body too
-#	redef fun compile(vm)
-#	do
-#		super
-#		if mpropdef isa MMethodDef then for site in mpropdef.as(MMethodDef).mosites do site.get_impl(vm)
-#	end
-end
-
-redef class AMethPropdef
 	# list of return expression of the optimizing model
 	# Null if this fuction is a procedure
 	var mo_dep_exprs: nullable MOVar = null
 
+	# Force to compute the implementation of the site when AST node is compiled
 	redef fun compile(vm)
 	do
 		super
 
-		# Generate MO for return of the propdef
-		if returnvar.dep_exprs.length == 1 then
-			var moexpr = returnvar.dep_exprs.first.ast2mo
-			if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
-		else if returnvar.dep_exprs.length > 1 then
-			var deps = new List[MOExpr]
-			for a_expr in returnvar.dep_exprs do
-				var moexpr = a_expr.ast2mo
-				if moexpr != null then deps.add(moexpr)
+		if self isa AMethPropdef then
+			# Generate MO for return of the propdef
+			if returnvar.dep_exprs.length == 1 then
+				var moexpr = returnvar.dep_exprs.first.ast2mo
+				if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
+			else if returnvar.dep_exprs.length > 1 then
+				var deps = new List[MOExpr]
+				for a_expr in returnvar.dep_exprs do
+					var moexpr = a_expr.ast2mo
+					if moexpr != null then deps.add(moexpr)
+				end
+
+				if deps.length == 1 then
+					mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
+				else if deps.length > 1 then
+					mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
+				end
 			end
 
-			if deps.length == 1 then
-				mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
-			else if deps.length > 1 then
-				mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
-			end
+			mpropdef.as(MMethodDef).return_expr = mo_dep_exprs
+
+			# Generate MO for sites inside the propdef
+			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
 		end
-
-		mpropdef.as(not null).return_expr = mo_dep_exprs
-
-		# Generate MO for sites inside the propdef
-		for expr in to_compile do expr.compile_ast(vm, mpropdef.as(not null))
 	end
+end
+
+redef class AMethPropdef
+
 end
 
 redef class ASendExpr
