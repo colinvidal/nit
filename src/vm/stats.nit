@@ -307,27 +307,13 @@ class MOStats
 		buf += "{map["attribute_preexist_null"]},"
 		buf += "{map["cast_preexist_null"]},"
 		buf += "{map["null_preexist"]},"
-		buf += "{map["rst_unloaded_null_pre"]}"
 		file.write("null preexist, {buf}\n")
 
 		buf = "{map["method_npreexist_null"]},"
 		buf += "{map["attribute_npreexist_null"]},"
 		buf += "{map["cast_npreexist_null"]},"
 		buf += "{map["null_npreexist"]},"
-		buf += "{map["rst_unloaded_null_npre"]}"
 		file.write("null npreexist, {buf}\n")
-
-
-#		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"] + map["cast_preexist_static"]
-#		file.write(",,,,,,,\n")
-#	
-#		var sum_pic_null_method = map["pic_unloaded_method_pre"] + map["pic_unloaded_method_npre"]
-#		var sum_pic_null_attribute = map["pic_unloaded_attribute_pre"] + map["pic_unloaded_attribute_npre"]
-#		var sum_pic_null_cast = map["pic_unloaded_cast_pre"] + map["pic_unloaded_cast_npre"]
-#
-#		file.write("pic null, {sum_pic_null_method}, {sum_pic_null_attribute}, {sum_pic_null_cast}\n")
-#		file.write("pic null pre,{map["pic_unloaded_method_pre"]},{map["pic_unloaded_attribute_pre"]},{map["pic_unloaded_cast_pre"]}\n")
-#		file.write("pic null npre,{map["pic_unloaded_method_npre"]},{map["pic_unloaded_attribute_npre"]},{map["pic_unloaded_cast_npre"]}\n")
 
 		file.write("\n\n")
 
