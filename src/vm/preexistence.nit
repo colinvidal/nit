@@ -3,8 +3,8 @@ module preexistence
 
 import model_optimizations
 
-# TODO: switch preexist_analysed boolean to false when propage_preexist or propage_npreexist
-# TODO: how call MMethodDef::preexist_all when preexist_analysed is switched to false ?
+# TODO: preexist_analysed is used because there is not "is_compiled" boolean of MPropDef (only on APropdef),
+# and we need to know for preexistence analysis if a candidate local property is compiled or not.
 
 redef class ToolContext
 	# Disable inter-procedural analysis and 'new' cases

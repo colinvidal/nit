@@ -72,8 +72,6 @@ redef class VirtualMachine
 end
 
 redef class AAttrFormExpr
-	super AToCompile
-
 	# Position of the attribute in attribute table
 	#
 	# The relative position of this attribute if perfect hashing is used,
@@ -89,9 +87,6 @@ redef class AAttrFormExpr
 
 	# Identifier of the class which introduced the attribute
 	var id: Int
-
-	# Link to the attribute access in MO
-	var moattrsite: nullable MOAttrSite
 
 	# Optimize this attribute access
 	# * `mproperty` The attribute which is accessed
@@ -110,30 +105,6 @@ redef class AAttrFormExpr
 			status = 2
 		end
 	end
-
-	# Compile this attribute access from ast to mo
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
-	do
-		var ignore = false
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			# Ignore litterals cases of the analysis
-			ignore = true
-		else if n_expr.mtype.is_primitive_type then
-			# Ignore primitives cases of the analysis
-			ignore = true
-		end
-
-		var recv = n_expr.ast2mo
-
-		if recv != null and not ignore then
-			moattrsite = make_mo(vm, recv, lp)
-			lp.mosites.add(moattrsite.as(not null))
-		end
-	end
-
-	# Make the MO node / pattern
-	private fun make_mo(vm: VirtualMachine, recv: MOExpr, lp:MMethodDef): MOAttrSite is abstract
 end
 
 redef class AAttrExpr
@@ -170,23 +141,6 @@ redef class AAttrExpr
 
 		return i
 	end
-
-	redef fun ast2mo do return moattrsite.as(nullable MOReadSite)
-
-	redef fun make_mo(vm, recv, lp)
-	do
-		var moattr = new MOReadSite(recv, lp)
-		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
-		return moattr
-	end
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
 end
 
 redef class AAttrAssignExpr
@@ -217,21 +171,6 @@ redef class AAttrAssignExpr
 
 		#TODO : we need recompilations here
 		status = 0
-	end
-
-	redef fun make_mo(vm, recv, lp)
-	do
-		var moattr = new MOWriteSite(recv, lp)
-		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
-		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
-		return moattr
-	end
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
 	end
 end
 
@@ -271,8 +210,6 @@ redef class CallSite
 end
 
 redef class AIsaExpr
-	super AToCompile
-
 	# Identifier of the target class type
 	var id: Int
 
@@ -335,40 +272,9 @@ redef class AIsaExpr
 		end
 		id = target.mclass.vtable.id
 	end
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
-
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
-	do
-		var ignore = false
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			# Ignore litterals cases of the analysis
-			ignore = true
-		else if n_expr.mtype.get_mclass(vm).mclass_type.is_primitive_type then
-			# Ignore primitives cases of the analysis
-			ignore = true
-		end
-
-		var recv = n_expr.ast2mo
-
-		if recv != null and not ignore then
-			var most = new MOSubtypeSite(recv, lp, cast_type.as(not null))
-			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-			recv_class.set_subtype_pattern(most, recv_class.mclass_type)
-			lp.mosites.add(most)
-		end
-	end
 end
 
 redef class AAsCastExpr
-	super AToCompile
-
 	# Identifier of the target class type
 	var id: Int
 
@@ -438,145 +344,9 @@ redef class AAsCastExpr
 		end
 		id = target.mclass.vtable.id
 	end
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
-
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
-	do
-		var ignore = false
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			# Ignore litterals cases of the analysis
-			ignore = true
-		else if n_expr.mtype.is_primitive_type then
-			# Ignore primitives cases of the analysis
-			ignore = true
-		else if n_type.mtype.get_mclass(vm).mclass_type.is_primitive_type then
-			ignore = true
-			# Sometimes, the cast come from a generic RST that is not resolve,
-			# so, if the model allow a cast to a primitive type, the receiver have a primitive type
-		end
-
-		var recv = n_expr.ast2mo
-
-		if recv != null and not ignore then
-			var moattr = new MOSubtypeSite(recv, lp, n_type.mtype.as(not null))
-			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
-		end
-	end
-end
-
-redef class Variable
-	# Represents the view of the variable in the optimizing representation
-	var movar: nullable MOVar
-
-	# Create (if doesn't exists) the movar corresponding to AST node, and return it
-	fun get_movar(node: AExpr): nullable MOVar
-	do
-		if movar == null then
-			if node isa ASelfExpr then
-				movar = new MOParam(0)
-			else if node isa AVarExpr then
-				# A variable read
-				if node.variable.parameter then
-					movar = new MOParam(node.variable.position)
-				else if node.variable.dep_exprs.length == 1 then
-					var mo = node.variable.dep_exprs.first.ast2mo
-					if mo != null then movar = new MOSSAVar(node.variable.position, mo)
-				else if node.variable.dep_exprs.length > 1 then
-					var phi = new List[MOExpr]
-					for a_expr in node.variable.dep_exprs do
-						var mo = a_expr.ast2mo
-						if mo != null then phi.add(mo)
-					end
-
-					if phi.length == 1 then
-						movar = new MOSSAVar(node.variable.position, phi.first)
-					else if phi.length > 1 then
-						movar = new MOPhiVar(node.variable.position, phi)
-						trace("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
-					end
-				end
-			end
-		end
-		return movar
-	end
-end
-
-redef class ANewExpr
-	# Represent the view of the new expression in the optimizing reprenstation
-	var monew: nullable MONew
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var sup = super
-
-		# Int, String, and Number are abstract, so we can't instantiate them with "new" keyword.
-		# Is there others primitives types we can do a "new" on it ? If not, remove this test.
-		if not recvtype.is_primitive_type then
-			monew = new MONew(ssa.propdef.mpropdef.as(MMethodDef))
-			ssa.propdef.mpropdef.as(MMethodDef).monews.add(monew.as(not null))
-			recvtype.mclass.set_new_pattern(monew.as(not null))
-		end
-
-		return sup
-	end
-
-	redef fun ast2mo do return monew
-end
-
-redef class ANode
-	# True if self is a primitive node
-	fun is_primitive_node: Bool
-	do
-		if self isa AIntExpr then return true
-		if self isa ACharExpr then return true
-		if self isa ANullExpr then return true
-		if self isa AStringFormExpr then return true
-		if self isa ATrueExpr then return true
-		if self isa AFalseExpr then return true
-		if self isa ASuperstringExpr then return true
-		return false
-	end
-
-	# Convert AST node into MOExpression
-	fun ast2mo: nullable MOExpr
-	do
-		if not is_primitive_node then trace("WARN: NYI {self}")
-		return null
-	end
-end
-
-redef class ASelfExpr
-	redef fun ast2mo
-	do
-		return variable.get_movar(self)
-	end
-end
-
-redef class AVarExpr
-	redef fun ast2mo
-	do
-		return variable.get_movar(self)
-	end
-end
-
-# Common call to all AST node that must be compiled into MO node
-class AToCompile
-	# Compile the AST to into a MO node
-	fun compile_ast(vm: VirtualMachine, lp: MMethodDef) is abstract
 end
 
 redef class APropdef
-	# List of ast node to compile
-	var to_compile = new List[AToCompile]
-
 	# Force to compute the implementation of the site when AST node is compiled
 	# TODO: compute objet site implementation on attributes with body too
 #	redef fun compile(vm)
@@ -587,145 +357,14 @@ redef class APropdef
 end
 
 redef class AMethPropdef
-	# list of return expression of the optimizing model
-	# Null if this fuction is a procedure
-	var mo_dep_exprs: nullable MOVar = null
-
 	redef fun compile(vm)
 	do
 		super
 
-		# Generate MO for return of the propdef
-		if returnvar.dep_exprs.length == 1 then
-			var moexpr = returnvar.dep_exprs.first.ast2mo
-			if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
-		else if returnvar.dep_exprs.length > 1 then
-			var deps = new List[MOExpr]
-			for a_expr in returnvar.dep_exprs do
-				var moexpr = a_expr.ast2mo
-				if moexpr != null then deps.add(moexpr)
-			end
-
-			if deps.length == 1 then
-				mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
-			else if deps.length > 1 then
-				mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
-			end
-		end
-
-		mpropdef.as(not null).return_expr = mo_dep_exprs
-
-		# Generate MO for sites inside the propdef
-		for expr in to_compile do expr.compile_ast(vm, mpropdef.as(not null))
-
 		# Force to compute the implementation of each site of the method
+		# TODO: do it in APropdef !
 		for site in mpropdef.mosites do site.get_impl(vm)
 	end
-end
-
-redef class ASendExpr
-	super AToCompile
-
-	# Site invocation associated with this node
-	var mocallsite: nullable MOCallSite
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var sup = super
-		ssa.propdef.to_compile.add(self)
-		return sup
-	end
-
-	redef fun ast2mo
-	do
-		return mocallsite
-	end
-
-	# Compile this ast node in MOCallSite after SSA
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
-	do
-		var ignore = false
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			# Ignore litterals cases of the analysis
-			ignore = true
-		else if n_expr.mtype.is_primitive_type then
-			# Ignore primitives cases of the analysis
-			ignore = true
-		end
-
-		var recv = n_expr.ast2mo
-
-		if recv != null and not ignore then
-			var cs = callsite.as(not null)
-
-			# Static dispatch of global model to known if we handle method call of attribute access
-			var has_redef = cs.mproperty.mpropdefs.length > 1
-			var node_ast = vm.modelbuilder.mpropdef2node(cs.mpropdef)
-			var is_attribute = node_ast isa AAttrPropdef
-
-			if is_attribute and not has_redef then
-				compile_ast_accessor(vm, lp, recv, node_ast.as(not null))
-			else
-				compile_ast_method(vm, lp, recv, node_ast.as(not null), is_attribute)
-			end
-		end
-	end
-
-	# Unique LP, simple attr access, make it as a real attribute access (eg. _attr)
-	fun compile_ast_accessor(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode)
-	do
-		var moattr: MOAttrSite
-		var params_len = callsite.as(not null).msignature.mparameters.length
-
-		if params_len == 0 then
-			# The node is a MOReadSite
-			moattr = new MOReadSite(recv, lp)
-		else
-			# The node is a MOWriteSite
-			assert params_len == 1
-			moattr = new MOWriteSite(recv, lp)
-		end
-
-		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-
-		var gp = node_ast.as(AAttrPropdef).mpropdef.mproperty
-
-		recv_class.set_site_pattern(moattr, recv_class.mclass_type, gp)
-		lp.mosites.add(moattr)
-	end
-
-	# Real methods calls, and accessors with multiples LPs
-	fun compile_ast_method(vm: VirtualMachine, lp: MMethodDef, recv: MOExpr, node_ast: ANode, is_attribute: Bool)
-	do
-		var cs = callsite.as(not null)
-
-		# Null cases are already eliminated, to get_mclass can't return null
-		var recv_class = cs.recv.get_mclass(vm).as(not null)
-
-		# If recv_class was a formal type, and now resolved as in primitive, we ignore it
-		if not recv_class.mclass_type.is_primitive_type  then
-			mocallsite = new MOCallSite(recv, lp)
-			var mocs = mocallsite.as(not null)
-
-			lp.mosites.add(mocs)
-			recv_class.set_site_pattern(mocs, recv_class.mclass_type, cs.mproperty)
-
-			# Expressions arguments given to the method called
-			for arg in raw_arguments do
-				var moexpr = arg.ast2mo
-				if moexpr != null then mocallsite.given_args.add(moexpr)
-			end
-		end
-	end
-end
-
-redef class AParExpr
-	redef fun ast2mo do return n_expr.ast2mo
-end
-
-redef class ANotExpr
-	redef fun ast2mo do return n_expr.ast2mo
 end
 
 redef abstract class MOSitePattern

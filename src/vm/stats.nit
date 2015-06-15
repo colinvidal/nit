@@ -301,18 +301,34 @@ class MOStats
 
 		file.write("ph, {map["method_ph"]}, {map["attribute_ph"]}, {map["cast_ph"]}, {map["ph"]}, {map["rst_unloaded_ph"]}\n")
 
+		buf = "{map["method_preexist_ph"]},"
+		buf += "{map["attribute_preexist_ph"]},"
+		buf += "{map["cast_preexist_ph"]},"
+		buf += "{map["ph_preexist"]},"
+		buf += "{map["rst_unloaded_ph_pre"]}"
+		file.write("ph preexist, {buf}\n")
+
+		buf = "{map["method_npreexist_ph"]},"
+		buf += "{map["attribute_npreexist_ph"]},"
+		buf += "{map["cast_npreexist_ph"]},"
+		buf += "{map["ph_npreexist"]},"
+		buf += "{map["rst_unloaded_ph_npre"]}"
+		file.write("ph npreexist, {buf}\n")
+
 		file.write("null, {map["method_null"]}, {map["attribute_null"]}, {map["cast_null"]}, {map["null"]}, {map["rst_unloaded_null"]}\n")
 
 		buf = "{map["method_preexist_null"]},"
 		buf += "{map["attribute_preexist_null"]},"
 		buf += "{map["cast_preexist_null"]},"
 		buf += "{map["null_preexist"]},"
+		buf += "{map["rst_unloaded_null_pre"]}"
 		file.write("null preexist, {buf}\n")
 
 		buf = "{map["method_npreexist_null"]},"
 		buf += "{map["attribute_npreexist_null"]},"
 		buf += "{map["cast_npreexist_null"]},"
 		buf += "{map["null_npreexist"]},"
+		buf += "{map["rst_unloaded_null_npre"]}"
 		file.write("null npreexist, {buf}\n")
 
 		file.write("\n\n")
@@ -409,6 +425,8 @@ class MOStats
 		map["sst_preexist"] = 0
 		map["sst_npreexist"] = 0
 		map["ph"] = 0
+		map["ph_preexist"] = 0
+		map["ph_npreexist"] = 0
 		map["null"] = 0
 		map["null_preexist"] = 0
 		map["null_npreexist"] = 0
@@ -432,7 +450,11 @@ class MOStats
 		map["rst_unloaded_sst_pre"] = 0
 		map["rst_unloaded_sst_npre"] = 0
 		map["rst_unloaded_ph"] = 0
+		map["rst_unloaded_ph_pre"] = 0
+		map["rst_unloaded_ph_npre"] = 0
 		map["rst_unloaded_null"] = 0
+		map["rst_unloaded_null_pre"] = 0
+		map["rst_unloaded_null_npre"] = 0
 
 		map["method"] = 0
 		map["method_preexist"] = 0
@@ -448,6 +470,8 @@ class MOStats
 		map["method_preexist_sst"] = 0
 		map["method_npreexist_sst"] = 0
 		map["method_ph"] = 0
+		map["method_preexist_ph"] = 0
+		map["method_npreexist_ph"] = 0
 		map["method_null"] = 0
 		map["method_preexist_null"] = 0
 		map["method_npreexist_null"] = 0
@@ -466,6 +490,8 @@ class MOStats
 		map["attribute_preexist_sst"] = 0
 		map["attribute_npreexist_sst"] = 0
 		map["attribute_ph"] = 0
+		map["attribute_preexist_ph"] = 0
+		map["attribute_npreexist_ph"] = 0
 		map["attribute_null"] = 0
 		map["attribute_preexist_null"] = 0
 		map["attribute_npreexist_null"] = 0
@@ -484,6 +510,8 @@ class MOStats
 		map["cast_preexist_sst"] = 0
 		map["cast_npreexist_sst"] = 0
 		map["cast_ph"] = 0
+		map["cast_preexist_ph"] = 0
+		map["cast_npreexist_ph"] = 0
 		map["cast_null"] = 0
 		map["cast_preexist_null"] = 0
 		map["cast_npreexist_null"] = 0
@@ -498,45 +526,50 @@ redef class MOSite
 	# Count the implementation of the site
 	fun stats(vm: VirtualMachine)
 	do
-		incr_preexist
+		incr_preexist(vm)
 		incr_from_site
-		incr_concrete_site
+		incr_concrete_site(vm)
 		incr_self
 		incr_rst_unloaded(vm)
 		incr_type_impl(vm)
 	end
 
 	#
-	fun incr_preexist do 
-		incr_specific_counters(expr_recv.is_pre, "preexist", "npreexist")
-		incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist", "{site_type}_npreexist")
+	fun incr_preexist(vm: VirtualMachine) do 
+		var pre = expr_recv.is_pre
+
+		incr_specific_counters(pre, "preexist", "npreexist")
+		incr_specific_counters(pre, "{site_type}_preexist", "{site_type}_npreexist")
 	end
 
 	#
 	fun incr_type_impl(vm: VirtualMachine)
 	do
 		var impl = get_impl(vm)
+		var pre = expr_recv.is_pre
 
 		pstats.inc(site_type)
 
 		if impl isa StaticImpl then
 			pstats.inc("{site_type}_static")
 			pstats.inc("static")
-			incr_specific_counters(expr_recv.is_pre, "static_preexist", "static_npreexist")
-			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_static", "{site_type}_npreexist_static")
+			incr_specific_counters(pre, "static_preexist", "static_npreexist")
+			incr_specific_counters(pre, "{site_type}_preexist_static", "{site_type}_npreexist_static")
 		else if impl isa SSTImpl then
 			pstats.inc("{site_type}_sst")
 			pstats.inc("sst")
-			incr_specific_counters(expr_recv.is_pre, "sst_preexist", "sst_npreexist")
-			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_sst", "{site_type}_npreexist_sst")
+			incr_specific_counters(pre, "sst_preexist", "sst_npreexist")
+			incr_specific_counters(pre, "{site_type}_preexist_sst", "{site_type}_npreexist_sst")
 		else if impl isa PHImpl then
 			pstats.inc("{site_type}_ph")
 			pstats.inc("ph")
+			incr_specific_counters(pre, "ph_preexist", "ph_npreexist")
+			incr_specific_counters(pre, "{site_type}_preexist_ph", "{site_type}_npreexist_ph")
 		else if impl isa NullImpl then
 			pstats.inc("{site_type}_null")
 			pstats.inc("null")
-			incr_specific_counters(expr_recv.is_pre, "null_preexist", "null_npreexist")
-			incr_specific_counters(expr_recv.is_pre, "{site_type}_preexist_null", "{site_type}_npreexist_null")
+			incr_specific_counters(pre, "null_preexist", "null_npreexist")
+			incr_specific_counters(pre, "{site_type}_preexist_null", "{site_type}_npreexist_null")
 		else
 			abort
 		end
@@ -554,13 +587,15 @@ redef class MOSite
 	end
 
 	#
-	fun incr_concrete_site
+	fun incr_concrete_site(vm: VirtualMachine)
 	do
 		if get_concretes.length > 0 then
+			var pre = expr_recv.is_pre
+
 			pstats.inc("concretes")
 			pstats.inc("{site_type}_concretes")
-			incr_specific_counters(expr_recv.is_pre, "concretes_preexist", "concretes_npreexist")
-			incr_specific_counters(expr_recv.is_pre, "{site_type}_concretes_preexist", "{site_type}_concretes_npreexist")
+			incr_specific_counters(pre, "concretes_preexist", "concretes_npreexist")
+			incr_specific_counters(pre, "{site_type}_concretes_preexist", "{site_type}_concretes_npreexist")
 		end
 	end
 
@@ -579,19 +614,21 @@ redef class MOSite
 		var rst_loaded = pattern.rst.get_mclass(vm).as(not null).abstract_loaded
 
 		if not rst_loaded then
-			var is_pre = expr_recv.is_pre
 			var impl = get_impl(vm)
+			var pre = expr_recv.is_pre
 
 			if impl isa StaticImpl then
 				pstats.inc("rst_unloaded_static")
-				incr_specific_counters(is_pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
+				incr_specific_counters(pre, "rst_unloaded_static_pre", "rst_unloaded_static_npre")
 			else if impl isa SSTImpl then
 				pstats.inc("rst_unloaded_sst")
-				incr_specific_counters(is_pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
+				incr_specific_counters(pre, "rst_unloaded_sst_pre", "rst_unloaded_sst_npre")
 			else if impl isa PHImpl then
 				pstats.inc("rst_unloaded_ph")
+				incr_specific_counters(pre, "rst_unloaded_ph_pre", "rst_unloaded_ph_npre")
 			else if impl isa NullImpl then
 				pstats.inc("rst_unloaded_null")
+				incr_specific_counters(pre, "rst_unloaded_null_pre", "rst_unloaded_null_npre")
 			else 
 				abort
 			end
