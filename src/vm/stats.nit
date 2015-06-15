@@ -344,8 +344,61 @@ class MOStats
 
 		file.write("\n\n")
 
-		file.write("from new,{map["sites_from_new"]}\n")
-		file.write("from return,{map["sites_from_meth_return"]}\n")
+		# from new
+
+		file.write("from new,{map["method_sites_from_new"]}, {map["attribute_sites_from_new"]},{map["cast_sites_from_new"]},{map["sites_from_new"]}\n")
+		
+		buf = "{map["method_preexist_sites_from_new"]},"
+		buf += "{map["attribute_preexist_sites_from_new"]},"
+		buf += "{map["cast_preexist_sites_from_new"]},"
+		buf += "{map["sites_from_new_pre"]}"
+		file.write("from new pre, {buf}\n")
+
+		buf = "{map["method_npreexist_sites_from_new"]},"
+		buf += "{map["attribute_npreexist_sites_from_new"]},"
+		buf += "{map["cast_npreexist_sites_from_new"]},"
+		buf += "{map["sites_from_new_npre"]}"
+		file.write("from new npre, {buf}\n")
+		
+		# from method return
+
+		buf = "{map["method_sites_from_meth_return"]},"
+		buf += "{map["attribute_sites_from_meth_return"]},"
+		buf += "{map["cast_sites_from_meth_return"]},"
+		buf += "{map["sites_from_meth_return"]}"
+		file.write("from return,{buf}\n")
+
+		buf = "{map["method_preexist_sites_from_meth_return"]},"
+		buf += "{map["attribute_preexist_sites_from_meth_return"]},"
+		buf += "{map["cast_preexist_sites_from_meth_return"]},"
+		buf += "{map["sites_from_meth_return_pre"]}"
+		file.write("from return pre, {buf}\n")
+
+		buf = "{map["method_npreexist_sites_from_meth_return"]},"
+		buf += "{map["attribute_npreexist_sites_from_meth_return"]},"
+		buf += "{map["cast_npreexist_sites_from_meth_return"]},"
+		buf += "{map["sites_from_meth_return_npre"]}"
+		file.write("from return npre, {buf}\n")
+
+		# from read site
+
+		buf = "{map["method_sites_from_read"]},"
+		buf += "{map["attribute_sites_from_read"]},"
+		buf += "{map["cast_sites_from_read"]},"
+		buf += "{map["sites_from_read"]}"
+		file.write("from readsite,{buf}\n")
+
+		buf = "{map["method_preexist_sites_from_read"]},"
+		buf += "{map["attribute_preexist_sites_from_read"]},"
+		buf += "{map["cast_preexist_sites_from_read"]},"
+		buf += "{map["sites_from_read_pre"]}"
+		file.write("from readsite pre, {buf}\n")
+
+		buf = "{map["method_npreexist_sites_from_read"]},"
+		buf += "{map["attribute_npreexist_sites_from_read"]},"
+		buf += "{map["cast_npreexist_sites_from_read"]},"
+		buf += "{map["sites_from_read_npre"]}"
+		file.write("from readsite npre, {buf}\n")
 
 		file.close
 	end
@@ -393,13 +446,49 @@ class MOStats
 			
 		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
+		map["sites_from_meth_return_pre"] = 0
+		map["sites_from_meth_return_npre"] = 0
+		map["method_sites_from_meth_return"] = 0
+		map["method_preexist_sites_from_meth_return"] = 0
+		map["method_npreexist_sites_from_meth_return"] = 0
+		map["attribute_sites_from_meth_return"] = 0
+		map["attribute_preexist_sites_from_meth_return"] = 0
+		map["attribute_npreexist_sites_from_meth_return"] = 0
+		map["cast_sites_from_meth_return"] = 0
+		map["cast_preexist_sites_from_meth_return"] = 0
+		map["cast_npreexist_sites_from_meth_return"] = 0
 
 		# incr when the site depends at least of one new expression
 		map["sites_from_new"] = 0
-		
+		map["sites_from_new_pre"] = 0
+		map["sites_from_new_npre"] = 0
+		map["method_sites_from_new"] = 0
+		map["method_preexist_sites_from_new"] = 0
+		map["method_npreexist_sites_from_new"] = 0
+		map["attribute_sites_from_new"] = 0
+		map["attribute_preexist_sites_from_new"] = 0
+		map["attribute_npreexist_sites_from_new"] = 0
+		map["cast_sites_from_new"] = 0
+		map["cast_preexist_sites_from_new"] = 0
+		map["cast_npreexist_sites_from_new"] = 0
+
+		# incr when the site depends at least of one attr read expression
+		map["sites_from_read"] = 0
+		map["sites_from_read_pre"] = 0
+		map["sites_from_read_npre"] = 0
+		map["method_sites_from_read"] = 0
+		map["method_preexist_sites_from_read"] = 0
+		map["method_npreexist_sites_from_read"] = 0
+		map["attribute_sites_from_read"] = 0
+		map["attribute_preexist_sites_from_read"] = 0
+		map["attribute_npreexist_sites_from_read"] = 0
+		map["cast_sites_from_read"] = 0
+		map["cast_preexist_sites_from_read"] = 0
+		map["cast_npreexist_sites_from_read"] = 0
+
 		# incr when the site depends of at least of one return expression or one new expression
 		map["sites_handle_by_extend_preexist"] = 0
-		
+
 		# incr when the site is on leaf gp on global model
 		map["sites_final"] = 0
 		
@@ -578,11 +667,24 @@ redef class MOSite
 	#
 	fun incr_from_site
 	do
+		var pre = expr_recv.is_pre
+
 		# WARN : this partition is not exclusive
 		if expr_recv.is_from_monew then
 			pstats.inc("sites_from_new")
+			pstats.inc("{site_type}_sites_from_new")
+			incr_specific_counters(pre, "sites_from_new_pre", "sites_from_new_npre")
+			incr_specific_counters(pre, "{site_type}_preexist_sites_from_new", "{site_type}_npreexist_sites_from_new")
 		else if expr_recv.is_from_mocallsite then
 			pstats.inc("sites_from_meth_return")
+			pstats.inc("{site_type}_sites_from_meth_return")
+			incr_specific_counters(pre, "sites_from_meth_return_pre", "sites_from_meth_return_npre")
+			incr_specific_counters(pre, "{site_type}_preexist_sites_from_meth_return", "{site_type}_npreexist_sites_from_meth_return")
+		else if expr_recv.is_from_moread then
+			pstats.inc("sites_from_read")
+			pstats.inc("{site_type}_sites_from_read")
+			incr_specific_counters(pre, "sites_from_read_pre", "sites_from_read_npre")
+			incr_specific_counters(pre, "{site_type}_preexist_sites_from_read", "{site_type}_npreexist_sites_from_read")
 		end
 	end
 

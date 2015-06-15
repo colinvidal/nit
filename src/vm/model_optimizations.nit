@@ -197,6 +197,9 @@ abstract class MOExpr
 
 	# Tell if the expression comes from MOCallSite (return of method)
 	fun is_from_mocallsite: Bool do return false
+
+	# Tell if the expression comes from MOReadSite
+	fun is_from_moread: Bool do return false
 end
 
 # MO of variables
@@ -233,6 +236,8 @@ class MOSSAVar
 	redef fun is_from_monew do return dependency.is_from_monew
 
 	redef fun is_from_mocallsite do return dependency.is_from_mocallsite
+
+	redef fun is_from_moread do return dependency.is_from_moread
 end
 
 # MO of variable with multiples dependencies
@@ -263,6 +268,15 @@ class MOPhiVar
 	do
 		for dep in dependencies do
 			if dep.is_from_mocallsite then return true
+		end
+
+		return false
+	end
+
+	redef fun is_from_moread
+	do
+		for dep in dependencies do
+			if dep.is_from_moread then return true
 		end
 
 		return false
@@ -386,6 +400,8 @@ class MOReadSite
 
 	# Tell if the attribute is immutable, useless at the moment
 	var immutable = false
+
+	redef fun is_from_moread do return true
 end
 
 # MO of write attribute
