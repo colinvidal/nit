@@ -299,22 +299,25 @@ class MOStats
 		buf += "{map["rst_unloaded_sst_npre"]}"
 		file.write("sst npreexist, {buf}\n")
 
+		file.write("ph, {map["method_ph"]}, {map["attribute_ph"]}, {map["cast_ph"]}, {map["ph"]}, {map["rst_unloaded_ph"]}\n")
+
+		file.write("null, {map["method_null"]}, {map["attribute_null"]}, {map["cast_null"]}, {map["null"]}, {map["rst_unloaded_null"]}\n")
+
+		buf = "{map["method_preexist_null"]},"
+		buf += "{map["attribute_preexist_null"]},"
+		buf += "{map["cast_preexist_null"]},"
+		buf += "{map["null_preexist"]},"
+		buf += "{map["rst_unloaded_null_pre"]}"
+		file.write("null preexist, {buf}\n")
+
+		buf = "{map["method_npreexist_null"]},"
+		buf += "{map["attribute_npreexist_null"]},"
+		buf += "{map["cast_npreexist_null"]},"
+		buf += "{map["null_npreexist"]},"
+		buf += "{map["rst_unloaded_null_npre"]}"
+		file.write("null npreexist, {buf}\n")
 
 
-#		var meth_sst = map["meth_preexist_sst"] + map["meth_npreexist_sst"]
-#		var attr_sst = map["attr_preexist_sst"] + map["attr_npreexist_sst"]
-#		var cast_sst = map["cast_preexist_sst"] + map["cast_npreexist_sst"]
-#		var rst_null_sst = map["rst_unloaded_sst_pre"] + map["rst_unloaded_sst_npre"]
-#		file.write("sst, {meth_sst}, {attr_sst}, {cast_sst}, {map["impl_sst"]}, {rst_null_sst}\n")
-#	
-#		var sum_pre_sst = map["meth_preexist_sst"] + map["attr_preexist_sst"] + map["cast_preexist_sst"]
-#		file.write("sst preexist, {map["meth_preexist_sst"]}, {map["attr_preexist_sst"]}, {map["cast_preexist_sst"]}, {sum_pre_sst}, {map["rst_unloaded_sst_pre"]}\n")
-#
-#		var sum_npre_sst = map["meth_npreexist_sst"] + map["attr_npreexist_sst"] + map["cast_npreexist_sst"]
-#		file.write("sst npreexist, {map["meth_npreexist_sst"]}, {map["attr_npreexist_sst"]}, {map["cast_npreexist_sst"]}, {sum_npre_sst}, {map["rst_unloaded_sst_npre"]}\n")
-#
-#		file.write("ph, {map["meth_ph"]}, {map["attr_ph"]}, {map["cast_ph"]}, {map["impl_ph"]}, {map["rst_unloaded_ph"]}\n")
-#
 #		var optimization_inline = map["preexist_static"] + map["attr_preexist_sst"] + map["cast_preexist_sst"] + map["cast_preexist_static"]
 #		file.write(",,,,,,,\n")
 #	
