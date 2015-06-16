@@ -635,13 +635,14 @@ redef class MOSite
 			var buf = "site {self}\n"
 			buf += "\tpattern: {pattern2str}\n"
 			buf += "\tlp: {lp.mclassdef.name}::{lp.name}\n"
+			buf += "\tlocation: {location}\n"
 			buf += "\tpreexist: {expr_recv.is_pre}\n"
 			buf += "\timpl: {get_impl(vm)}\n"
 			print(buf)
 		end
 	end
 
-	#
+	# Print the pattern (RST/GP or target class for subtype test)
 	fun pattern2str: String is abstract
 
 	#

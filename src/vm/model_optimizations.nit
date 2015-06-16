@@ -310,6 +310,9 @@ end
 
 # Root hierarchy of objets sites
 abstract class MOSite
+	# Location (module; line number) of the site inside the nit source code
+	var location: Location
+
 	# The type of the site pattern associated to this site
 	type P: MOSitePattern
 
@@ -622,7 +625,7 @@ redef class AAttrExpr
 
 	redef fun make_mo(vm, recv, lp)
 	do
-		var moattr = new MOReadSite(recv, lp)
+		var moattr = new MOReadSite(location, recv, lp)
 		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
 		return moattr
@@ -639,7 +642,7 @@ end
 redef class AAttrAssignExpr
 	redef fun make_mo(vm, recv, lp)
 	do
-		var moattr = new MOWriteSite(recv, lp)
+		var moattr = new MOWriteSite(location, recv, lp)
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
 		return moattr
@@ -678,7 +681,7 @@ redef class AIsaExpr
 		var recv = n_expr.ast2mo
 
 		if recv != null and not ignore then
-			var most = new MOSubtypeSite(recv, lp, cast_type.as(not null))
+			var most = new MOSubtypeSite(location, recv, lp, cast_type.as(not null))
 			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 			recv_class.set_subtype_pattern(most, recv_class.mclass_type)
 			lp.mosites.add(most)
@@ -715,7 +718,7 @@ redef class AAsCastExpr
 		var recv = n_expr.ast2mo
 
 		if recv != null and not ignore then
-			var moattr = new MOSubtypeSite(recv, lp, n_type.mtype.as(not null))
+			var moattr = new MOSubtypeSite(location, recv, lp, n_type.mtype.as(not null))
 			var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
 			recv_class.set_subtype_pattern(moattr, recv_class.mclass_type)
 		end
@@ -924,11 +927,11 @@ redef class ASendExpr
 
 		if params_len == 0 then
 			# The node is a MOReadSite
-			moattr = new MOReadSite(recv, lp)
+			moattr = new MOReadSite(location, recv, lp)
 		else
 			# The node is a MOWriteSite
 			assert params_len == 1
-			moattr = new MOWriteSite(recv, lp)
+			moattr = new MOWriteSite(location, recv, lp)
 		end
 
 		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
@@ -949,7 +952,7 @@ redef class ASendExpr
 
 		# If recv_class was a formal type, and now resolved as in primitive, we ignore it
 		if not recv_class.mclass_type.is_primitive_type  then
-			mocallsite = new MOCallSite(recv, lp)
+			mocallsite = new MOCallSite(location, recv, lp)
 			var mocs = mocallsite.as(not null)
 
 			lp.mosites.add(mocs)
