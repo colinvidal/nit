@@ -778,13 +778,13 @@ redef class MOSubtypeSite
 	redef var site_type = "cast"
 end
 
-redef class AMethPropdef
+redef class MPropDef
 	redef fun compile(vm)
 	do
 		super
 
-		if mpropdef isa MMethodDef then
-			for site in mpropdef.as(MMethodDef).mosites do
+		if self isa MMethodDef then
+			for site in self.mosites do
 				site.stats(vm)
 				pstats.analysed_sites.add(site)
 			end

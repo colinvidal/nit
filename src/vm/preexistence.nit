@@ -35,28 +35,7 @@ redef class VirtualMachine
 	do
 		if mclass.loaded then return
 		super(mclass)
-		mclass.handle_new_class
-	end
-end
-
-redef class APropdef
-	# TODO: make preexistence analysis on attributes with body too
-	redef fun compile(vm)
-	do
-		super
-
-		if mpropdef isa MMethodDef then 
-			var m = mpropdef.as(MMethodDef)
-			
-			print("compile {m.mclassdef.name}::{m.name}")
-			for pattern in m.callers do
-				print("\tcaller {pattern.rst}::{pattern.gp}")
-				pattern.cuc -= 1
-				assert pattern.cuc >= 0
-			end
-
-			m.preexist_all(vm)
-		end
+		if not disable_preexistence_extensions then mclass.new_pattern.set_preexist_newsite
 	end
 end
 
@@ -119,6 +98,21 @@ redef class MPropDef
 			else
 				if not exprs_npreexist_mut.has(expr) then exprs_npreexist_mut.add(expr)
 			end
+		end
+	end
+
+	# TODO: make preexistence analysis on attributes with body too
+	redef fun compile(vm)
+	do
+		super
+
+		if self isa MMethodDef then 
+			print("compile {mclassdef.name}::{name}")
+			for pattern in callers do
+				print("\tcaller {pattern.rst}::{pattern.gp}")
+			end
+
+			preexist_all(vm)
 		end
 	end
 end
@@ -519,9 +513,6 @@ redef class MOSite
 end
 
 redef class MOExprSitePattern
-	# Number of uncompiled calles (local properties)
-	var cuc = 0
-
 	# If a LP no preexists and it's perexistence is perennial (unused while cuc > 0)
 	var perennial_status = false
 
@@ -544,7 +535,6 @@ redef class MOExprSitePattern
 	redef fun add_lp(lp)
 	do
 		super
-		cuc += 1
 
 		if cuc == 1 then
 			for site in sites do
@@ -566,14 +556,5 @@ redef class MONewPattern
 			newexpr.set_ptype_per
 			newexpr.lp.propage_npreexist
 		end
-	end
-end
-
-# Change preexistence state of new sites compiled before loading
-redef class MClass
-	redef fun handle_new_class
-	do
-		super
-		if not disable_preexistence_extensions then new_pattern.set_preexist_newsite
 	end
 end

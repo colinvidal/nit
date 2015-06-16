@@ -114,7 +114,9 @@ abstract class MOPropSitePattern
 		end
 	end
 
-	end
+	# Number of calls on uncompiled methods
+	var cuc = 0
+end
 
 # Pattern of expression sites (method call / read attribute)
 abstract class MOExprSitePattern
@@ -139,7 +141,7 @@ class MOCallSitePattern
 		self.rst = rst
 		self.gp = gp
 
-		var rsc = rst.get_mclass(sys.vm)
+		var rsc = rst.get_mclass(sys.vm).as(not null)
 
 		if not rsc.abstract_loaded then return
 
@@ -182,9 +184,6 @@ redef class MProperty
 	# Type of owning local properties
 	type LP: MPropDef
 	
-	# Local properties who belongs this global property currently loaded
-	var loaded_lps = new List[LP]
-
 	# Type of the pattern
 	type PATTERN: MOPropSitePattern
 
@@ -481,39 +480,39 @@ redef class MClass
 	# List of patterns of subtypes test
 	var subtype_pattern = new List[MOSubtypeSitePattern]
 
-	# Detect new branches added by a loading class
-	# Add introduces and redifines local properties
-	fun handle_new_class
-	do	
-		var redefs = new List[MMethodDef]
-
-		# mclassdef.mpropdefs contains intro & redef methods
-		for classdef in mclassdefs do
-			for i in [0..classdef.mpropdefs.length - 1] do
-				var mdef = classdef.mpropdefs[i]
-				if mdef isa MMethodDef then
-					# Add the method implementation in loadeds implementations of the associated gp
-					mdef.mproperty.loaded_lps.add(mdef)
-#					if not mdef.is_intro then
-						# There is a new branch
-						redefs.add(mdef)
+#	# Detect new branches added by a loading class
+#	# Add introduces and redifines local properties
+#	fun handle_new_class
+#	do	
+#		var redefs = new List[MMethodDef]
+#
+#		# mclassdef.mpropdefs contains intro & redef methods
+#		for classdef in mclassdefs do
+#			for i in [0..classdef.mpropdefs.length - 1] do
+#				var mdef = classdef.mpropdefs[i]
+#				if mdef isa MMethodDef then
+#					# Add the method implementation in loadeds implementations of the associated gp
+#					mdef.mproperty.loaded_lps.add(mdef)
+##					if not mdef.is_intro then
+#						# There is a new branch
+#						redefs.add(mdef)
+##					end
+#				end
+#			end
+#		end
+#
+#		# For each class who know one of the redefs methods, tell the pattern there is a new branch
+#		for lp in redefs do
+#			for parent in ordering do
+#				for p in parent.sites_patterns do
+#					if p.gp == lp.mproperty then 
+#						if not sites_patterns.has(p) then sites_patterns.add(p)
+#						p.add_lp(lp)
 #					end
-				end
-			end
-		end
-
-		# For each class who know one of the redefs methods, tell the pattern there is a new branch
-		for lp in redefs do
-			for parent in ordering do
-				for p in parent.sites_patterns do
-					if p.gp == lp.mproperty then 
-						if not sites_patterns.has(p) then sites_patterns.add(p)
-						p.add_lp(lp)
-					end
-				end
-			end
-		end
-	end
+#				end
+#			end
+#		end
+#	end
 
 	# `self` is an instance of object
 	fun is_instance_of_object(vm:VirtualMachine): Bool
@@ -582,7 +581,7 @@ redef class MClass
 		if pattern isa MOCallSitePattern then
 				print("MOCallSitePattern {rst}::{gp}")
 				print("\tnb sites: {pattern.sites.length}")
-				for lp in gp.loaded_lps do
+				for lp in gp.as(MMethod).living_mpropdefs do
 					print("\t\tlp {lp.name} nb callers {lp.callers.length}")
 				end
 		end

@@ -346,24 +346,14 @@ redef class AAsCastExpr
 	end
 end
 
-redef class APropdef
-	# Force to compute the implementation of the site when AST node is compiled
-	# TODO: compute objet site implementation on attributes with body too
-#	redef fun compile(vm)
-#	do
-#		super
-#		if mpropdef isa MMethodDef then for site in mpropdef.as(MMethodDef).mosites do site.get_impl(vm)
-#	end
-end
-
-redef class AMethPropdef
+redef class MPropDef
 	redef fun compile(vm)
 	do
 		super
 
-		# Force to compute the implementation of each site of the method
-		# TODO: do it in APropdef !
-		for site in mpropdef.mosites do site.get_impl(vm)
+		if self isa MMethodDef then
+			for site in self.mosites do site.get_impl(vm)
+		end
 	end
 end
 
