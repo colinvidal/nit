@@ -451,7 +451,7 @@ redef abstract class MOPropSitePattern
 
 	redef fun add_lp(lp)
 	do
-		var reset = not lps.has(lp)
+		var reset = not callees.has(lp)
 
 		super(lp)
 		if reset then
@@ -472,9 +472,9 @@ redef class MOAttrPattern
 end
 
 redef class MOCallSitePattern
-	redef fun set_static_impl(mutable) do impl = new StaticImplProp(mutable, lps.first)
+	redef fun set_static_impl(mutable) do impl = new StaticImplProp(mutable, callees.first)
 
-	redef fun can_be_static do return lps.length == 1
+	redef fun can_be_static do return callees.length == 1
 end
 
 redef abstract class MOSite

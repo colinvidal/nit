@@ -452,11 +452,11 @@ redef class MOCallSite
 		else if pattern.lp_all_perennial then 
 			preexist_expr_value = pmask_PVAL_PER
 			check_args
-		else if pattern.lps.length == 0 then
+		else if pattern.callees.length == 0 then
 			set_npre_nper
 		else
 			preexist_expr_value = pmask_PVAL_PER
-			for candidate in pattern.lps do
+			for candidate in pattern.callees do
 				if candidate.is_intern or candidate.is_extern then
 					# WARNING
 					# If the candidate method is intern/extern, then the return is preexist immutable
@@ -509,16 +509,16 @@ redef class MOExprSitePattern
 	# If all LPs preexists and are perennial, according to the current class hierarchy
 	var lp_all_perennial = false
 
-	# Call MMethodDef.propage_preexist on all lps 
+	# Call MMethodDef.propage_preexist on all callees
 	fun propage_preexist
 	do
-		for lp in lps do lp.propage_preexist
+		for lp in callees do lp.propage_preexist
 	end
 
-	# Call MMethodDef.propage_npreexist on all lps
+	# Call MMethodDef.propage_npreexist on all callees 
 	fun propage_npreexist
 	do
-		for lp in lps do lp.propage_npreexist
+		for lp in callees do lp.propage_npreexist
 	end
 
 	# When add a new branch, if it is not compiled, unset preexistence to all expressions using it

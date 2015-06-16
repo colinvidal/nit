@@ -93,7 +93,7 @@ abstract class MOPropSitePattern
 	var gp: GP
 
 	# Candidates local properties owning by the GP
-	var lps = new List[LP]
+	var callees = new List[LP]
 
 	redef fun add_site(site)
 	do
@@ -120,6 +120,14 @@ abstract class MOPropSitePattern
 
 	# Decrement cuc (usefull for stats)
 	fun cuc_decr do cuc -= 1
+
+	# Add a new method on this pattern
+	fun add_lp(mpropdef: LP)
+	do
+		callees.add(mpropdef)
+		mpropdef.callers.add(self)
+		cuc_incr
+	end
 end
 
 # Pattern of expression sites (method call / read attribute)
@@ -151,9 +159,7 @@ class MOCallSitePattern
 
 		for lp in gp.living_mpropdefs do
 			if lp.mclassdef.mclass.ordering.has(rsc) then
-				lps.add(lp)
-				lp.callers.add(self)
-				cuc_incr	
+				add_lp(lp)
 			end
 		end
 	end
@@ -225,9 +231,7 @@ redef class MMethod
 			var rsc = pattern.rst.get_mclass(sys.vm)
 
 			if rsc.abstract_loaded and ordering.has(rsc) then
-				mpropdef.callers.add(pattern)
-				pattern.lps.add(mpropdef)
-				pattern.cuc_incr
+				pattern.add_lp(mpropdef)
 			end
 		end
 	end
