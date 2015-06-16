@@ -632,7 +632,9 @@ redef class MOSite
 		incr_type_impl(vm)
 
 		if print_site_state then
-			var buf = "site state {self} {pattern2str}\n"
+			var buf = "site {self}\n"
+			buf += "\tpattern: {pattern2str}\n"
+			buf += "\tlp: {lp.mclassdef.name}::{lp.name}\n"
 			buf += "\tpreexist: {expr_recv.is_pre}\n"
 			buf += "\timpl: {get_impl(vm)}\n"
 			print(buf)
