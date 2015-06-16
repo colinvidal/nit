@@ -636,7 +636,7 @@ redef class MOSite
 			buf += "\tpattern: {pattern2str}\n"
 			buf += "\tlp: {lp.mclassdef.name}::{lp.name}\n"
 			buf += "\tlocation: {location}\n"
-			buf += "\tpreexist: {expr_recv.is_pre}\n"
+			buf += "\tpreexist/mutable: {expr_recv.is_pre}/{expr_recv.is_nper}\n"
 			buf += "\timpl: {get_impl(vm)}\n"
 			print(buf)
 		end
