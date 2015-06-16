@@ -21,18 +21,13 @@ import interpreter::naive_interpreter
 import perfect_hashing
 
 redef class ModelBuilder
-	# The virtual machine
-	var interpreter: VirtualMachine
-
 	fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
 	do
 		var time0 = get_time
 		self.toolcontext.info("*** NITVM STARTING ***", 1)
 
-		interpreter = new VirtualMachine(self, mainmodule, arguments)
-		interpreter.start(mainmodule)
-
-		sys.vm = interpreter
+		sys.vm = new VirtualMachine(self, mainmodule, arguments)
+		sys.vm.start(mainmodule)
 
 		var time1 = get_time
 		self.toolcontext.info("*** NITVM STOPPING : {time1-time0} ***", 2)

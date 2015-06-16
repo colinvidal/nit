@@ -74,8 +74,8 @@ redef class ModelBuilder
 			site.lp.as(MMethodDef).preexist_analysed = false
 			site.preexist_site
 			site.impl = null
-			site.get_impl(interpreter)
-			site.stats(interpreter)
+			site.get_impl(sys.vm)
+			site.stats(sys.vm)
 		end
 
 		print(pstats.pretty)
