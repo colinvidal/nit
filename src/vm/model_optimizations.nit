@@ -98,15 +98,16 @@ abstract class MOPropSitePattern
 	redef fun add_site(site)
 	do
 		assert not sites.has(site)
+		print("pattern {rst}::{gp} add_site {site}")
 
 		sites.add(site)
 		site.pattern = self
-		for lp in gp.loaded_lps do add_lp(lp)
 	end
 
 	# Add a candidate LP
 	fun add_lp(lp: LP)
 	do
+		print("pattern {rst}::{gp} add lp {lp.mclassdef.name}::{lp.name}")
 		if not lps.has(lp) then
 			lps.add(lp)
 			lp.callers.add(self)
@@ -131,6 +132,26 @@ class MOCallSitePattern
 	redef type LP: MMethodDef
 
 	redef type S: MOCallSite
+
+	#
+	init(rst: MType, gp: MMethod)
+	do
+		self.rst = rst
+		self.gp = gp
+
+		var rsc = rst.get_mclass(sys.vm)
+
+		if not rsc.abstract_loaded then return
+
+		for lp in gp.living_mpropdefs do
+			if lp.mclassdef.mclass.ordering.has(rsc) then
+				lps.add(lp)
+				lp.callers.add(self)
+			end
+
+			cuc += 1
+		end
+	end
 end
 
 # Common subpattern of all attributes (read/write)
@@ -163,6 +184,12 @@ redef class MProperty
 	
 	# Local properties who belongs this global property currently loaded
 	var loaded_lps = new List[LP]
+
+	# Type of the pattern
+	type PATTERN: MOPropSitePattern
+
+	# List of patterns using this gp
+	var patterns = new List[PATTERN] is lazy
 end
 
 redef class MPropDef
@@ -171,10 +198,37 @@ redef class MPropDef
 
 	# List of patterns who use this local property
 	var callers = new List[P]
+
+	# Compile the property
+	fun compile(vm: VirtualMachine)
+	do
+		for pattern in callers do
+			pattern.cuc -= 1
+		end
+	end
 end
 
 redef class MMethod
 	redef type LP: MMethodDef
+
+	redef type PATTERN: MOCallSitePattern
+
+	redef fun add_propdef(mpropdef)
+	do
+		super
+
+		var ordering = mpropdef.mclassdef.mclass.ordering
+
+		for pattern in patterns do
+			var rsc = pattern.rst.get_mclass(sys.vm)
+
+			if rsc.abstract_loaded and ordering.has(rsc) then
+				mpropdef.callers.add(pattern)
+				pattern.lps.add(mpropdef)
+				pattern.cuc += 1
+			end
+		end
+	end
 end
 
 redef class MMethodDef
@@ -440,10 +494,10 @@ redef class MClass
 				if mdef isa MMethodDef then
 					# Add the method implementation in loadeds implementations of the associated gp
 					mdef.mproperty.loaded_lps.add(mdef)
-					if not mdef.is_intro then
+#					if not mdef.is_intro then
 						# There is a new branch
 						redefs.add(mdef)
-					end
+#					end
 				end
 			end
 		end
@@ -519,9 +573,19 @@ redef class MClass
 			end
 
 			sites_patterns.add(pattern.as(not null))
+
+
 		end
 
 		pattern.add_site(site)
+
+		if pattern isa MOCallSitePattern then
+				print("MOCallSitePattern {rst}::{gp}")
+				print("\tnb sites: {pattern.sites.length}")
+				for lp in gp.loaded_lps do
+					print("\t\tlp {lp.name} nb callers {lp.callers.length}")
+				end
+		end
 	end
 
 	# Add newsite expression in the NewPattern assocociated to this class
@@ -863,6 +927,8 @@ redef class APropdef
 			# Generate MO for sites inside the propdef
 			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
 		end
+
+		mpropdef.compile(vm)
 	end
 end
 

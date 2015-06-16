@@ -44,7 +44,19 @@ redef class APropdef
 	redef fun compile(vm)
 	do
 		super
-		if mpropdef isa MMethodDef then mpropdef.as(MMethodDef).preexist_all(vm)
+
+		if mpropdef isa MMethodDef then 
+			var m = mpropdef.as(MMethodDef)
+			
+			print("compile {m.mclassdef.name}::{m.name}")
+			for pattern in m.callers do
+				print("\tcaller {pattern.rst}::{pattern.gp}")
+				pattern.cuc -= 1
+				assert pattern.cuc >= 0
+			end
+
+			m.preexist_all(vm)
+		end
 	end
 end
 
@@ -59,6 +71,9 @@ redef class Int
 end
 
 redef class MPropDef
+	# Tell if preexistance analysis is done
+	var preexist_analysed: Bool = false is writable
+
 	# List of mutable preexists expressions
 	var exprs_preexist_mut = new List[MOExpr]
 
@@ -109,9 +124,6 @@ redef class MPropDef
 end
 
 redef class MMethodDef
-	# Tell if preexistance analysis is done
-	var preexist_analysed: Bool = false is writable
-
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
@@ -444,9 +456,11 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
+		print("MOCallSite::preexist_expr {location}")
 		if disable_preexistence_extensions then
 			preexist_expr_value = pmask_NPRE_PER
 		else if pattern.cuc > 0 then
+			print("\tcuc > 0 ({pattern.cuc})")
 			preexist_expr_value = pmask_NPRE_NPER
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
@@ -497,6 +511,7 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
+		print("preexist_site {location}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value
@@ -535,6 +550,7 @@ redef class MOExprSitePattern
 			for site in sites do
 				site.expr_recv.init_preexist
 				site.lp.propage_preexist
+				site.lp.preexist_analysed = false
 			end
 		end
 
