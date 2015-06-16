@@ -67,7 +67,7 @@ redef class ModelBuilder
 
 		var old_counters = sys.pstats
 		pstats = new MOStats("last")
-		pstats.copy_static_data(old_counters)
+		pstats.copy_data(old_counters)
 
 		for site in pstats.analysed_sites do
 			# WARN: this cast is always true for now, but we need to put preexist_analysed on MPropDef when we'll analysed attribute with body.
@@ -409,6 +409,12 @@ class MOStats
 		buf += "{map["sites_from_read_npre"]}"
 		file.write("from readsite npre, {buf}\n")
 
+		# cuc
+
+		file.write("\n")
+		file.write("cuc pos, {map["cuc_pos"]}\n")
+		file.write("cuc neg, {map["cuc_neg"]}\n")
+
 		file.close
 	end
 
@@ -424,8 +430,8 @@ class MOStats
 		return ret
 	end
 
-	# Copy all values that are counted statically (eg. when we do ast -> mo)
-	fun copy_static_data(counters: MOStats)
+	# Copy counters who not depends of the world state
+	fun copy_data(counters: MOStats)
 	do
 		map["loaded_classes_explicits"] = counters.get("loaded_classes_explicits")
 		map["loaded_classes_implicits"] = counters.get("loaded_classes_implicits")
@@ -436,6 +442,8 @@ class MOStats
 		map["ast_new"] = counters.get("ast_new")
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
+		map["cuc_pos"] = counters.get("cuc_pos")
+		map["cuc_neg"] = counters.get("cuc_neg")
 		analysed_sites.add_all(counters.analysed_sites)
 	end
 
@@ -613,9 +621,35 @@ class MOStats
 		map["cast_null"] = 0
 		map["cast_preexist_null"] = 0
 		map["cast_npreexist_null"] = 0
+
+		# Number of patterns with a positive/negative cuc
+		map["cuc_pos"] = 0
+		map["cuc_neg"] = 0
 	end
 end
 
+redef class MOPropSitePattern
+	redef fun cuc_incr
+	do
+		var old_cuc = cuc
+
+		super
+
+		if old_cuc == 0 and cuc > 0 then sys.pstats.inc("cuc_pos")
+	end
+
+	redef fun cuc_decr
+	do
+		var old_cuc = cuc
+
+		super
+
+		if old_cuc > 0 and cuc == 0 then
+			sys.pstats.inc("cuc_neg")
+			sys.pstats.dec("cuc_pos")
+		end
+	end
+end
 
 redef class MOSite
 	# Type of the site (method, attribute or cast)

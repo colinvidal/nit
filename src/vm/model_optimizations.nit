@@ -98,24 +98,28 @@ abstract class MOPropSitePattern
 	redef fun add_site(site)
 	do
 		assert not sites.has(site)
-		print("pattern {rst}::{gp} add_site {site}")
 
 		sites.add(site)
 		site.pattern = self
 	end
 
-	# Add a candidate LP
-	fun add_lp(lp: LP)
-	do
-		print("pattern {rst}::{gp} add lp {lp.mclassdef.name}::{lp.name}")
-		if not lps.has(lp) then
-			lps.add(lp)
-			lp.callers.add(self)
-		end
-	end
+#	# Add a candidate LP
+#	fun add_lp(lp: LP)
+#	do
+#		if not lps.has(lp) then
+#			lps.add(lp)
+#			lp.callers.add(self)
+#		end
+#	end
 
 	# Number of calls on uncompiled methods
 	var cuc = 0
+
+	# Increment cuc (usefull for stats)
+	fun cuc_incr do cuc += 1
+
+	# Decrement cuc (usefull for stats)
+	fun cuc_decr do cuc -= 1
 end
 
 # Pattern of expression sites (method call / read attribute)
@@ -149,9 +153,8 @@ class MOCallSitePattern
 			if lp.mclassdef.mclass.ordering.has(rsc) then
 				lps.add(lp)
 				lp.callers.add(self)
+				cuc_incr	
 			end
-
-			cuc += 1
 		end
 	end
 end
@@ -202,7 +205,7 @@ redef class MPropDef
 	fun compile(vm: VirtualMachine)
 	do
 		for pattern in callers do
-			pattern.cuc -= 1
+			pattern.cuc_decr
 		end
 	end
 end
@@ -224,7 +227,7 @@ redef class MMethod
 			if rsc.abstract_loaded and ordering.has(rsc) then
 				mpropdef.callers.add(pattern)
 				pattern.lps.add(mpropdef)
-				pattern.cuc += 1
+				pattern.cuc_incr
 			end
 		end
 	end
@@ -577,14 +580,6 @@ redef class MClass
 		end
 
 		pattern.add_site(site)
-
-		if pattern isa MOCallSitePattern then
-				print("MOCallSitePattern {rst}::{gp}")
-				print("\tnb sites: {pattern.sites.length}")
-				for lp in gp.as(MMethod).living_mpropdefs do
-					print("\t\tlp {lp.name} nb callers {lp.callers.length}")
-				end
-		end
 	end
 
 	# Add newsite expression in the NewPattern assocociated to this class
@@ -929,10 +924,6 @@ redef class APropdef
 
 		mpropdef.compile(vm)
 	end
-end
-
-redef class AMethPropdef
-
 end
 
 redef class ASendExpr

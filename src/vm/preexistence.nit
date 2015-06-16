@@ -106,14 +106,7 @@ redef class MPropDef
 	do
 		super
 
-		if self isa MMethodDef then 
-			print("compile {mclassdef.name}::{name}")
-			for pattern in callers do
-				print("\tcaller {pattern.rst}::{pattern.gp}")
-			end
-
-			preexist_all(vm)
-		end
+		if self isa MMethodDef then preexist_all(vm)
 	end
 end
 
@@ -450,11 +443,9 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-		print("MOCallSite::preexist_expr {location}")
 		if disable_preexistence_extensions then
 			preexist_expr_value = pmask_NPRE_PER
 		else if pattern.cuc > 0 then
-			print("\tcuc > 0 ({pattern.cuc})")
 			preexist_expr_value = pmask_NPRE_NPER
 		else if pattern.perennial_status then
 			preexist_expr_value = pmask_NPRE_PER
@@ -505,7 +496,6 @@ redef class MOSite
 	# Compute the preexistence of the site call
 	fun preexist_site: Int
 	do
-		print("preexist_site {location}")
 		expr_recv.preexist_expr
 		if expr_recv.is_rec then expr_recv.set_pval_nper
 		return expr_recv.preexist_expr_value
