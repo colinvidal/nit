@@ -354,40 +354,28 @@ class MOStats
 		file.write("\n\n")
 
 		# from new
-
+		
 		file.write("from new,{map["method_sites_from_new"]}, {map["attribute_sites_from_new"]},{map["cast_sites_from_new"]},{map["sites_from_new"]}\n")
 		
-		buf = "{map["method_preexist_sites_from_new"]},"
-		buf += "{map["attribute_preexist_sites_from_new"]},"
-		buf += "{map["cast_preexist_sites_from_new"]},"
-		buf += "{map["sites_from_new_pre"]}"
-		file.write("from new pre, {buf}\n")
-
-		buf = "{map["method_npreexist_sites_from_new"]},"
-		buf += "{map["attribute_npreexist_sites_from_new"]},"
-		buf += "{map["cast_npreexist_sites_from_new"]},"
-		buf += "{map["sites_from_new_npre"]}"
-		file.write("from new npre, {buf}\n")
-		
 		# from method return
-
+		
 		buf = "{map["method_sites_from_meth_return"]},"
 		buf += "{map["attribute_sites_from_meth_return"]},"
 		buf += "{map["cast_sites_from_meth_return"]},"
 		buf += "{map["sites_from_meth_return"]}"
 		file.write("from return,{buf}\n")
 
-		buf = "{map["method_preexist_sites_from_meth_return"]},"
-		buf += "{map["attribute_preexist_sites_from_meth_return"]},"
-		buf += "{map["cast_preexist_sites_from_meth_return"]},"
-		buf += "{map["sites_from_meth_return_pre"]}"
-		file.write("from return pre, {buf}\n")
+		buf = "{map["method_sites_from_meth_return_cuc_null"]},"
+		buf += "{map["attribute_sites_from_meth_return_cuc_null"]},"
+		buf += "{map["cast_sites_from_meth_return_cuc_null"]},"
+		buf += "{map["sites_from_meth_return_cuc_null"]}"
+		file.write("from return cuc null,{buf}\n")
 
-		buf = "{map["method_npreexist_sites_from_meth_return"]},"
-		buf += "{map["attribute_npreexist_sites_from_meth_return"]},"
-		buf += "{map["cast_npreexist_sites_from_meth_return"]},"
-		buf += "{map["sites_from_meth_return_npre"]}"
-		file.write("from return npre, {buf}\n")
+		buf = "{map["method_sites_from_meth_return_cuc_pos"]},"
+		buf += "{map["attribute_sites_from_meth_return_cuc_pos"]},"
+		buf += "{map["cast_sites_from_meth_return_cuc_pos"]},"
+		buf += "{map["sites_from_meth_return_cuc_pos"]}"
+		file.write("from return cuc pos,{buf}\n")
 
 		# from read site
 
@@ -397,23 +385,37 @@ class MOStats
 		buf += "{map["sites_from_read"]}"
 		file.write("from readsite,{buf}\n")
 
-		buf = "{map["method_preexist_sites_from_read"]},"
-		buf += "{map["attribute_preexist_sites_from_read"]},"
-		buf += "{map["cast_preexist_sites_from_read"]},"
-		buf += "{map["sites_from_read_pre"]}"
-		file.write("from readsite pre, {buf}\n")
-
-		buf = "{map["method_npreexist_sites_from_read"]},"
-		buf += "{map["attribute_npreexist_sites_from_read"]},"
-		buf += "{map["cast_npreexist_sites_from_read"]},"
-		buf += "{map["sites_from_read_npre"]}"
-		file.write("from readsite npre, {buf}\n")
-
 		# cuc
 
 		file.write("\n")
-		file.write("cuc pos, {map["cuc_pos"]}\n")
-		file.write("cuc neg, {map["cuc_neg"]}\n")
+
+		var living_propdefs = new HashSet[MMethodDef]
+		for site in analysed_sites do
+			if site isa MOCallSite then
+				for lp in site.pattern.gp.living_mpropdefs do
+					# The hashset make duplicates if the site is already in (!!!??!!)
+					if not living_propdefs.has(site.lp) then
+						living_propdefs.add(lp)
+					end
+				end
+			end
+		end
+
+		var cuc_pos = 0
+		var cuc_null = 0
+
+		for propdef in living_propdefs do
+			if propdef.callers.length > 0 then
+				if propdef.callers.first.cuc == 0 then
+					cuc_null += 1
+				else 
+					cuc_pos += 1
+				end
+			end
+		end
+
+		file.write("callers cuc pos, {cuc_pos}\n")
+		file.write("callers cuc null, {cuc_null}\n")
 
 		file.close
 	end
@@ -442,8 +444,6 @@ class MOStats
 		map["ast_new"] = counters.get("ast_new")
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
-		map["cuc_pos"] = counters.get("cuc_pos")
-		map["cuc_neg"] = counters.get("cuc_neg")
 		analysed_sites.add_all(counters.analysed_sites)
 	end
 
@@ -463,45 +463,29 @@ class MOStats
 			
 		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
-		map["sites_from_meth_return_pre"] = 0
-		map["sites_from_meth_return_npre"] = 0
+		map["sites_from_meth_return_cuc_pos"] = 0
+		map["sites_from_meth_return_cuc_null"] = 0
 		map["method_sites_from_meth_return"] = 0
-		map["method_preexist_sites_from_meth_return"] = 0
-		map["method_npreexist_sites_from_meth_return"] = 0
+		map["method_sites_from_meth_return_cuc_pos"] = 0
+		map["method_sites_from_meth_return_cuc_null"] = 0
 		map["attribute_sites_from_meth_return"] = 0
-		map["attribute_preexist_sites_from_meth_return"] = 0
-		map["attribute_npreexist_sites_from_meth_return"] = 0
+		map["attribute_sites_from_meth_return_cuc_pos"] = 0
+		map["attribute_sites_from_meth_return_cuc_null"] = 0
 		map["cast_sites_from_meth_return"] = 0
-		map["cast_preexist_sites_from_meth_return"] = 0
-		map["cast_npreexist_sites_from_meth_return"] = 0
+		map["cast_sites_from_meth_return_cuc_pos"] = 0
+		map["cast_sites_from_meth_return_cuc_null"] = 0
 
 		# incr when the site depends at least of one new expression
 		map["sites_from_new"] = 0
-		map["sites_from_new_pre"] = 0
-		map["sites_from_new_npre"] = 0
 		map["method_sites_from_new"] = 0
-		map["method_preexist_sites_from_new"] = 0
-		map["method_npreexist_sites_from_new"] = 0
 		map["attribute_sites_from_new"] = 0
-		map["attribute_preexist_sites_from_new"] = 0
-		map["attribute_npreexist_sites_from_new"] = 0
 		map["cast_sites_from_new"] = 0
-		map["cast_preexist_sites_from_new"] = 0
-		map["cast_npreexist_sites_from_new"] = 0
 
 		# incr when the site depends at least of one attr read expression
 		map["sites_from_read"] = 0
-		map["sites_from_read_pre"] = 0
-		map["sites_from_read_npre"] = 0
 		map["method_sites_from_read"] = 0
-		map["method_preexist_sites_from_read"] = 0
-		map["method_npreexist_sites_from_read"] = 0
 		map["attribute_sites_from_read"] = 0
-		map["attribute_preexist_sites_from_read"] = 0
-		map["attribute_npreexist_sites_from_read"] = 0
 		map["cast_sites_from_read"] = 0
-		map["cast_preexist_sites_from_read"] = 0
-		map["cast_npreexist_sites_from_read"] = 0
 
 		# incr when the site depends of at least of one return expression or one new expression
 		map["sites_handle_by_extend_preexist"] = 0
@@ -622,32 +606,8 @@ class MOStats
 		map["cast_preexist_null"] = 0
 		map["cast_npreexist_null"] = 0
 
-		# Number of patterns with a positive/negative cuc
-		map["cuc_pos"] = 0
-		map["cuc_neg"] = 0
-	end
-end
-
-redef class MOPropSitePattern
-	redef fun cuc_incr
-	do
-		var old_cuc = cuc
-
-		super
-
-		if old_cuc == 0 and cuc > 0 then sys.pstats.inc("cuc_pos")
-	end
-
-	redef fun cuc_decr
-	do
-		var old_cuc = cuc
-
-		super
-
-		if old_cuc > 0 and cuc == 0 then
-			sys.pstats.inc("cuc_neg")
-			sys.pstats.dec("cuc_pos")
-		end
+		map["call_with_cuc_pos"] = 0
+		map["call_with_cuc_null"] = 0
 	end
 end
 
@@ -720,27 +680,28 @@ redef class MOSite
 		end
 	end
 
-	#
+	# WARN : this partition is not exclusive
 	fun incr_from_site
 	do
-		var pre = expr_recv.is_pre
+		var dep_trace = new DependencyTrace(expr_recv)
 
-		# WARN : this partition is not exclusive
-		if expr_recv.is_from_monew then
+		dep_trace.trace
+
+		if dep_trace.from_new then
 			pstats.inc("sites_from_new")
 			pstats.inc("{site_type}_sites_from_new")
-			incr_specific_counters(pre, "sites_from_new_pre", "sites_from_new_npre")
-			incr_specific_counters(pre, "{site_type}_preexist_sites_from_new", "{site_type}_npreexist_sites_from_new")
-		else if expr_recv.is_from_mocallsite then
+		end
+
+		if dep_trace.from_return then
 			pstats.inc("sites_from_meth_return")
 			pstats.inc("{site_type}_sites_from_meth_return")
-			incr_specific_counters(pre, "sites_from_meth_return_pre", "sites_from_meth_return_npre")
-			incr_specific_counters(pre, "{site_type}_preexist_sites_from_meth_return", "{site_type}_npreexist_sites_from_meth_return")
-		else if expr_recv.is_from_moread then
+			incr_specific_counters(dep_trace.cuc_null, "{site_type}_sites_from_meth_return_cuc_null", "{site_type}_sites_from_meth_return_cuc_pos")
+			incr_specific_counters(dep_trace.cuc_null, "sites_from_meth_return_cuc_null", "sites_from_meth_return_cuc_pos")
+		end
+
+		if dep_trace.from_read then
 			pstats.inc("sites_from_read")
 			pstats.inc("{site_type}_sites_from_read")
-			incr_specific_counters(pre, "sites_from_read_pre", "sites_from_read_npre")
-			incr_specific_counters(pre, "{site_type}_preexist_sites_from_read", "{site_type}_npreexist_sites_from_read")
 		end
 	end
 
@@ -822,6 +783,44 @@ redef class MPropDef
 				site.stats(vm)
 				pstats.analysed_sites.add(site)
 			end
+		end
+	end
+end
+
+# Tell where the expression of a site comes from
+class DependencyTrace
+	# from a new expression
+	var from_new = false
+
+	# from a return method expression
+	var from_return = false
+
+	# from a read attribute expression
+	var from_read = false
+
+	# cuc is null ? usefull only when it comes from a method
+	var cuc_null = true
+
+	# the expression to trace
+	var expr: MOExpr
+
+	# trace the dependencies (entry point) 
+	fun trace do trace_internal(expr)
+
+	# trace the dependencies (internal function)
+	fun trace_internal(expr: MOExpr)
+	do
+		if expr isa MONew then
+			from_new = true
+		else if expr isa MOCallSite then
+			from_return = true
+			if expr.pattern.cuc > 0 then cuc_null = false
+		else if expr isa MOReadSite then
+			from_read = true
+		else if expr isa MOSSAVar then
+			trace_internal(expr.dependency)
+		else if expr isa MOPhiVar then
+			for dep in expr.dependencies do trace_internal(dep)
 		end
 	end
 end

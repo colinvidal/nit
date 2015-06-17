@@ -103,30 +103,15 @@ abstract class MOPropSitePattern
 		site.pattern = self
 	end
 
-#	# Add a candidate LP
-#	fun add_lp(lp: LP)
-#	do
-#		if not lps.has(lp) then
-#			lps.add(lp)
-#			lp.callers.add(self)
-#		end
-#	end
-
 	# Number of calls on uncompiled methods
 	var cuc = 0
-
-	# Increment cuc (usefull for stats)
-	fun cuc_incr do cuc += 1
-
-	# Decrement cuc (usefull for stats)
-	fun cuc_decr do cuc -= 1
 
 	# Add a new method on this pattern
 	fun add_lp(mpropdef: LP)
 	do
 		callees.add(mpropdef)
 		mpropdef.callers.add(self)
-		cuc_incr
+		cuc += 1
 	end
 end
 
@@ -211,7 +196,7 @@ redef class MPropDef
 	fun compile(vm: VirtualMachine)
 	do
 		for pattern in callers do
-			pattern.cuc_decr
+			pattern.cuc -= 1
 		end
 	end
 end
@@ -252,14 +237,6 @@ end
 
 # Root hierarchy of expressions
 abstract class MOExpr
-	# Tell if the expression comes from MONew
-	fun is_from_monew: Bool do return false
-
-	# Tell if the expression comes from MOCallSite (return of method)
-	fun is_from_mocallsite: Bool do return false
-
-	# Tell if the expression comes from MOReadSite
-	fun is_from_moread: Bool do return false
 end
 
 # MO of variables
@@ -292,12 +269,6 @@ class MOSSAVar
 	var dependency: MOExpr
 
 	redef fun compute_concretes(concretes) do return valid_and_add_dep(dependency, concretes)
-
-	redef fun is_from_monew do return dependency.is_from_monew
-
-	redef fun is_from_mocallsite do return dependency.is_from_mocallsite
-
-	redef fun is_from_moread do return dependency.is_from_moread
 end
 
 # MO of variable with multiples dependencies
@@ -313,33 +284,6 @@ class MOPhiVar
 			if not valid_and_add_dep(dep, concretes) then return false
 		end
 		return true
-	end
-
-	redef fun is_from_monew
-	do
-		for dep in dependencies do
-			if dep.is_from_monew then return true
-		end
-
-		return false
-	end
-
-	redef fun is_from_mocallsite
-	do
-		for dep in dependencies do
-			if dep.is_from_mocallsite then return true
-		end
-
-		return false
-	end
-
-	redef fun is_from_moread
-	do
-		for dep in dependencies do
-			if dep.is_from_moread then return true
-		end
-
-		return false
 	end
 end
 
@@ -359,8 +303,6 @@ class MONew
 
 	# The pattern of this site
 	var pattern: MONewPattern is writable, noinit
-
-	redef fun is_from_monew do return true
 end
 
 # MO of literals
@@ -450,8 +392,6 @@ class MOCallSite
 
 	# Values of each arguments
 	var given_args = new List[MOExpr]
-
-	redef fun is_from_mocallsite do return true
 end
 
 # MO of read attribute
@@ -463,8 +403,6 @@ class MOReadSite
 
 	# Tell if the attribute is immutable, useless at the moment
 	var immutable = false
-
-	redef fun is_from_moread do return true
 end
 
 # MO of write attribute
@@ -486,40 +424,6 @@ redef class MClass
 
 	# List of patterns of subtypes test
 	var subtype_pattern = new List[MOSubtypeSitePattern]
-
-#	# Detect new branches added by a loading class
-#	# Add introduces and redifines local properties
-#	fun handle_new_class
-#	do	
-#		var redefs = new List[MMethodDef]
-#
-#		# mclassdef.mpropdefs contains intro & redef methods
-#		for classdef in mclassdefs do
-#			for i in [0..classdef.mpropdefs.length - 1] do
-#				var mdef = classdef.mpropdefs[i]
-#				if mdef isa MMethodDef then
-#					# Add the method implementation in loadeds implementations of the associated gp
-#					mdef.mproperty.loaded_lps.add(mdef)
-##					if not mdef.is_intro then
-#						# There is a new branch
-#						redefs.add(mdef)
-##					end
-#				end
-#			end
-#		end
-#
-#		# For each class who know one of the redefs methods, tell the pattern there is a new branch
-#		for lp in redefs do
-#			for parent in ordering do
-#				for p in parent.sites_patterns do
-#					if p.gp == lp.mproperty then 
-#						if not sites_patterns.has(p) then sites_patterns.add(p)
-#						p.add_lp(lp)
-#					end
-#				end
-#			end
-#		end
-#	end
 
 	# `self` is an instance of object
 	fun is_instance_of_object(vm:VirtualMachine): Bool
