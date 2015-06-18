@@ -356,7 +356,19 @@ class MOStats
 		# from new
 		
 		file.write("from new,{map["method_sites_from_new"]}, {map["attribute_sites_from_new"]},{map["cast_sites_from_new"]},{map["sites_from_new"]}\n")
-		
+
+		buf = "{map["method_sites_from_new_pre"]},"
+		buf += "{map["attribute_sites_from_new_pre"]},"
+		buf += "{map["cast_sites_from_new_pre"]},"
+		buf += "{map["sites_from_new_pre"]}"
+		file.write("from new preexist,{buf}\n")
+
+		buf = "{map["method_sites_from_new_npre"]},"
+		buf += "{map["attribute_sites_from_new_npre"]},"
+		buf += "{map["cast_sites_from_new_npre"]},"
+		buf += "{map["sites_from_new_npre"]}"
+		file.write("from new no preexist,{buf}\n")
+
 		# from method return
 		
 		buf = "{map["method_sites_from_meth_return"]},"
@@ -370,6 +382,18 @@ class MOStats
 		buf += "{map["cast_sites_from_meth_return_cuc_null"]},"
 		buf += "{map["sites_from_meth_return_cuc_null"]}"
 		file.write("from return cuc null,{buf}\n")
+
+		buf = "{map["method_sites_from_meth_return_cuc_null_pre"]},"
+		buf += "{map["attribute_sites_from_meth_return_cuc_null_pre"]},"
+		buf += "{map["cast_sites_from_meth_return_cuc_null_pre"]},"
+		buf += "{map["sites_from_meth_return_cuc_null_pre"]}"
+		file.write("from return cuc null preexist,{buf}\n")
+
+		buf = "{map["method_sites_from_meth_return_cuc_null_npre"]},"
+		buf += "{map["attribute_sites_from_meth_return_cuc_null_npre"]},"
+		buf += "{map["cast_sites_from_meth_return_cuc_null_npre"]},"
+		buf += "{map["sites_from_meth_return_cuc_null_npre"]}"
+		file.write("from return cuc null no preexist,{buf}\n")
 
 		buf = "{map["method_sites_from_meth_return_cuc_pos"]},"
 		buf += "{map["attribute_sites_from_meth_return_cuc_pos"]},"
@@ -465,21 +489,42 @@ class MOStats
 		map["sites_from_meth_return"] = 0
 		map["sites_from_meth_return_cuc_pos"] = 0
 		map["sites_from_meth_return_cuc_null"] = 0
+		map["sites_from_meth_return_cuc_null_pre"] = 0
+		map["sites_from_meth_return_cuc_null_npre"] = 0
+
 		map["method_sites_from_meth_return"] = 0
 		map["method_sites_from_meth_return_cuc_pos"] = 0
 		map["method_sites_from_meth_return_cuc_null"] = 0
+		map["method_sites_from_meth_return_cuc_null_pre"] = 0
+		map["method_sites_from_meth_return_cuc_null_npre"] = 0
+
 		map["attribute_sites_from_meth_return"] = 0
 		map["attribute_sites_from_meth_return_cuc_pos"] = 0
 		map["attribute_sites_from_meth_return_cuc_null"] = 0
+		map["attribute_sites_from_meth_return_cuc_null_pre"] = 0
+		map["attribute_sites_from_meth_return_cuc_null_npre"] = 0
+		
 		map["cast_sites_from_meth_return"] = 0
 		map["cast_sites_from_meth_return_cuc_pos"] = 0
 		map["cast_sites_from_meth_return_cuc_null"] = 0
+		map["cast_sites_from_meth_return_cuc_null_pre"] = 0
+		map["cast_sites_from_meth_return_cuc_null_npre"] = 0
 
 		# incr when the site depends at least of one new expression
 		map["sites_from_new"] = 0
 		map["method_sites_from_new"] = 0
 		map["attribute_sites_from_new"] = 0
 		map["cast_sites_from_new"] = 0
+
+		map["sites_from_new_pre"] = 0
+		map["method_sites_from_new_pre"] = 0
+		map["attribute_sites_from_new_pre"] = 0
+		map["cast_sites_from_new_pre"] = 0
+
+		map["sites_from_new_npre"] = 0
+		map["method_sites_from_new_npre"] = 0
+		map["attribute_sites_from_new_npre"] = 0
+		map["cast_sites_from_new_npre"] = 0
 
 		# incr when the site depends at least of one attr read expression
 		map["sites_from_read"] = 0
@@ -690,13 +735,30 @@ redef class MOSite
 		if dep_trace.from_new then
 			pstats.inc("sites_from_new")
 			pstats.inc("{site_type}_sites_from_new")
+
+			incr_specific_counters(expr_recv.is_pre, "sites_from_new_pre", "sites_from_new_npre")
+			incr_specific_counters(expr_recv.is_pre, "{site_type}_sites_from_new_pre", "{site_type}_sites_from_new_npre")
 		end
 
 		if dep_trace.from_return then
 			pstats.inc("sites_from_meth_return")
 			pstats.inc("{site_type}_sites_from_meth_return")
-			incr_specific_counters(dep_trace.cuc_null, "{site_type}_sites_from_meth_return_cuc_null", "{site_type}_sites_from_meth_return_cuc_pos")
+			
+			incr_specific_counters(dep_trace.cuc_null,
+			"{site_type}_sites_from_meth_return_cuc_null",
+			"{site_type}_sites_from_meth_return_cuc_pos")
+			
 			incr_specific_counters(dep_trace.cuc_null, "sites_from_meth_return_cuc_null", "sites_from_meth_return_cuc_pos")
+
+			if dep_trace.cuc_null then
+				incr_specific_counters(expr_recv.is_pre, 
+				"{site_type}_sites_from_meth_return_cuc_null_pre",
+				"{site_type}_sites_from_meth_return_cuc_null_npre")
+
+				incr_specific_counters(expr_recv.is_pre,
+				"sites_from_meth_return_cuc_null_pre",
+				"sites_from_meth_return_cuc_null_npre")
+			end
 		end
 
 		if dep_trace.from_read then
