@@ -10,22 +10,30 @@ redef class ToolContext
 	# Disable inter-procedural analysis and 'new' cases
 	var disable_preexistence_extensions = new OptionBool("Disable preexistence extensions", "--no-preexist-ext")
 
+	# Disable inter-procedural analysis
+	var disable_method_return = new OptionBool("Disable preexistence extensions on method call", "--disable-meth-return")
+
 	redef init
 	do
 		super
 		option_context.add_option(disable_preexistence_extensions)
+		option_context.add_option(disable_method_return)
 	end
 end
 
 redef class Sys
 	# Tell if preexistence extensions are disabled
 	var disable_preexistence_extensions: Bool
+
+	# Tell if inter-procedural analysis is disabled
+	var disable_method_return: Bool
 end
 
 redef class ModelBuilder	
 	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
 	do
 		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
+		sys.disable_method_return = toolcontext.disable_method_return.value
 		super(mainmodule, arguments)
 	end
 end
@@ -71,7 +79,7 @@ redef class MPropDef
 		for expr in exprs_preexist_mut do expr.init_preexist
 		exprs_preexist_mut.clear
 
-		if flag then for p in callers do p.as(MOExprSitePattern).propage_preexist
+		if flag and not disable_method_return then for p in callers do p.as(MOExprSitePattern).propage_preexist
 	end
 
 	# Drop exprs_npreesit_mut and set unknown state to all expression inside
@@ -86,7 +94,7 @@ redef class MPropDef
 		for expr in exprs_npreexist_mut do expr.init_preexist
 		exprs_npreexist_mut.clear
 
-		if flag then for p in callers do p.as(MOExprSitePattern).propage_npreexist
+		if flag and not disable_method_return then for p in callers do p.as(MOExprSitePattern).propage_npreexist
 	end
 
 	# Fill the correct list if the analysed preexistence if unperennial
@@ -443,7 +451,7 @@ redef class MOCallSite
 
 	redef fun preexist_expr
 	do
-		if disable_preexistence_extensions then
+		if disable_preexistence_extensions or disable_method_return then
 			preexist_expr_value = pmask_NPRE_PER
 		else if pattern.cuc > 0 then
 			preexist_expr_value = pmask_NPRE_NPER
