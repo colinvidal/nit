@@ -243,6 +243,9 @@ end
 abstract class MOVar
 	super MOExpr
 
+	# The Variable objet refered by this node
+	var variable: Variable
+
 	# The offset of the variable in it environment, or the position of parameter
 	var offset: Int
 
@@ -700,14 +703,14 @@ redef class Variable
 	do
 		if movar == null then
 			if node isa ASelfExpr then
-				movar = new MOParam(0)
+				movar = new MOParam(self, 0)
 			else if node isa AVarExpr then
 				# A variable read
 				if node.variable.parameter then
-					movar = new MOParam(node.variable.position)
+					movar = new MOParam(self, node.variable.position)
 				else if node.variable.dep_exprs.length == 1 then
 					var mo = node.variable.dep_exprs.first.ast2mo
-					if mo != null then movar = new MOSSAVar(node.variable.position, mo)
+					if mo != null then movar = new MOSSAVar(self, node.variable.position, mo)
 				else if node.variable.dep_exprs.length > 1 then
 					var phi = new List[MOExpr]
 					for a_expr in node.variable.dep_exprs do
@@ -716,9 +719,9 @@ redef class Variable
 					end
 
 					if phi.length == 1 then
-						movar = new MOSSAVar(node.variable.position, phi.first)
+						movar = new MOSSAVar(self, node.variable.position, phi.first)
 					else if phi.length > 1 then
-						movar = new MOPhiVar(node.variable.position, phi)
+						movar = new MOPhiVar(self, node.variable.position, phi)
 						trace("MOPhiVar AST phi len: {phi.length} | node.variable.dep_exprs: {node.variable.dep_exprs}")
 					end
 				end
@@ -809,7 +812,7 @@ redef class APropdef
 			# Generate MO for return of the propdef
 			if returnvar.dep_exprs.length == 1 then
 				var moexpr = returnvar.dep_exprs.first.ast2mo
-				if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar.position, moexpr)
+				if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
 			else if returnvar.dep_exprs.length > 1 then
 				var deps = new List[MOExpr]
 				for a_expr in returnvar.dep_exprs do
@@ -818,9 +821,9 @@ redef class APropdef
 				end
 
 				if deps.length == 1 then
-					mo_dep_exprs = new MOSSAVar(returnvar.position, deps.first)
+					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, deps.first)
 				else if deps.length > 1 then
-					mo_dep_exprs = new MOPhiVar(returnvar.position, deps)
+					mo_dep_exprs = new MOPhiVar(returnvar, returnvar.position, deps)
 				end
 			end
 
