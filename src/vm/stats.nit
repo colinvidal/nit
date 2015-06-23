@@ -66,8 +66,8 @@ redef class ModelBuilder
 		# We don't need pstats counters with lower bound anymore, so we override it
 
 		var old_counters = sys.pstats
-		pstats = new MOStats("last")
-		pstats.copy_data(old_counters)
+		sys.pstats = new MOStats("last")
+		sys.pstats.copy_data(old_counters)
 
 		for site in pstats.analysed_sites do
 			# WARN: this cast is always true for now, but we need to put preexist_analysed on MPropDef when we'll analysed attribute with body.
@@ -76,6 +76,12 @@ redef class ModelBuilder
 			site.impl = null
 			site.get_impl(sys.vm)
 			site.stats(sys.vm)
+		end
+
+		for method in sys.pstats.compiled_methods do
+			if method.return_expr != null then
+				method.return_expr.as(not null).return_stats(method.mproperty)
+			end
 		end
 
 		print(pstats.pretty)
@@ -211,8 +217,8 @@ class MOStats
 	# List of analysed sites
 	var analysed_sites = new List[MOSite]
 
-	# List of return var of living methods
-	var return_vars = new List[MOVar]
+	# List of compiled methods
+	var compiled_methods = new List[MMethodDef]
 
 	# Label to display on dump
 	var lbl: String
@@ -477,7 +483,7 @@ class MOStats
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
 		analysed_sites.add_all(counters.analysed_sites)
-		return_vars.add_all(counters.return_vars)
+		compiled_methods.add_all(counters.compiled_methods)
 	end
 
 	init
@@ -859,9 +865,11 @@ redef class MPropDef
 			end
 
 			if return_expr != null then
-				sys.pstats.return_vars.add(return_expr.as(not null))
-				return_expr.return_stats(mproperty)
+				sys.pstats.compiled_methods.add(self)
+				return_expr.as(not null).return_stats(mproperty)
 			end
+
+#			print("[stats] compile {mproperty} {return_expr != null}")
 		end
 	end
 end
@@ -887,9 +895,8 @@ redef class MOVar
 			return true
 		else if expr isa MOCallSite and not callees.has(expr.pattern.gp) then
 			# Recurse on all living local properties
+			callees.add(expr.pattern.gp)
 			for mpropdef in expr.pattern.gp.living_mpropdefs do
-				# create new callees objet that take a copy of current callees
-				# if trace_origin of this mpropdef return false, then return false
 				if mpropdef.return_expr == null then return false
 				if not trace_origin(mpropdef.return_expr.as(not null), callees) then return false
 			end

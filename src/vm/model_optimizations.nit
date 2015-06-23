@@ -809,10 +809,18 @@ redef class APropdef
 		super
 
 		if self isa AMethPropdef then
+			# Generate MO for sites inside the propdef
+			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
+
 			# Generate MO for return of the propdef
 			if returnvar.dep_exprs.length == 1 then
 				var moexpr = returnvar.dep_exprs.first.ast2mo
-				if moexpr != null then mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
+				if moexpr != null then 
+#					print("[model_optimizations] compile AMethPropdef returnvar ssa {moexpr.as(not null)}")
+					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
+				else
+#					print("[model_optimizations] compile AMethPropdef {mpropdef.mproperty} returnvar null {returnvar.dep_exprs.first}")
+				end
 			else if returnvar.dep_exprs.length > 1 then
 				var deps = new List[MOExpr]
 				for a_expr in returnvar.dep_exprs do
@@ -828,9 +836,6 @@ redef class APropdef
 			end
 
 			mpropdef.as(MMethodDef).return_expr = mo_dep_exprs
-
-			# Generate MO for sites inside the propdef
-			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
 		end
 
 		mpropdef.compile(vm)
@@ -858,6 +863,7 @@ redef class ASendExpr
 	# Compile this ast node in MOCallSite after SSA
 	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
+#		print("[model_optimizations] compile_ast of {self} in {lp}")
 		var ignore = false
 
 		if n_expr.mtype isa MNullType or n_expr.mtype == null then
