@@ -226,7 +226,10 @@ redef class MMethodDef
 	redef type P: MOCallSitePattern
 	
 	# Return expression of the method (null if procedure)
-	var return_expr: nullable MOVar is writable
+	var return_expr: nullable MOExpr is writable
+
+	# An object is never return if return_expr is not a MOVar
+	fun return_expr_is_object: Bool do return return_expr isa MOVar
 
 	# List of instantiations sites in this local property 
 	var monews = new List[MONew]
@@ -310,6 +313,11 @@ end
 
 # MO of literals
 class MOLit
+	super MOExpr
+end
+
+# MO of primitives
+class MOPrimitive
 	super MOExpr
 end
 
@@ -801,7 +809,7 @@ redef class APropdef
 
 	# list of return expression of the optimizing model
 	# Null if this fuction is a procedure
-	var mo_dep_exprs: nullable MOVar = null
+	var mo_dep_exprs: nullable MOExpr = null
 
 	# Force to compute the implementation of the site when AST node is compiled
 	redef fun compile(vm)
@@ -816,10 +824,9 @@ redef class APropdef
 			if returnvar.dep_exprs.length == 1 then
 				var moexpr = returnvar.dep_exprs.first.ast2mo
 				if moexpr != null then 
-#					print("[model_optimizations] compile AMethPropdef returnvar ssa {moexpr.as(not null)}")
 					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
 				else
-#					print("[model_optimizations] compile AMethPropdef {mpropdef.mproperty} returnvar null {returnvar.dep_exprs.first}")
+					mo_dep_exprs = new MOPrimitive
 				end
 			else if returnvar.dep_exprs.length > 1 then
 				var deps = new List[MOExpr]
@@ -832,6 +839,8 @@ redef class APropdef
 					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, deps.first)
 				else if deps.length > 1 then
 					mo_dep_exprs = new MOPhiVar(returnvar, returnvar.position, deps)
+				else
+					mo_dep_exprs = new MOPrimitive
 				end
 			end
 

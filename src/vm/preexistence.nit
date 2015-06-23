@@ -73,7 +73,7 @@ redef class MPropDef
 	do
 		var flag = false
 		if self isa MMethodDef then
-			if return_expr != null then flag = return_expr.is_pre_nper
+			if return_expr_is_object then flag = return_expr.is_pre_nper
 		end
 
 		for expr in exprs_preexist_mut do expr.init_preexist
@@ -88,7 +88,7 @@ redef class MPropDef
 	do
 		var flag = false
 		if self isa MMethodDef then
-			if return_expr != null then flag = return_expr.is_npre_nper
+			if return_expr_is_object then flag = return_expr.is_npre_nper
 		end
 
 		for expr in exprs_npreexist_mut do expr.init_preexist
@@ -476,7 +476,7 @@ redef class MOCallSite
 					# So, we must NOT check it's return_expr (it could be still null)
 					set_npre_nper
 					break
-				else if candidate.return_expr == null then
+				else if not candidate.return_expr_is_object then
 					# Lazy attribute not yet initialized
 					# WARNING
 					# Be sure that it can't be anything else that lazy attributes here

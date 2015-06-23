@@ -78,11 +78,7 @@ redef class ModelBuilder
 			site.stats(sys.vm)
 		end
 
-		for method in sys.pstats.compiled_methods do
-			if method.return_expr != null then
-				method.return_expr.as(not null).return_stats(method.mproperty)
-			end
-		end
+		for method in sys.pstats.compiled_methods do sys.pstats.get_method_return_origin(method)
 
 		print(pstats.pretty)
 	end
@@ -453,7 +449,9 @@ class MOStats
 		# return from new with inter-procedural analysis
 		file.write("\n")
 		file.write("inter procedural return from new, {map["inter_return_from_new"]}\n")
-		file.write("inter procedural reutrn from other, {map["inter_return_from_other"]}\n")
+		file.write("inter procedural return from other, {map["inter_return_from_other"]}\n")
+		file.write("from primitive/lit, {map["return_from_not_object"]}\n")
+		file.write("procedure, {map["procedure"]}\n")
 
 		file.close
 	end
@@ -671,6 +669,21 @@ class MOStats
 
 		map["inter_return_from_new"] = 0
 		map["inter_return_from_other"] = 0
+		map["return_from_not_object"] = 0
+		map["procedure"] = 0
+	end
+
+	# Tell where the return of method is come from
+	fun get_method_return_origin(method: MMethodDef)
+	do
+		if method.return_expr_is_object then
+			# If the method return an object, it's return_expr is a MOVar
+			method.return_expr.as(MOVar).return_stats(method.mproperty)
+		else if method.return_expr != null then
+			sys.pstats.inc("return_from_not_object")
+		else
+			sys.pstats.inc("procedure")
+		end
 	end
 end
 
@@ -861,15 +874,12 @@ redef class MPropDef
 		if self isa MMethodDef then
 			for site in self.mosites do
 				site.stats(vm)
-				pstats.analysed_sites.add(site)
+				sys.pstats.analysed_sites.add(site)
 			end
 
-			if return_expr != null then
-				sys.pstats.compiled_methods.add(self)
-				return_expr.as(not null).return_stats(mproperty)
-			end
+			if return_expr_is_object then sys.pstats.compiled_methods.add(self)
 
-#			print("[stats] compile {mproperty} {return_expr != null}")
+			sys.pstats.get_method_return_origin(self)
 		end
 	end
 end
