@@ -444,6 +444,11 @@ class MOStats
 		file.write("callers cuc pos, {cuc_pos}\n")
 		file.write("callers cuc null, {cuc_null}\n")
 
+		# return from new with inter-procedural analysis
+		file.write("\n")
+		file.write("inter procedural return from new, {map["inter_return_from_new"]}\n")
+		file.write("inter procedural reutrn from other, {map["inter_return_from_other"]}\n")
+
 		file.close
 	end
 
@@ -657,6 +662,9 @@ class MOStats
 
 		map["call_with_cuc_pos"] = 0
 		map["call_with_cuc_null"] = 0
+
+		map["inter_return_from_new"] = 0
+		map["inter_return_from_other"] = 0
 	end
 end
 
