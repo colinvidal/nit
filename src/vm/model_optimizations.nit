@@ -226,7 +226,7 @@ redef class MMethodDef
 	redef type P: MOCallSitePattern
 	
 	# Return expression of the method (null if procedure)
-	var return_expr: nullable MOExpr is writable
+	var return_expr: nullable MOVar is writable
 
 	# List of instantiations sites in this local property 
 	var monews = new List[MONew]

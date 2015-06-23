@@ -211,6 +211,9 @@ class MOStats
 	# List of analysed sites
 	var analysed_sites = new List[MOSite]
 
+	# List of return var of living methods
+	var return_vars = new List[MOVar]
+
 	# Label to display on dump
 	var lbl: String
 
@@ -469,6 +472,7 @@ class MOStats
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
 		analysed_sites.add_all(counters.analysed_sites)
+		return_vars.add_all(counters.return_vars)
 	end
 
 	init
@@ -845,6 +849,52 @@ redef class MPropDef
 				site.stats(vm)
 				pstats.analysed_sites.add(site)
 			end
+
+			if return_expr != null then
+				sys.pstats.return_vars.add(return_expr.as(not null))
+				return_expr.return_stats(mproperty)
+			end
+		end
+	end
+end
+
+redef class MOVar
+	# Get the origin of return variable (tell if it comes from a new expression), with inter-procedural analysis
+	fun return_stats(mproperty: MProperty)
+	do
+		var callees = new List[MProperty]
+		callees.add(mproperty)
+		if trace_origin(self, callees) then
+			sys.pstats.inc("inter_return_from_new")
+		else
+			sys.pstats.inc("inter_return_from_other")
+		end
+	end
+
+	# Recurse while one of the dependency is not a new or callsite.
+	# True if its come from only new expressions
+	fun trace_origin(expr: MOExpr, callees: List[MProperty]): Bool
+	do
+		if expr isa MONew then
+			return true
+		else if expr isa MOCallSite and not callees.has(expr.pattern.gp) then
+			# Recurse on all living local properties
+			for mpropdef in expr.pattern.gp.living_mpropdefs do
+				# create new callees objet that take a copy of current callees
+				# if trace_origin of this mpropdef return false, then return false
+				if mpropdef.return_expr == null then return false
+				if not trace_origin(mpropdef.return_expr.as(not null), callees) then return false
+			end
+			return true
+		else if expr isa MOSSAVar then
+			return trace_origin(expr.dependency, callees)
+		else if expr isa MOPhiVar then
+			for dep in expr.dependencies do
+				if not trace_origin(dep, callees) then return false
+			end
+			return true
+		else
+			return false
 		end
 	end
 end
