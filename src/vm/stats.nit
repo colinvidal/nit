@@ -877,8 +877,7 @@ redef class MPropDef
 				sys.pstats.analysed_sites.add(site)
 			end
 
-			if return_expr_is_object then sys.pstats.compiled_methods.add(self)
-
+			sys.pstats.compiled_methods.add(self)
 			sys.pstats.get_method_return_origin(self)
 		end
 	end
