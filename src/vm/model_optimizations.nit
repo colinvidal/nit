@@ -394,13 +394,23 @@ abstract class MOSite
 end
 
 # MO of a subtype test site
-class MOSubtypeSite
+abstract class MOSubtypeSite
 	super MOSite
 
 	redef type P: MOSubtypeSitePattern
 
 	# Static type on which the test is applied
 	var target: MType
+end
+
+# MO of .as(Type) expr
+class MOAsSubtypeSite
+	super MOSubtypeSite
+end
+
+# MO of isa expr
+class MOIsaSubtypeSite
+	super MOSubtypeSite
 end
 
 # MO of global properties sites
