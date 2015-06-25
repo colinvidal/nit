@@ -717,8 +717,13 @@ redef class Variable
 				if node.variable.parameter then
 					movar = new MOParam(self, node.variable.position)
 				else if node.variable.dep_exprs.length == 1 then
-					var mo = node.variable.dep_exprs.first.ast2mo
-					if mo != null then movar = new MOSSAVar(self, node.variable.position, mo)
+#				if node.variable.dep_exprs.length == 1 then
+					if node.variable.parameter then
+						movar = new MOParam(self, node.variable.position)
+					else
+						var mo = node.variable.dep_exprs.first.ast2mo
+						if mo != null then movar = new MOSSAVar(self, node.variable.position, mo)
+					end
 				else if node.variable.dep_exprs.length > 1 then
 					var phi = new List[MOExpr]
 					for a_expr in node.variable.dep_exprs do

@@ -26,11 +26,15 @@ redef class ToolContext
 	# Enable print site state
 	var print_site_state = new OptionBool("Display state of a MOSite (preexistence, impl)", "--site-state")
 
+	# Enable print location of preexists sites
+	var print_location_preexist = new OptionBool("Dump the location of preexist site", "--location-preexist")
+
 	redef init
 	do
 		super
 		option_context.add_option(stats_on)
 		option_context.add_option(print_site_state)
+		option_context.add_option(print_location_preexist)
 	end
 end
 
@@ -40,13 +44,20 @@ redef class Sys
 
 	# Access to print_site_state from anywhere
 	var print_site_state: Bool = false
+
+	# Access to location-preexist information from anywhere
+	var print_location_preexist: Bool = false
+
+	# Used to put location of preexist sites
+	var dump_location: nullable FileWriter = null
 end
 
 redef class ModelBuilder
 	redef fun run_virtual_machine(mainmodule, arguments)
 	do
 		sys.print_site_state = toolcontext.print_site_state.value
-		
+		sys.print_location_preexist = toolcontext.print_location_preexist.value
+
 		super(mainmodule, arguments)
 		
 		if toolcontext.stats_on.value then 
@@ -69,6 +80,10 @@ redef class ModelBuilder
 		sys.pstats = new MOStats("last")
 		sys.pstats.copy_data(old_counters)
 
+		if sys.print_location_preexist then
+			dump_location = new FileWriter.open("mo-stats-location")
+		end
+
 		for site in pstats.analysed_sites do
 			# WARN: this cast is always true for now, but we need to put preexist_analysed on MPropDef when we'll analysed attribute with body.
 			site.lp.as(MMethodDef).preexist_analysed = false
@@ -79,6 +94,10 @@ redef class ModelBuilder
 		end
 
 		for method in sys.pstats.compiled_methods do sys.pstats.get_method_return_origin(method)
+
+		if sys.print_location_preexist then
+			dump_location.as(not null).close
+		end
 
 		print(pstats.pretty)
 	end
@@ -112,7 +131,8 @@ redef class ANewExpr
 	redef fun generate_basic_blocks(ssa, old_block)
 	do
 		var sup = super
-		pstats.inc("ast_new")
+		sys.pstats.inc("ast_new")
+		if monew != null then sys.pstats.compiled_new.add(monew.as(not null))
 		return sup
 	end
 end
@@ -215,6 +235,9 @@ class MOStats
 
 	# List of compiled methods
 	var compiled_methods = new List[MMethodDef]
+
+	# List of new site compiled
+	var compiled_new = new List[MONew]
 
 	# Label to display on dump
 	var lbl: String
@@ -453,6 +476,12 @@ class MOStats
 		file.write("from primitive/lit, {map["return_from_not_object"]}\n")
 		file.write("procedure, {map["procedure"]}\n")
 
+		# compiled "new" of unloaded class at the end of execution
+		file.write("\n")
+		var compiled_new_unloaded = 0
+		for newsite in compiled_new do if not newsite.pattern.cls.abstract_loaded then compiled_new_unloaded += 1
+		file.write("compiled new of unloaded classes, {compiled_new_unloaded}")
+
 		file.close
 	end
 
@@ -482,6 +511,7 @@ class MOStats
 		map["sites_final"] = counters.get("sites_final")
 		analysed_sites.add_all(counters.analysed_sites)
 		compiled_methods.add_all(counters.compiled_methods)
+		compiled_new.add_all(counters.compiled_new)
 	end
 
 	init
@@ -701,6 +731,8 @@ redef class MOSite
 		incr_rst_unloaded(vm)
 		incr_type_impl(vm)
 
+		if print_location_preexist then dump_location_site
+
 		if print_site_state then
 			var buf = "site {self}\n"
 			buf += "\tpattern: {pattern2str}\n"
@@ -714,6 +746,22 @@ redef class MOSite
 
 	# Print the pattern (RST/GP or target class for subtype test)
 	fun pattern2str: String is abstract
+
+	# Print location of a site
+	fun dump_location_site do 
+		# dump_location is null of first compilation, and set for last compilation
+		if expr_recv.is_pre and dump_location != null then
+			var from = new DependencyTrace(expr_recv)
+			from.trace
+
+			var from2str = ""
+			if from.from_new then from2str += " from-new "
+			if from.from_param then from2str += " from-param "
+			if from.from_return then from2str += " from-return "
+
+			dump_location.as(not null).write("{site_type} {ast.location} {from2str}\n")
+		end
+	end
 
 	#
 	fun incr_preexist(vm: VirtualMachine) do 
@@ -934,6 +982,9 @@ class DependencyTrace
 	# from a read attribute expression
 	var from_read = false
 
+	# from a parameter
+	var from_param = false
+
 	# cuc is null ? usefull only when it comes from a method
 	var cuc_null = true
 
@@ -953,6 +1004,8 @@ class DependencyTrace
 			if expr.pattern.cuc > 0 then cuc_null = false
 		else if expr isa MOReadSite then
 			from_read = true
+		else if expr isa MOParam then
+			from_param = true
 		else if expr isa MOSSAVar then
 			trace_internal(expr.dependency)
 		else if expr isa MOPhiVar then
