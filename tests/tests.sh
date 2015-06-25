@@ -430,8 +430,9 @@ case $engine in
 		;;
 	nitvm)
 		isinterpret=true
-		enginebinname=nit
-		OPT="--vm $OPT"
+# 		enginebinname=nit
+# 		OPT="--vm $OPT"
+        enginebinname=nitvm
 		savdirs="sav/niti/"
 		;;
 	emscripten)
