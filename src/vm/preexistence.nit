@@ -162,8 +162,6 @@ redef class MMethodDef
 		end
 
 		for site in mosites do
-			assert not site.pattern.rst.is_primitive_type
-
 			preexist = site.preexist_site
 			var buff = "\tpreexist of "
 
@@ -358,6 +356,22 @@ redef class MONew
 
 	redef fun preexist_expr do 
 		if is_pre_unknown then init_preexist
+		return preexist_expr_value
+	end
+end
+
+redef class MONull
+	redef fun preexist_expr
+	do
+		if is_pre_unknown then set_pval_per
+		return preexist_expr_value
+	end
+end
+
+redef class MOPrimitive
+	redef fun preexist_expr
+	do
+		if is_pre_unknown then set_pval_per
 		return preexist_expr_value
 	end
 end

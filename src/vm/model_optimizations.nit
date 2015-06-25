@@ -26,8 +26,11 @@ redef class Sys
 	# and get_movar needs to use this table to put the generated MOExpr.
 	var ast2mo_clone_table = new HashMap[ANode, MOEntity]
 
-	# Singleton on MONull to avoid to create it several times
-	var monull = new MONull
+	# Singleton of MONull to avoid to create it several times
+	var monull = new MONull is lazy
+
+	# Singleton of MOPrimitive to avoid to create it several times
+	var moprimitive = new MOPrimitive is lazy
 end
 
 redef class ModelBuilder
@@ -324,6 +327,15 @@ class MONew
 	var pattern: MONewPattern is writable, noinit
 end
 
+# MO of super calls
+class MOSuper
+#	super MOCallSite
+	super MOExpr
+
+	# It's very complex to write a good code for ast2mo for ASuperExpr (it depends of a super call on init or regular method)
+	# So, for now, MOSuper is an expression
+end
+
 # MO of literals
 class MOLit
 	super MOExpr
@@ -590,6 +602,16 @@ redef class AExpr
 	# Otherwise, create it, set it in clone table, set it's dependencies, return it.
 	fun ast2mo(mpropdef: MPropDef): MOEntity is abstract
 
+	# Generic ast2mo function for primitive nodes
+	fun ast2mo_generic_primitive(mpropdef: MPropDef): MOEntity
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+
+		sys.ast2mo_clone_table[self] = sys.moprimitive
+		return sys.moprimitive
+	end
+
 	# Return the MOEntity if it's already on clone table
 	fun get_mo_from_clone_table: nullable MOEntity
 	do
@@ -607,15 +629,45 @@ redef class AAttrExpr
 		if mo_entity != null then return mo_entity
 		if n_expr.mtype isa MNullType then return sys.monull
 		
-		var attr_site: MOAttrSite
+		var attr_site = new MOReadSite(self, mpropdef)
 
-		if self isa AAttrAssignExpr or self isa AAttrReassignExpr then
-			# AAttrReassignExpr is not a subtype of AAttrAssignExpr, so we must do a checktype herebefore.
-			attr_site = new MOWriteSite(self, mpropdef)
-		else
-			# Read attribute access (or test to know if the attribute is set)
-			attr_site = new MOReadSite(self, mpropdef)
-		end
+		sys.ast2mo_clone_table[self] = attr_site
+		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+
+		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
+		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
+
+		return attr_site
+	end
+end
+
+redef class AAttrAssignExpr
+	redef fun ast2mo(mpropdef)
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+		if n_expr.mtype isa MNullType then return sys.monull
+		
+		var attr_site = new MOWriteSite(self, mpropdef)
+
+		sys.ast2mo_clone_table[self] = attr_site
+		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+
+		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
+		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
+
+		return attr_site
+	end
+end
+
+redef class AAttrReassignExpr
+	redef fun ast2mo(mpropdef)
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+		if n_expr.mtype isa MNullType then return sys.monull
+		
+		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
 		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
@@ -814,7 +866,17 @@ redef class ASendExpr
 		mpropdef.as(MMethodDef).mosites.add(mocallsite)
 		recv_class.set_site_pattern(mocallsite, recv_class.mclass_type, cs.mproperty)
 
-		mocallsite.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		# In the case of attr.as(AType).foo, the receiver of foo() is a MOSubtypeSite.
+		# That's a nonsence, we want the receiver "attr".
+		# This is why this mess...
+		var raw_expr = n_expr.ast2mo(mpropdef)
+
+		# Just if stupid case of attr.as(AType1).as(AType2)
+		while raw_expr isa MOSubtypeSite do
+			raw_expr = raw_expr.ast.as(AAsCastExpr).n_expr.ast2mo(mpropdef)
+		end
+
+		mocallsite.expr_recv = raw_expr.as(MOExpr)
 
 		# Expressions arguments given to the method called
 		for arg in raw_arguments do
@@ -849,4 +911,101 @@ redef class ANotExpr
 		sys.ast2mo_clone_table[self] = moexpr
 		return moexpr
 	end
+end
+
+redef class AAsNotnullExpr
+	redef fun ast2mo(mpropdef)
+	do 
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+		if n_expr.mtype isa MNullType then return sys.monull
+
+		var moexpr = n_expr.ast2mo(mpropdef)
+		sys.ast2mo_clone_table[self] = moexpr
+		return moexpr
+	end
+end
+
+redef class AOnceExpr
+	redef fun ast2mo(mpropdef)
+	do 
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+		if n_expr.mtype isa MNullType then return sys.monull
+
+		var moexpr = n_expr.ast2mo(mpropdef)
+		sys.ast2mo_clone_table[self] = moexpr
+		return moexpr
+	end
+end
+
+redef class ASuperExpr
+	redef fun ast2mo(mpropdef)
+	do 
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+
+		var mosuper = new MOSuper
+		sys.ast2mo_clone_table[self] = mosuper
+		return mosuper
+	end
+
+#	redef fun ast2mo(mpropdef) do
+#		var mo_entity = get_mo_from_clone_table
+#		if mo_entity != null then return mo_entity
+#
+#		var recv_class: MClass
+#		var called_mproperty: MProperty
+#		
+#		if callsite != null then
+#			# super init call
+#			var cs = callsite.as(not null)
+#			recv_class = cs.recv.get_mclass(vm).as(not null)
+#			called_mproperty = cs.mproperty
+#		else
+#			# super standard call
+#			called_mproperty = self.mpropdef.as(not null).mproperty
+#			recv_class = called_mproperty.intro_mclassdef.mclass
+#		end
+#		
+#		var mosuper = new MOSuperSite(self, mpropdef)
+#		sys.ast2mo_clone_table[self] = mosuper
+#
+#		# TODO: remove this cast when the analysis is safe with attribute body
+#		mpropdef.as(MMethodDef).mosites.add(mosuper)
+#		recv_class.set_site_pattern(mosuper, recv_class.mclass_type, called_mproperty)
+#
+#		mosuper.expr_recv = n_args.n_exprs.first.ast2mo(mpropdef).as(MOExpr)
+#
+#		# Expressions arguments given to the method called
+#		for i_arg in [1..n_args.n_exprs.length] do
+#			mosuper.given_args.add(n_args.n_exprs[i_arg].ast2mo(mpropdef).as(MOExpr))
+#		end
+#
+#		return mosuper
+#	end
+end
+
+redef class ANullExpr
+	redef fun ast2mo(mpropdef) do return sys.monull
+end
+
+redef class AStringExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class ACharExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class AIntExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class ATrueExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class AFalseExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
