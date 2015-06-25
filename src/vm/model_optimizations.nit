@@ -26,11 +26,14 @@ redef class Sys
 	# and get_movar needs to use this table to put the generated MOExpr.
 	var ast2mo_clone_table = new HashMap[ANode, MOEntity]
 
-	# Singleton of MONull to avoid to create it several times
+	# Singleton of MONull
 	var monull = new MONull is lazy
 
-	# Singleton of MOPrimitive to avoid to create it several times
+	# Singleton of MOPrimitive
 	var moprimitive = new MOPrimitive is lazy
+
+	# Singleton of MOLiteral
+	var moliteral = new MOLit is lazy
 end
 
 redef class ModelBuilder
@@ -595,6 +598,23 @@ redef class MType
 	end
 end
 
+redef class ANode
+	# In the case of attr.as(AType).foo, the receiver of foo() is a MOSubtypeSite.
+	# That's a nonsence, we want the receiver "attr".
+	# This is why this mess...
+	fun get_receiver(mpropdef: MPropDef, node: AExpr): MOExpr
+	do
+		var raw_expr = node.ast2mo(mpropdef)
+
+		# Just if stupid case of attr.as(AType1).as(AType2)
+		while raw_expr isa MOSubtypeSite do
+			raw_expr = raw_expr.ast.as(AAsCastExpr).n_expr.ast2mo(mpropdef)
+		end
+
+		return raw_expr.as(MOExpr)
+	end
+end
+
 redef class AExpr
 	# Clone a AST expression to a MOEntity
 	# `mpropdef` is the local property containing this expression (or expression-site)
@@ -610,6 +630,16 @@ redef class AExpr
 
 		sys.ast2mo_clone_table[self] = sys.moprimitive
 		return sys.moprimitive
+	end
+
+	# Generic ast2mo function for literal nodes
+	fun ast2mo_generic_literal(mpropdef: MPropDef): MOEntity
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+
+		sys.ast2mo_clone_table[self] = sys.moliteral
+		return sys.moliteral
 	end
 
 	# Return the MOEntity if it's already on clone table
@@ -731,14 +761,14 @@ redef class Variable
 			if dep_exprs.length == 0 then
 				mossa.dependency = sys.monull
 			else
-				mossa.dependency = dep_exprs.first.ast2mo(mpropdef).as(MOExpr)
+				mossa.dependency = node.get_receiver(mpropdef, dep_exprs.first)
 			end
 			return mossa
 		else 
 			assert dep_exprs.length > 1
 			var mophi = new MOPhiVar(self, position)
 			sys.ast2mo_clone_table[node] = mophi
-			for dep in dep_exprs do mophi.dependencies.add(dep.ast2mo(mpropdef).as(MOExpr))
+			for dep in dep_exprs do mophi.dependencies.add(node.get_receiver(mpropdef, dep))
 			return mophi
 		end
 	end
@@ -841,7 +871,7 @@ redef class ASendExpr
 		end
 
 		sys.ast2mo_clone_table[self] = moattr
-		moattr.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		moattr.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		var gp = called_node_ast.mpropdef.as(not null).mproperty
@@ -866,21 +896,11 @@ redef class ASendExpr
 		mpropdef.as(MMethodDef).mosites.add(mocallsite)
 		recv_class.set_site_pattern(mocallsite, recv_class.mclass_type, cs.mproperty)
 
-		# In the case of attr.as(AType).foo, the receiver of foo() is a MOSubtypeSite.
-		# That's a nonsence, we want the receiver "attr".
-		# This is why this mess...
-		var raw_expr = n_expr.ast2mo(mpropdef)
-
-		# Just if stupid case of attr.as(AType1).as(AType2)
-		while raw_expr isa MOSubtypeSite do
-			raw_expr = raw_expr.ast.as(AAsCastExpr).n_expr.ast2mo(mpropdef)
-		end
-
-		mocallsite.expr_recv = raw_expr.as(MOExpr)
+		mocallsite.expr_recv = get_receiver(mpropdef, n_expr)
 
 		# Expressions arguments given to the method called
 		for arg in raw_arguments do
-			mocallsite.given_args.add(arg.ast2mo(mpropdef).as(MOExpr))
+			mocallsite.given_args.add(get_receiver(mpropdef, arg))
 		end
 
 		return mocallsite
@@ -994,6 +1014,18 @@ redef class AStringExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
 
+redef class ASuperstringExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class AAndExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class AOrExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
 redef class ACharExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
@@ -1008,4 +1040,8 @@ end
 
 redef class AFalseExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
+end
+
+redef class AArrayExpr
+	redef fun ast2mo(mpropdef) do return ast2mo_generic_literal(mpropdef)
 end
