@@ -20,6 +20,9 @@ redef class Sys
 
 	# Tell if trace is enabled
 	var trace_on: Bool
+
+	# Hashmap used for clone AST to MO
+	var ast2mo_clone_table = new HashMap[AExpr, MOExpr]
 end
 
 redef class ModelBuilder
@@ -193,7 +196,7 @@ redef class MPropDef
 	var callers = new List[P]
 
 	# Compile the property
-	fun compile(vm: VirtualMachine)
+	fun compile_mo
 	do
 		for pattern in callers do
 			pattern.cuc -= 1
@@ -330,7 +333,7 @@ abstract class MOSite
 	type P: MOSitePattern
 
 	# The expression of the receiver
-	var expr_recv: MOExpr
+	var expr_recv: MOExpr is noinit
 
 	# The local property containing this expression
 	var lp: MPropDef
@@ -566,83 +569,50 @@ redef class MType
 	end
 end
 
-redef class AAttrFormExpr
-	super AToCompile
-
-	# Link to the attribute access in MO
-	var moattrsite: nullable MOAttrSite
-
-	# Compile this attribute access from ast to mo
-	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
+redef class AExpr
+	# Clone a AST expression to a MOExpr
+	# `mpropdef` is the local property containing this expression (or expression-site)
+	# Return a MOExpr it's already created (already in the clone table), null otherwise
+	# The redefinitions must return the new MOExpr created.
+	fun ast2mo_expr(mpropdef: MPropDef): nullable MOExpr
 	do
-		var ignore = false
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			# Ignore litterals cases of the analysis
-			ignore = true
-		else if n_expr.mtype.is_primitive_type then
-			# Ignore primitives cases of the analysis
-			ignore = true
+		if sys.ast2mo_clone_table.has_key(self) then
+			return sys.ast2mo_clone_table[self]
 		end
-
-		var recv = n_expr.ast2mo
-
-		if recv != null and not ignore then
-			moattrsite = make_mo(vm, recv, lp)
-			lp.mosites.add(moattrsite.as(not null))
-		end
+		return null
 	end
 
-	# Make the MO node / pattern
-	private fun make_mo(vm: VirtualMachine, recv: MOExpr, lp:MMethodDef): MOAttrSite is abstract
+	# Clone a AST expression to a MOSite
+	# `mpropdef` is the local property containing this site (or expression-site)
+	# Return a MOSite
+	# The redefititions in ASendExpr and AST node for read attribute must check the ast2mo_clone_table,
+	# in case or the site is already created in expression position
+	fun ast2mo_site(mpropdef: MPropdef): MOSite is abstract
 end
 
 redef class AAttrExpr
-	redef fun ast2mo do return moattrsite.as(nullable MOReadSite)
-
-	redef fun make_mo(vm, recv, lp)
+	redef fun ast2mo(mpropdef)
 	do
-		var moattr = new MOReadSite(self, recv, lp)
-		var recv_class = n_expr.mtype.get_mclass(vm).as(not null)
-		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
-		return moattr
-	end
+		var sup = super
+		if sup != null then return sup
 
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
-end
-
-redef class AAttrAssignExpr
-	redef fun make_mo(vm, recv, lp)
-	do
-		var moattr = new MOWriteSite(self, recv, lp)
-		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
-		recv_class.set_site_pattern(moattr, recv_class.mclass_type, mproperty.as(not null))
-		return moattr
-	end
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
+		if self isa AAttrAssignExpr or self isa AAttrReassignExpr then
+			# AAttrReassignExpr is not a subtype of AAttrAssignExpr, so we must do a checktype herebefore.
+			var write_site = new MOWriteSite(self, mpropdef)
+			sys.ast2mo_clone_table[self] = write_site
+			write_site.recv_expr = n_expr.ast2mo_expr
+			return write_site
+		else
+			# Read attribute access (or test to know if the attribute is set)
+			var read_site = new MOReadSite(self, mpropdef)
+			sys.ast2mo_clone_table[self] = read_site
+			read_site.recv_expr = n_expr.ast2mo
+			return read_site
+		end
 	end
 end
 
 redef class AIsaExpr
-	super AToCompile
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
-
 	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
 		var ignore = false
@@ -667,15 +637,6 @@ redef class AIsaExpr
 end
 
 redef class AAsCastExpr
-	super AToCompile
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var ret = super
-		ssa.propdef.as(AMethPropdef).to_compile.add(self)
-		return ret
-	end
-
 	redef fun compile_ast(vm: VirtualMachine, lp: MMethodDef)
 	do
 		var ignore = false
@@ -766,27 +727,27 @@ redef class ANewExpr
 	redef fun ast2mo do return monew
 end
 
-redef class ANode
-	# True if self is a primitive node
-	fun is_primitive_node: Bool
-	do
-		if self isa AIntExpr then return true
-		if self isa ACharExpr then return true
-		if self isa ANullExpr then return true
-		if self isa AStringFormExpr then return true
-		if self isa ATrueExpr then return true
-		if self isa AFalseExpr then return true
-		if self isa ASuperstringExpr then return true
-		return false
-	end
-
-	# Convert AST node into MOExpression
-	fun ast2mo: nullable MOExpr
-	do
-		if not is_primitive_node then trace("WARN: NYI {self}")
-		return null
-	end
-end
+#redef class ANode
+#	# True if self is a primitive node
+#	fun is_primitive_node: Bool
+#	do
+#		if self isa AIntExpr then return true
+#		if self isa ACharExpr then return true
+#		if self isa ANullExpr then return true
+#		if self isa AStringFormExpr then return true
+#		if self isa ATrueExpr then return true
+#		if self isa AFalseExpr then return true
+#		if self isa ASuperstringExpr then return true
+#		return false
+#	end
+#
+#	# Convert AST node into MOExpression
+#	fun ast2mo: nullable MOExpr
+#	do
+#		if not is_primitive_node then trace("WARN: NYI {self}")
+#		return null
+#	end
+#end
 
 redef class ASelfExpr
 	redef fun ast2mo
@@ -802,73 +763,64 @@ redef class AVarExpr
 	end
 end
 
-# Common call to all AST node that must be compiled into MO node
-class AToCompile
-	# Compile the AST to into a MO node
-	fun compile_ast(vm: VirtualMachine, lp: MMethodDef) is abstract
-end
-
 redef class APropdef
-	# List of ast node to compile
-	var to_compile = new List[AToCompile]
-
-	# list of return expression of the optimizing model
-	# Null if this fuction is a procedure
-	var mo_dep_exprs: nullable MOExpr = null
-
+#	# List of ast node to compile
+#	var to_compile = new List[AToCompile]
+#
+#	# list of return expression of the optimizing model
+#	# Null if this fuction is a procedure
+#	var mo_dep_exprs: nullable MOExpr = null
+#
 	# Force to compute the implementation of the site when AST node is compiled
 	redef fun compile(vm)
 	do
 		super
 
 		if self isa AMethPropdef then
-			# Generate MO for sites inside the propdef
-			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
-
-			# Generate MO for return of the propdef
-			if returnvar.dep_exprs.length == 1 then
-				var moexpr = returnvar.dep_exprs.first.ast2mo
-				if moexpr != null then 
-					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
-				else
-					mo_dep_exprs = new MOPrimitive
-				end
-			else if returnvar.dep_exprs.length > 1 then
-				var deps = new List[MOExpr]
-				for a_expr in returnvar.dep_exprs do
-					var moexpr = a_expr.ast2mo
-					if moexpr != null then deps.add(moexpr)
-				end
-
-				if deps.length == 1 then
-					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, deps.first)
-				else if deps.length > 1 then
-					mo_dep_exprs = new MOPhiVar(returnvar, returnvar.position, deps)
-				else
-					mo_dep_exprs = new MOPrimitive
-				end
+			for site in object_sites do
+				site.ast2mo_site(self)
 			end
 
-			mpropdef.as(MMethodDef).return_expr = mo_dep_exprs
-		end
+			mpropdef.as(MMethodDef).return_expr = returnvar.get_movar(self)
 
-		mpropdef.compile(vm)
+			mpropdef.compile_mo
+		end
+		
+#			# Generate MO for sites inside the propdef
+#			for expr in to_compile do expr.compile_ast(vm, mpropdef.as(MMethodDef))
+#
+#			# Generate MO for return of the propdef
+#			if returnvar.dep_exprs.length == 1 then
+#				var moexpr = returnvar.dep_exprs.first.ast2mo
+#				if moexpr != null then 
+#					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, moexpr)
+#				else
+#					mo_dep_exprs = new MOPrimitive
+#				end
+#			else if returnvar.dep_exprs.length > 1 then
+#				var deps = new List[MOExpr]
+#				for a_expr in returnvar.dep_exprs do
+#					var moexpr = a_expr.ast2mo
+#					if moexpr != null then deps.add(moexpr)
+#				end
+#
+#				if deps.length == 1 then
+#					mo_dep_exprs = new MOSSAVar(returnvar, returnvar.position, deps.first)
+#				else if deps.length > 1 then
+#					mo_dep_exprs = new MOPhiVar(returnvar, returnvar.position, deps)
+#				else
+#					mo_dep_exprs = new MOPrimitive
+#				end
+#			end
+#
+#			mpropdef.as(MMethodDef).return_expr = mo_dep_exprs
+#		end
+
+#		mpropdef.compile(vm)
 	end
 end
 
 redef class ASendExpr
-	super AToCompile
-
-	# Site invocation associated with this node
-	var mocallsite: nullable MOCallSite
-
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var sup = super
-		ssa.propdef.to_compile.add(self)
-		return sup
-	end
-
 	redef fun ast2mo
 	do
 		return mocallsite
