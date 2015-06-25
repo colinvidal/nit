@@ -23,14 +23,14 @@ end
 
 redef class Sys
 	# Tell if preexistence extensions are disabled
-	var disable_preexistence_extensions: Bool
+	var disable_preexistence_extensions: Bool is noinit
 
 	# Tell if inter-procedural analysis is disabled
-	var disable_method_return: Bool
+	var disable_method_return: Bool is noinit
 end
 
 redef class ModelBuilder	
-	redef fun run_virtual_machine(mainmodule: MModule, arguments: Array[String])
+	redef fun run_virtual_machine(mainmodule, arguments)
 	do
 		sys.disable_preexistence_extensions = toolcontext.disable_preexistence_extensions.value
 		sys.disable_method_return = toolcontext.disable_method_return.value
@@ -73,7 +73,7 @@ redef class MPropDef
 	do
 		var flag = false
 		if self isa MMethodDef then
-			if return_expr_is_object then flag = return_expr.is_pre_nper
+			if return_expr_is_object then flag = return_expr.as(not null).is_pre_nper
 		end
 
 		for expr in exprs_preexist_mut do expr.init_preexist
@@ -88,7 +88,7 @@ redef class MPropDef
 	do
 		var flag = false
 		if self isa MMethodDef then
-			if return_expr_is_object then flag = return_expr.is_npre_nper
+			if return_expr_is_object then flag = return_expr.as(not null).is_npre_nper
 		end
 
 		for expr in exprs_npreexist_mut do expr.init_preexist
@@ -110,7 +110,7 @@ redef class MPropDef
 	end
 
 	# TODO: make preexistence analysis on attributes with body too
-	redef fun compile(vm)
+	redef fun compile_mo
 	do
 		super
 
@@ -122,14 +122,17 @@ redef class MMethodDef
 	# Compute the preexistence of the return of the method expression
 	fun preexist_return: Int
 	do
+		# preexist_return is called only when return_expr is not null
+		var expr = return_expr.as(not null)
+
 		if not preexist_analysed then
-			return_expr.set_npre_nper
-			return return_expr.preexist_expr_value
-		else if not return_expr.is_pre_unknown then
-			return return_expr.preexist_expr_value
+			expr.set_npre_nper
+			return expr.preexist_expr_value
+		else if not expr.is_pre_unknown then
+			return expr.preexist_expr_value
 		else
-			return_expr.set_recursive
-			return return_expr.preexist_expr_value
+			expr.set_recursive
+			return expr.preexist_expr_value
 		end
 	end
 

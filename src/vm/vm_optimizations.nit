@@ -21,9 +21,9 @@ import preexistence
 
 redef class VirtualMachine
 	# Add optimization of the method dispatch
-	redef fun callsite(callsite: nullable CallSite, arguments: Array[Instance]): nullable Instance
+	redef fun callsite(callsite, arguments)
 	do
-		var initializers = callsite.mpropdef.initializers
+		var initializers = callsite.as(not null).mpropdef.initializers
 		if initializers.is_empty then return send_optimize(callsite.as(not null), arguments)
 
 		var recv = arguments.first
@@ -31,7 +31,7 @@ redef class VirtualMachine
 		for p in initializers do
 			if p isa MMethod then
 				var args = [recv]
-				for x in p.intro.msignature.mparameters do
+				for x in p.intro.msignature.as(not null).mparameters do
 					args.add arguments[i]
 					i += 1
 				end
@@ -59,9 +59,9 @@ redef class VirtualMachine
 
 		var propdef
 		if callsite.status == 1 then
-			propdef = method_dispatch_sst(recv.vtable.internal_vtable, callsite.offset)
+			propdef = method_dispatch_sst(recv.vtable.as(not null).internal_vtable, callsite.offset)
 		else
-			propdef = method_dispatch_ph(recv.vtable.internal_vtable, recv.vtable.mask,
+			propdef = method_dispatch_ph(recv.vtable.as(not null).internal_vtable, recv.vtable.as(not null).mask,
 				callsite.id, callsite.offset)
 		end
 
@@ -76,7 +76,7 @@ redef class AAttrFormExpr
 	#
 	# The relative position of this attribute if perfect hashing is used,
 	# The absolute position of this attribute if SST is used
-	var offset: Int
+	var offset: Int is noinit
 
 	# Indicate the status of the optimization for this node
 	#
@@ -86,7 +86,7 @@ redef class AAttrFormExpr
 	var status: Int = 0
 
 	# Identifier of the class which introduced the attribute
-	var id: Int
+	var id: Int is noinit
 
 	# Optimize this attribute access
 	# * `mproperty` The attribute which is accessed
@@ -100,7 +100,7 @@ redef class AAttrFormExpr
 			status = 1
 		else
 			# Otherwise, perfect hashing must be used
-			id = mproperty.intro_mclassdef.mclass.vtable.id
+			id = mproperty.intro_mclassdef.mclass.vtable.as(not null).id
 			offset = mproperty.offset
 			status = 2
 		end
@@ -127,7 +127,7 @@ redef class AAttrExpr
 			i = v.read_attribute_sst(recv.internal_attributes, offset)
 		else
 			# PH
-			i = v.read_attribute_ph(recv.internal_attributes, recv.vtable.internal_vtable, recv.vtable.mask, id, offset)
+			i = v.read_attribute_ph(recv.internal_attributes, recv.vtable.as(not null).internal_vtable, recv.vtable.as(not null).mask, id, offset)
 		end
 
 		# If we get a `MInit` value, throw an error
@@ -165,8 +165,8 @@ redef class AAttrAssignExpr
 		if status == 1 then
 			v.write_attribute_sst(recv.internal_attributes, offset, i)
 		else
-			v.write_attribute_ph(recv.internal_attributes, recv.vtable.internal_vtable,
-					recv.vtable.mask, id, offset, i)
+			v.write_attribute_ph(recv.internal_attributes, recv.vtable.as(not null).internal_vtable,
+					recv.vtable.as(not null).mask, id, offset, i)
 		end
 
 		#TODO : we need recompilations here
@@ -180,7 +180,7 @@ redef class CallSite
 	#
 	# The relative position of this MMethod if perfect hashing is used,
 	# The absolute position of this MMethod if SST is used
-	var offset: Int
+	var offset: Int is noinit
 
 	# Indicate the status of the optimization for this node
 	#
@@ -190,7 +190,7 @@ redef class CallSite
 	var status: Int = 0
 
 	# Identifier of the class which introduced the MMethod
-	var id: Int
+	var id: Int is noinit
 
 	# Optimize a method dispatch,
 	# If this method is always at the same position in virtual table, we can use direct access,
@@ -205,16 +205,16 @@ redef class CallSite
 			offset = mproperty.offset
 			status = 2
 		end
-		id = mproperty.intro_mclassdef.mclass.vtable.id
+		id = mproperty.intro_mclassdef.mclass.vtable.as(not null).id
 	end
 end
 
 redef class AIsaExpr
 	# Identifier of the target class type
-	var id: Int
+	var id: Int is noinit
 
 	# If the Cohen test is used, the position of the target id in vtable
-	var position: Int
+	var position: Int is noinit
 
 	# Indicate the status of the optimization for this node
 	#
@@ -237,10 +237,10 @@ redef class AIsaExpr
 		# If this test can be optimized, directly call appropriate subtyping methods
 		if status == 1 and recv.mtype isa MClassType then
 			# Direct access
-			return v.bool_instance(v.inter_is_subtype_sst(id, position, recv.mtype.as(MClassType).mclass.vtable.internal_vtable))
+			return v.bool_instance(v.inter_is_subtype_sst(id, position, recv.mtype.as(MClassType).mclass.vtable.as(not null).internal_vtable))
 		else if status == 2 and recv.mtype isa MClassType then
 			# Perfect hashing
-			return v.bool_instance(v.inter_is_subtype_ph(id, recv.vtable.mask, recv.mtype.as(MClassType).mclass.vtable.internal_vtable))
+			return v.bool_instance(v.inter_is_subtype_ph(id, recv.vtable.as(not null).mask, recv.mtype.as(MClassType).mclass.vtable.as(not null).internal_vtable))
 		else
 			# Use the slow path (default)
 			return v.bool_instance(v.is_subtype(recv.mtype, mtype))
@@ -270,16 +270,16 @@ redef class AIsaExpr
 			# We use perfect hashing
 			status = 2
 		end
-		id = target.mclass.vtable.id
+		id = target.mclass.vtable.as(not null).id
 	end
 end
 
 redef class AAsCastExpr
 	# Identifier of the target class type
-	var id: Int
+	var id: Int is noinit
 
 	# If the Cohen test is used, the position of the target id in vtable
-	var position: Int
+	var position: Int is noinit
 
 	# Indicate the status of the optimization for this node
 	#
@@ -304,10 +304,10 @@ redef class AAsCastExpr
 		var res: Bool
 		if status == 1 and recv.mtype isa MClassType then
 			# Direct access
-			res = v.inter_is_subtype_sst(id, position, recv.mtype.as(MClassType).mclass.vtable.internal_vtable)
+			res = v.inter_is_subtype_sst(id, position, recv.mtype.as(MClassType).mclass.vtable.as(not null).internal_vtable)
 		else if status == 2 and recv.mtype isa MClassType then
 			# Perfect hashing
-			res = v.inter_is_subtype_ph(id, recv.vtable.mask, recv.mtype.as(MClassType).mclass.vtable.internal_vtable)
+			res = v.inter_is_subtype_ph(id, recv.vtable.as(not null).mask, recv.mtype.as(MClassType).mclass.vtable.as(not null).internal_vtable)
 		else
 			# Use the slow path (default)
 			res = v.is_subtype(recv.mtype, amtype)
@@ -342,12 +342,12 @@ redef class AAsCastExpr
 			# We use perfect hashing
 			status = 2
 		end
-		id = target.mclass.vtable.id
+		id = target.mclass.vtable.as(not null).id
 	end
 end
 
 redef class MPropDef
-	redef fun compile(vm)
+	redef fun compile_mo
 	do
 		super
 

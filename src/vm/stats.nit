@@ -930,7 +930,7 @@ redef class MOSubtypeSite
 end
 
 redef class MPropDef
-	redef fun compile(vm)
+	redef fun compile_mo
 	do
 		super
 
