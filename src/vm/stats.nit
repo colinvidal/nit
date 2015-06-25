@@ -136,104 +136,23 @@ redef class APropdef
 	end
 end
 
-redef class ANewExpr
-	redef fun generate_basic_blocks(ssa, old_block)
-	do
-		var sup = super
-		sys.pstats.inc("ast_new")
-		if monew != null then sys.pstats.compiled_new.add(monew.as(not null))
-		return sup
-	end
-end
-
-redef class ANode
-	redef fun ast2mo
-	do
-		if is_primitive_node then
-			pstats.inc("primitive_sites")
-		else
-			pstats.inc("nyi")
-		end
-
-		return super
-	end
-end
-
 redef class AAttrPropdef
 	# When the node encode accessors who are redefined, tell if it's already count as "attr_redef"
 	var attr_redef_taken_into = false
 end
 
 redef class ASendExpr
-	redef fun compile_ast(vm, lp)
+	redef fun ast2mo_method(mpropdef, called_node_ast, is_attribute)
 	do
-		super(vm, lp)
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			pstats.inc("lits")
-		else if n_expr.mtype.as(not null).is_primitive_type then
-			pstats.inc("primitive_sites")
-		end
-	end
-
-	redef fun compile_ast_method(vm, lp, recv, node_ast, is_attribute)
-	do
-		super(vm, lp, recv, node_ast, is_attribute)
+		var sup = super
 
 		# It's an accessors (with redefs) dispatch
-		if is_attribute and not node_ast.as(AAttrPropdef).attr_redef_taken_into then 
+		if is_attribute and not called_node_ast.as(AAttrPropdef).attr_redef_taken_into then 
 			pstats.inc("attr_redef")
-			node_ast.as(AAttrPropdef).attr_redef_taken_into = true
+			called_node_ast.as(AAttrPropdef).attr_redef_taken_into = true
 		end
-	end
-end
 
-redef class AAsCastExpr
-	redef fun compile_ast(vm, lp)
-	do
-		super(vm, lp)
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			pstats.inc("lits")
-		else if n_expr.mtype.as(not null).is_primitive_type then
-			pstats.inc("primitive_sites")
-		else if n_type.mtype.as(not null).get_mclass(vm).as(not null).mclass_type.is_primitive_type then
-			pstats.inc("primitive_sites")
-		end
-	end
-end
-
-redef class AAttrFormExpr
-	redef fun compile_ast(vm, lp)
-	do
-		super(vm, lp)
-
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			pstats.inc("lits")
-		else if n_expr.mtype.as(not null).is_primitive_type then
-			pstats.inc("primitive_sites")
-		end
-	end
-end
-
-redef class AIsaExpr
-	redef fun compile_ast(vm, lp)
-	do
-		super(vm, lp)
-		
-		if n_expr.mtype isa MNullType or n_expr.mtype == null then
-			pstats.inc("lits")
-		else if n_expr.mtype.as(not null).get_mclass(vm).as(not null).mclass_type.is_primitive_type then
-			pstats.inc("primitive_sites")
-		end
-	end
-end
-
-redef class ABinopExpr
-	# If a binary operation on primitives types return something (or test of equality), it's primitive
-	# TODO: what about obj1 + obj2 ?
-	redef fun ast2mo do
-		pstats.inc("primitive_sites")
-		return super
+		return sup
 	end
 end
 
