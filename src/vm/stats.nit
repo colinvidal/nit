@@ -127,6 +127,15 @@ redef class VirtualMachine
 	end
 end
 
+redef class APropdef
+	#
+	redef fun compile(vm)
+	do
+		super
+		sys.pstats.map["object_sites"] = sys.pstats.map["object_sites"] + object_sites.length
+	end
+end
+
 redef class ANewExpr
 	redef fun generate_basic_blocks(ssa, old_block)
 	do
@@ -482,6 +491,9 @@ class MOStats
 		for newsite in compiled_new do if not newsite.pattern.cls.abstract_loaded then compiled_new_unloaded += 1
 		file.write("compiled new of unloaded classes, {compiled_new_unloaded}")
 
+		file.write("\n")
+		file.write("object sites, {map["object_sites"]}\n")
+
 		file.close
 	end
 
@@ -512,6 +524,7 @@ class MOStats
 		analysed_sites.add_all(counters.analysed_sites)
 		compiled_methods.add_all(counters.compiled_methods)
 		compiled_new.add_all(counters.compiled_new)
+		map["object_sites"] = counters.get("object_sites")
 	end
 
 	init
@@ -701,6 +714,8 @@ class MOStats
 		map["inter_return_from_other"] = 0
 		map["return_from_not_object"] = 0
 		map["procedure"] = 0
+
+		map["object_sites"] = 0
 	end
 
 	# Tell where the return of method is come from

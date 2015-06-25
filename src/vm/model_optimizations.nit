@@ -22,7 +22,7 @@ redef class Sys
 	var trace_on: Bool
 
 	# Hashmap used for clone AST to MO
-	var ast2mo_clone_table = new HashMap[AExpr, MOExpr]
+	var ast2mo_clone_table = new HashMap[AExpr, MOEntity]
 end
 
 redef class ModelBuilder
@@ -241,8 +241,13 @@ redef class MMethodDef
 	var mosites = new List[MOSite]
 end
 
+# Root hierarchy of MO entities
+abstract class MOEntity
+end
+
 # Root hierarchy of expressions
 abstract class MOExpr
+	super MOEntity
 end
 
 # MO of variables
@@ -254,6 +259,9 @@ abstract class MOVar
 
 	# The offset of the variable in it environment, or the position of parameter
 	var offset: Int
+
+	# True if the variable is a parameter
+	var parameter: Bool
 
 	# Compute concrete receivers (see MOCallSite / MOSite)
 	fun compute_concretes(concretes: List[MClass]): Bool is abstract
@@ -326,6 +334,8 @@ end
 
 # Root hierarchy of objets sites
 abstract class MOSite
+	super MOEntity
+
 	# The AST node where this site comes from
 	var ast: AExpr 
 
@@ -424,9 +434,11 @@ class MOWriteSite
 	super MOAttrSite
 
 	redef type P: MOWriteSitePattern
+end
 
-	# Value to assign to the attribute
-#	var arg: MOExpr
+# MO of null
+class MONull
+	super MOLit
 end
 
 redef class MClass
@@ -570,43 +582,39 @@ redef class MType
 end
 
 redef class AExpr
-	# Clone a AST expression to a MOExpr
+	# Clone a AST expression to a MOEntity
 	# `mpropdef` is the local property containing this expression (or expression-site)
-	# Return a MOExpr it's already created (already in the clone table), null otherwise
-	# The redefinitions must return the new MOExpr created.
-	fun ast2mo_expr(mpropdef: MPropDef): nullable MOExpr
+	# Return a MOEntity it's already created (already in the clone table).
+	# Otherwise, create it, set it in clone table, set it's dependencies, return it.
+	fun ast2mo(mpropdef: MPropDef): MOEntity is abstract
+
+	# Return the MOEntity if it's already on clone table
+	fun get_mo_from_clone_table: nullable MOEntity
 	do
 		if sys.ast2mo_clone_table.has_key(self) then
 			return sys.ast2mo_clone_table[self]
 		end
 		return null
 	end
-
-	# Clone a AST expression to a MOSite
-	# `mpropdef` is the local property containing this site (or expression-site)
-	# Return a MOSite
-	# The redefititions in ASendExpr and AST node for read attribute must check the ast2mo_clone_table,
-	# in case or the site is already created in expression position
-	fun ast2mo_site(mpropdef: MPropdef): MOSite is abstract
 end
 
 redef class AAttrExpr
 	redef fun ast2mo(mpropdef)
 	do
-		var sup = super
-		if sup != null then return sup
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
 
 		if self isa AAttrAssignExpr or self isa AAttrReassignExpr then
 			# AAttrReassignExpr is not a subtype of AAttrAssignExpr, so we must do a checktype herebefore.
 			var write_site = new MOWriteSite(self, mpropdef)
 			sys.ast2mo_clone_table[self] = write_site
-			write_site.recv_expr = n_expr.ast2mo_expr
+			write_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
 			return write_site
 		else
 			# Read attribute access (or test to know if the attribute is set)
 			var read_site = new MOReadSite(self, mpropdef)
 			sys.ast2mo_clone_table[self] = read_site
-			read_site.recv_expr = n_expr.ast2mo
+			read_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
 			return read_site
 		end
 	end
@@ -633,6 +641,14 @@ redef class AIsaExpr
 			recv_class.set_subtype_pattern(most, recv_class.mclass_type)
 			lp.mosites.add(most)
 		end
+	end
+
+	redef fun ast2mo(mproperty)
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+
+
 	end
 end
 
@@ -913,4 +929,3 @@ end
 redef class ANotExpr
 	redef fun ast2mo do return n_expr.ast2mo
 end
-
