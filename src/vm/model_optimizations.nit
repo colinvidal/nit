@@ -324,10 +324,17 @@ class MONew
 	super MOExpr
 
 	# The local property containing this site 
-	var lp: MMethodDef
+	var lp: MPropDef
 
 	# The pattern of this site
 	var pattern: MONewPattern is writable, noinit
+
+	# TODO: remove the cast to MMethodDef
+	init(mpropdef: MPropDef)
+	do
+		lp = mpropdef
+		lp.as(MMethodDef).monews.add(self)
+	end
 end
 
 # MO of super calls
@@ -391,6 +398,14 @@ abstract class MOSite
 		end
 		return concretes_receivers.as(not null)
 	end
+
+	# TODO: remove the cast to MMethodDef
+	init(ast: AExpr, mpropdef: MPropDef)
+	do
+		self.ast = ast
+		lp = mpropdef
+		lp.as(MMethodDef).mosites.add(self)
+	end
 end
 
 # MO of a subtype test site
@@ -401,6 +416,13 @@ abstract class MOSubtypeSite
 
 	# Static type on which the test is applied
 	var target: MType
+
+	# TODO: remove the cast to MMethodDef
+	init(ast: AExpr, mpropdef: MPropDef, target: MType)
+	do
+		super
+		self.target = target
+	end
 end
 
 # MO of .as(Type) expr
@@ -673,7 +695,6 @@ redef class AAttrExpr
 		var attr_site = new MOReadSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -693,7 +714,6 @@ redef class AIssetAttrExpr
 		var attr_site = new MOReadSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -713,7 +733,6 @@ redef class AAttrAssignExpr
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -733,7 +752,6 @@ redef class AAttrReassignExpr
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -753,7 +771,6 @@ redef class AIsaExpr
 		# TODO: be sure that cast_type is never null here
 		var cast_site = new MOIsaSubtypeSite(self, mpropdef, cast_type.as(not null))
 		sys.ast2mo_clone_table[self] = cast_site
-		mpropdef.as(MMethodDef).mosites.add(cast_site)
 		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
 	
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -773,7 +790,6 @@ redef class AAsCastExpr
 		# TODO: be sure that n_type.mtype is never null here
 		var cast_site = new MOAsSubtypeSite(self, mpropdef, n_type.mtype.as(not null)) 
 		sys.ast2mo_clone_table[self] = cast_site
-		mpropdef.as(MMethodDef).mosites.add(cast_site)
 		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -913,8 +929,6 @@ redef class ASendExpr
 		var gp = called_node_ast.mpropdef.as(not null).mproperty
 
 		recv_class.set_site_pattern(moattr, recv_class.mclass_type, gp)
-		# TODO: remove this cast when the analysis is safe with attribute body
-		mpropdef.as(MMethodDef).mosites.add(moattr)
 
 		return moattr
 	end
@@ -928,8 +942,6 @@ redef class ASendExpr
 		var mocallsite = new MOCallSite(self, mpropdef)
 		
 		sys.ast2mo_clone_table[self] = mocallsite
-		# TODO: remove this cast when the analysis is safe with attribute body
-		mpropdef.as(MMethodDef).mosites.add(mocallsite)
 		recv_class.set_site_pattern(mocallsite, recv_class.mclass_type, cs.mproperty)
 
 		mocallsite.expr_recv = get_receiver(mpropdef, n_expr)
@@ -1014,8 +1026,6 @@ redef class ASuperExpr
 #		var mosuper = new MOSuperSite(self, mpropdef)
 #		sys.ast2mo_clone_table[self] = mosuper
 #
-#		# TODO: remove this cast when the analysis is safe with attribute body
-#		mpropdef.as(MMethodDef).mosites.add(mosuper)
 #		recv_class.set_site_pattern(mosuper, recv_class.mclass_type, called_mproperty)
 #
 #		mosuper.expr_recv = n_args.n_exprs.first.ast2mo(mpropdef).as(MOExpr)
