@@ -667,11 +667,12 @@ redef class MOSite
 	var site_type: String is noinit
 
 	# Non-recursive origin of the dependency
-	var origin = new DependencyTrace(expr_recv)
+	var origin: DependencyTrace is noinit
 
 	# Count the implementation of the site
 	fun stats(vm: VirtualMachine)
 	do
+		origin = new DependencyTrace(expr_recv)
 		origin.trace
 		incr_preexist(vm)
 
