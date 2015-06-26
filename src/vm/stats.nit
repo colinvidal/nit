@@ -447,6 +447,7 @@ class MOStats
 		compiled_methods.add_all(counters.compiled_methods)
 		compiled_new.add_all(counters.compiled_new)
 		map["ast_sites"] = counters.get("ast_sites")
+		map["new_sites"] = counters.get("new_sites")
 	end
 
 	init
@@ -695,7 +696,6 @@ redef class MOSite
 			end
 
 			sys.pstats.inc("object_sites")
-			if expr_recv isa MONew then sys.pstats.inc("new_sites")
 		end
 
 		if print_location_preexist then dump_location_site
