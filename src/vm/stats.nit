@@ -132,7 +132,7 @@ redef class APropdef
 	redef fun compile(vm)
 	do
 		super
-		sys.pstats.map["object_sites"] = sys.pstats.map["object_sites"] + object_sites.length
+		sys.pstats.map["ast_sites"] = sys.pstats.map["ast_sites"] + object_sites.length
 	end
 end
 
@@ -411,6 +411,8 @@ class MOStats
 		file.write("compiled new of unloaded classes, {compiled_new_unloaded}")
 
 		file.write("\n")
+		file.write("ast sites, {map["ast_sites"]}\n")
+		file.write("new sites, {map["new_sites"]}\n")
 		file.write("object sites, {map["object_sites"]}\n")
 
 		file.close
@@ -634,6 +636,8 @@ class MOStats
 		map["return_from_not_object"] = 0
 		map["procedure"] = 0
 
+		map["ast_sites"] = 0
+		map["new_sites"] = 0
 		map["object_sites"] = 0
 	end
 
@@ -676,6 +680,9 @@ redef class MOSite
 			buf += "\timpl: {get_impl(vm)}\n"
 			print(buf)
 		end
+
+		sys.pstats.inc("object_sites")
+		if expr_recv isa MONew then sys.pstats.inc("new_sites")
 	end
 
 	# Print the pattern (RST/GP or target class for subtype test)
@@ -855,7 +862,6 @@ redef class MPropDef
 
 		if self isa MMethodDef then
 			for site in self.mosites do
-				print("stat site {site}")
 				site.stats(vm)
 				sys.pstats.analysed_sites.add(site)
 			end
