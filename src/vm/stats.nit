@@ -212,6 +212,7 @@ class MOStats
 		file.write("self, {self_meth}, {self_attr}, {self_cast}, {self_sum}, \n")
 
 		file.write("preexist, {map["method_preexist"]}, {map["attribute_preexist"]}, {map["cast_preexist"]}, {map["preexist"]}, \n")
+		file.write("preexist_primitive, {map["method_preexist_primitive"]}, {map["attribute_preexist_primitive"]}, {map["cast_preexist_primitive"]}, {map["preexist_primitive"]}\n")
 		file.write("npreexist, {map["method_npreexist"]}, {map["attribute_npreexist"]}, {map["cast_npreexist"]}, {map["npreexist"]}, \n")
 
 		buf = "{map["method_concretes"]},"
@@ -527,6 +528,9 @@ class MOStats
 		# incr if a site is preexist
 		map["preexist"] = 0
 
+		# incr if a site is a primitive (and so, preexists)
+		map["preexist_primitive"] = 0
+
 		# incr if a site isn't preexist
 		map["npreexist"] = 0
 
@@ -570,6 +574,7 @@ class MOStats
 
 		map["method"] = 0
 		map["method_preexist"] = 0
+		map["method_preexist_primitive"] = 0
 		map["method_npreexist"] = 0
 		map["method_self"] = 0
 		map["method_concretes"] = 0
@@ -590,6 +595,7 @@ class MOStats
 
 		map["attribute"] = 0
 		map["attribute_preexist"] = 0
+		map["attribute_preexist_primitive"] = 0
 		map["attribute_npreexist"] = 0
 		map["attribute_self"] = 0
 		map["attribute_concretes"] = 0
@@ -610,6 +616,7 @@ class MOStats
 
 		map["cast"] = 0
 		map["cast_preexist"] = 0
+		map["cast_preexist_primitive"] = 0
 		map["cast_npreexist"] = 0
 		map["cast_self"] = 0
 		map["cast_concretes"] = 0
@@ -666,28 +673,31 @@ redef class MOSite
 	fun stats(vm: VirtualMachine)
 	do
 		origin.trace
-
 		incr_preexist(vm)
-		incr_from_site
-		incr_concrete_site(vm)
-		incr_self
-		incr_rst_unloaded(vm)
-		incr_type_impl(vm)
 
-		if print_location_preexist then dump_location_site
+		if not origin.from_primitive then
+			incr_from_site
+			incr_concrete_site(vm)
+			incr_self
+			incr_rst_unloaded(vm)
+			incr_type_impl(vm)
 
-		if print_site_state then
-			var buf = "site {self}\n"
-			buf += "\tpattern: {pattern2str}\n"
-			buf += "\tlp: {lp.mclassdef.name}::{lp.name}\n"
-			buf += "\tlocation: {ast.location}\n"
-			buf += "\tpreexist/mutable: {expr_recv.is_pre}/{expr_recv.is_nper}\n"
-			buf += "\timpl: {get_impl(vm)}\n"
-			print(buf)
+
+			if print_site_state then
+				var buf = "site {self}\n"
+				buf += "\tpattern: {pattern2str}\n"
+				buf += "\tlp: {lp.mclassdef.name}::{lp.name}\n"
+				buf += "\tlocation: {ast.location}\n"
+				buf += "\tpreexist/mutable: {expr_recv.is_pre}/{expr_recv.is_nper}\n"
+				buf += "\timpl: {get_impl(vm)}\n"
+				print(buf)
+			end
+
+			sys.pstats.inc("object_sites")
+			if expr_recv isa MONew then sys.pstats.inc("new_sites")
 		end
 
-		sys.pstats.inc("object_sites")
-		if expr_recv isa MONew then sys.pstats.inc("new_sites")
+		if print_location_preexist then dump_location_site
 	end
 
 	# Print the pattern (RST/GP or target class for subtype test)
@@ -713,8 +723,16 @@ redef class MOSite
 	fun incr_preexist(vm: VirtualMachine) do 
 		var pre = expr_recv.is_pre
 
-		incr_specific_counters(pre, "preexist", "npreexist")
-		incr_specific_counters(pre, "{site_type}_preexist", "{site_type}_npreexist")
+		if pre and origin.from_primitive then
+			sys.pstats.inc("preexist_primitive")
+			sys.pstats.inc("{site_type}_preexist_primitive")
+		else if pre then
+			sys.pstats.inc("preexist")
+			sys.pstats.inc("{site_type}_preexist")
+		else
+			sys.pstats.inc("npreexist")
+			sys.pstats.inc("{site_type}_npreexist")
+		end
 	end
 
 	#
