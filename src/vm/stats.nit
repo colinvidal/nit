@@ -445,7 +445,7 @@ class MOStats
 		analysed_sites.add_all(counters.analysed_sites)
 		compiled_methods.add_all(counters.compiled_methods)
 		compiled_new.add_all(counters.compiled_new)
-		map["object_sites"] = counters.get("object_sites")
+		map["ast_sites"] = counters.get("ast_sites")
 	end
 
 	init
@@ -866,6 +866,7 @@ redef class MPropDef
 				sys.pstats.analysed_sites.add(site)
 			end
 
+			for newexpr in self.monews do sys.pstats.inc("new_sites")
 			sys.pstats.compiled_methods.add(self)
 			sys.pstats.get_method_return_origin(self)
 		end
