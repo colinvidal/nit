@@ -437,10 +437,6 @@ class MOStats
 		map["loaded_classes_explicits"] = counters.get("loaded_classes_explicits")
 		map["loaded_classes_implicits"] = counters.get("loaded_classes_implicits")
 		map["loaded_classes_abstracts"] = counters.get("loaded_classes_abstracts")
-		map["primitive_sites"] = counters.get("primitive_sites")
-		map["nyi"] = counters.get("nyi")
-		map["lits"] = counters.get("lits")
-		map["ast_new"] = counters.get("ast_new")
 		map["attr_redef"] = counters.get("attr_redef")
 		map["sites_final"] = counters.get("sites_final")
 		analysed_sites.add_all(counters.analysed_sites)
@@ -461,9 +457,6 @@ class MOStats
 		# incr when a class is abstract and loaded as super-class
 		map["loaded_classes_abstracts"] = 0
 
-		# incr when compile a instantiation site
-		map["ast_new"] = 0
-			
 		# incr when the site depends at least of one return expression
 		map["sites_from_meth_return"] = 0
 		map["sites_from_meth_return_cuc_pos"] = 0
@@ -517,15 +510,6 @@ class MOStats
 		# incr when the site is on leaf gp on global model
 		map["sites_final"] = 0
 		
-		# incr when site is on integer, char, string (not added into the MO)
-		map["primitive_sites"] = 0
-
-		# incr when the ast site is an unkown case (not added into the MO)
-		map["nyi"] = 0
-
-		# never use. Maybe usefull for enum if Nit add it (this cass should not be added into the MO)
-		map["lits"] = 0
-
 		# incr if a site is preexist
 		map["preexist"] = 0
 
