@@ -326,11 +326,19 @@ redef class MOExpr
 end
 
 redef class MOLit
-	redef var preexist_expr_value = pmask_PVAL_PER
+	redef fun preexist_expr
+	do
+		if is_pre_unknown then set_pval_per
+		return preexist_expr_value
+	end
+end
 
-	redef fun init_preexist do end 
-
-	redef fun preexist_expr do return preexist_expr_value
+redef class MOIsaSubtypeSite
+	redef fun preexist_expr
+	do
+		if is_pre_unknown then set_pval_per
+		return preexist_expr_value
+	end
 end
 
 redef class MOParam
@@ -361,11 +369,12 @@ redef class MONew
 end
 
 redef class MONull
-	redef fun preexist_expr
-	do
-		if is_pre_unknown then set_pval_per
-		return preexist_expr_value
-	end
+	redef var preexist_expr_value = pmask_PVAL_PER
+
+	redef fun init_preexist do end
+
+	redef fun preexist_expr do return preexist_expr_value
+
 end
 
 redef class MOPrimitive

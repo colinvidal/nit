@@ -411,6 +411,7 @@ end
 # MO of isa expr
 class MOIsaSubtypeSite
 	super MOSubtypeSite
+	super MOExpr
 end
 
 # MO of global properties sites
@@ -617,7 +618,7 @@ redef class ANode
 		var raw_expr = node.ast2mo(mpropdef)
 
 		# Just if stupid case of attr.as(AType1).as(AType2)
-		while raw_expr isa MOSubtypeSite do
+		while raw_expr isa MOAsSubtypeSite do
 			raw_expr = raw_expr.ast.as(AAsCastExpr).n_expr.ast2mo(mpropdef)
 		end
 
@@ -727,7 +728,7 @@ redef class AIsaExpr
 		if n_expr.mtype isa MNullType then return sys.monull
 
 		# TODO: be sure that cast_type is never null here
-		var cast_site = new MOSubtypeSite(self, mpropdef, cast_type.as(not null))
+		var cast_site = new MOIsaSubtypeSite(self, mpropdef, cast_type.as(not null))
 		sys.ast2mo_clone_table[self] = cast_site
 		cast_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
 	
@@ -746,7 +747,7 @@ redef class AAsCastExpr
 		if n_expr.mtype isa MNullType then return sys.monull
 
 		# TODO: be sure that n_type.mtype is never null here
-		var cast_site = new MOSubtypeSite(self, mpropdef, n_type.mtype.as(not null)) 
+		var cast_site = new MOAsSubtypeSite(self, mpropdef, n_type.mtype.as(not null)) 
 		sys.ast2mo_clone_table[self] = cast_site
 		cast_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
 	
