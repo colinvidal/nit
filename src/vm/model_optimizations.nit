@@ -673,6 +673,7 @@ redef class AAttrExpr
 		var attr_site = new MOReadSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
+		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -692,6 +693,7 @@ redef class AIssetAttrExpr
 		var attr_site = new MOReadSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
+		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -711,6 +713,7 @@ redef class AAttrAssignExpr
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
+		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -730,6 +733,7 @@ redef class AAttrReassignExpr
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
+		mpropdef.as(MMethodDef).mosites.add(attr_site)
 		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -749,6 +753,7 @@ redef class AIsaExpr
 		# TODO: be sure that cast_type is never null here
 		var cast_site = new MOIsaSubtypeSite(self, mpropdef, cast_type.as(not null))
 		sys.ast2mo_clone_table[self] = cast_site
+		mpropdef.as(MMethodDef).mosites.add(cast_site)
 		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
 	
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
@@ -768,8 +773,9 @@ redef class AAsCastExpr
 		# TODO: be sure that n_type.mtype is never null here
 		var cast_site = new MOAsSubtypeSite(self, mpropdef, n_type.mtype.as(not null)) 
 		sys.ast2mo_clone_table[self] = cast_site
+		mpropdef.as(MMethodDef).mosites.add(cast_site)
 		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
-	
+
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_subtype_pattern(cast_site, recv_class.mclass_type)
 

@@ -855,6 +855,7 @@ redef class MPropDef
 
 		if self isa MMethodDef then
 			for site in self.mosites do
+				print("stat site {site}")
 				site.stats(vm)
 				sys.pstats.analysed_sites.add(site)
 			end
