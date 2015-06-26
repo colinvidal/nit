@@ -668,12 +668,31 @@ redef class AAttrExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 		
 		var attr_site = new MOReadSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
+
+		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
+		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
+
+		return attr_site
+	end
+end
+
+redef class AIssetAttrExpr
+	redef fun ast2mo(mpropdef)
+	do
+		var mo_entity = get_mo_from_clone_table
+		if mo_entity != null then return mo_entity
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
+		
+		var attr_site = new MOReadSite(self, mpropdef)
+
+		sys.ast2mo_clone_table[self] = attr_site
+		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
@@ -687,12 +706,12 @@ redef class AAttrAssignExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 		
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
@@ -706,12 +725,12 @@ redef class AAttrReassignExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 		
 		var attr_site = new MOWriteSite(self, mpropdef)
 
 		sys.ast2mo_clone_table[self] = attr_site
-		attr_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		attr_site.expr_recv = get_receiver(mpropdef, n_expr)
 
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_site_pattern(attr_site, recv_class.mclass_type, mproperty.as(not null))
@@ -725,12 +744,12 @@ redef class AIsaExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 
 		# TODO: be sure that cast_type is never null here
 		var cast_site = new MOIsaSubtypeSite(self, mpropdef, cast_type.as(not null))
 		sys.ast2mo_clone_table[self] = cast_site
-		cast_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
 	
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_subtype_pattern(cast_site, recv_class.mclass_type)
@@ -744,12 +763,12 @@ redef class AAsCastExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 
 		# TODO: be sure that n_type.mtype is never null here
 		var cast_site = new MOAsSubtypeSite(self, mpropdef, n_type.mtype.as(not null)) 
 		sys.ast2mo_clone_table[self] = cast_site
-		cast_site.expr_recv = n_expr.ast2mo(mpropdef).as(MOExpr)
+		cast_site.expr_recv = get_receiver(mpropdef, n_expr)
 	
 		var recv_class = n_expr.mtype.as(not null).get_mclass(vm).as(not null)
 		recv_class.set_subtype_pattern(cast_site, recv_class.mclass_type)
@@ -849,7 +868,7 @@ redef class ASendExpr
 	do
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 	
 		var cs = callsite.as(not null)
 
@@ -923,20 +942,7 @@ redef class AParExpr
 	do 
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
-
-		var moexpr = n_expr.ast2mo(mpropdef)
-		sys.ast2mo_clone_table[self] = moexpr
-		return moexpr
-	end
-end
-
-redef class ANotExpr
-	redef fun ast2mo(mpropdef)
-	do 
-		var mo_entity = get_mo_from_clone_table
-		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 
 		var moexpr = n_expr.ast2mo(mpropdef)
 		sys.ast2mo_clone_table[self] = moexpr
@@ -949,7 +955,7 @@ redef class AAsNotnullExpr
 	do 
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 
 		var moexpr = n_expr.ast2mo(mpropdef)
 		sys.ast2mo_clone_table[self] = moexpr
@@ -962,7 +968,7 @@ redef class AOnceExpr
 	do 
 		var mo_entity = get_mo_from_clone_table
 		if mo_entity != null then return mo_entity
-		if n_expr.mtype isa MNullType then return sys.monull
+		if n_expr.mtype isa MNullType or n_expr.mtype == null then return sys.monull
 
 		var moexpr = n_expr.ast2mo(mpropdef)
 		sys.ast2mo_clone_table[self] = moexpr
@@ -1029,14 +1035,6 @@ redef class ASuperstringExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
 
-redef class AAndExpr
-	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
-end
-
-redef class AOrExpr
-	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
-end
-
 redef class ACharExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
@@ -1045,11 +1043,11 @@ redef class AIntExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
 
-redef class ATrueExpr
+redef class AFloatExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
 
-redef class AFalseExpr
+redef class ABoolExpr
 	redef fun ast2mo(mpropdef) do return ast2mo_generic_primitive(mpropdef)
 end
 

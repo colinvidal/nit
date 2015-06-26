@@ -325,6 +325,14 @@ redef class MOExpr
 	end
 end
 
+redef class MOSuper
+	redef fun preexist_expr
+	do
+		if is_pre_unknown then set_pval_per
+		return preexist_expr_value
+	end
+end
+
 redef class MOLit
 	redef fun preexist_expr
 	do
