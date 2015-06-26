@@ -979,7 +979,7 @@ class DependencyTrace
 			from_param = true
 		else if expr isa MOLit then
 			from_literal = true
-		else if expr isa MOPrimitive then
+		else if expr isa MOPrimitive or expr isa MOIsaSubtypeSite then
 			from_primitive = true
 		else if expr isa MOSuper then
 			from_super = true
