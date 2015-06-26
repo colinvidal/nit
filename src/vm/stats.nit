@@ -659,9 +659,14 @@ redef class MOSite
 	# Type of the site (method, attribute or cast)
 	var site_type: String is noinit
 
+	# Non-recursive origin of the dependency
+	var origin = new DependencyTrace(expr_recv)
+
 	# Count the implementation of the site
 	fun stats(vm: VirtualMachine)
 	do
+		origin.trace
+
 		incr_preexist(vm)
 		incr_from_site
 		incr_concrete_site(vm)
@@ -692,13 +697,13 @@ redef class MOSite
 	fun dump_location_site do 
 		# dump_location is null of first compilation, and set for last compilation
 		if expr_recv.is_pre and dump_location != null then
-			var from = new DependencyTrace(expr_recv)
-			from.trace
-
 			var from2str = ""
-			if from.from_new then from2str += " from-new "
-			if from.from_param then from2str += " from-param "
-			if from.from_return then from2str += " from-return "
+			if origin.from_new then from2str += " from-new "
+			if origin.from_param then from2str += " from-param "
+			if origin.from_return then from2str += " from-return "
+			if origin.from_primitive then from2str += " from-primitive "
+			if origin.from_literal then from2str += " from-literal "
+			if origin.from_super then from2str += " from-super "
 
 			dump_location.as(not null).write("{site_type} {ast.location} {from2str}\n")
 		end
@@ -748,11 +753,7 @@ redef class MOSite
 	# WARN : this partition is not exclusive
 	fun incr_from_site
 	do
-		var dep_trace = new DependencyTrace(expr_recv)
-
-		dep_trace.trace
-
-		if dep_trace.from_new then
+		if origin.from_new then
 			pstats.inc("sites_from_new")
 			pstats.inc("{site_type}_sites_from_new")
 
@@ -760,17 +761,17 @@ redef class MOSite
 			incr_specific_counters(expr_recv.is_pre, "{site_type}_sites_from_new_pre", "{site_type}_sites_from_new_npre")
 		end
 
-		if dep_trace.from_return then
+		if origin.from_return then
 			pstats.inc("sites_from_meth_return")
 			pstats.inc("{site_type}_sites_from_meth_return")
 			
-			incr_specific_counters(dep_trace.cuc_null,
+			incr_specific_counters(origin.cuc_null,
 			"{site_type}_sites_from_meth_return_cuc_null",
 			"{site_type}_sites_from_meth_return_cuc_pos")
 			
-			incr_specific_counters(dep_trace.cuc_null, "sites_from_meth_return_cuc_null", "sites_from_meth_return_cuc_pos")
+			incr_specific_counters(origin.cuc_null, "sites_from_meth_return_cuc_null", "sites_from_meth_return_cuc_pos")
 
-			if dep_trace.cuc_null then
+			if origin.cuc_null then
 				incr_specific_counters(expr_recv.is_pre, 
 				"{site_type}_sites_from_meth_return_cuc_null_pre",
 				"{site_type}_sites_from_meth_return_cuc_null_npre")
@@ -781,7 +782,7 @@ redef class MOSite
 			end
 		end
 
-		if dep_trace.from_read then
+		if origin.from_read then
 			pstats.inc("sites_from_read")
 			pstats.inc("{site_type}_sites_from_read")
 		end
@@ -927,6 +928,15 @@ class DependencyTrace
 	# from a parameter
 	var from_param = false
 
+	# from a literal
+	var from_literal = false
+
+	# from a primitive
+	var from_primitive = false
+
+	# from super
+	var from_super = false
+
 	# cuc is null ? usefull only when it comes from a method
 	var cuc_null = true
 
@@ -948,6 +958,12 @@ class DependencyTrace
 			from_read = true
 		else if expr isa MOParam then
 			from_param = true
+		else if expr isa MOLit then
+			from_literal = true
+		else if expr isa MOPrimitive then
+			from_primitive = true
+		else if expr isa MOSuper then
+			from_super = true
 		else if expr isa MOSSAVar then
 			trace_internal(expr.dependency)
 		else if expr isa MOPhiVar then
